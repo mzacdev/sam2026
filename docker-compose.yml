@@ -3,7 +3,9 @@ services:
     build: ./docker
     container_name: esports-web
     ports:
-      - "8000:80"
+      - "80:80"
+      - "443:443"
     volumes:
       - /mnt/d/WWW/e-sports/app:/var/www/html
     restart: unless-stopped
+

@@ -22,12 +22,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // Get input
-$username = trim($_POST['username'] ?? '');
+$email = trim($_POST['email'] ?? '');
 $password = $_POST['password'] ?? '';
 $rememberMe = isset($_POST['remember_me']) && $_POST['remember_me'] === 'on';
 
 // Validate input
-if (empty($username) || empty($password)) {
+if (empty($email) || empty($password)) {
     echo json_encode([
         'success' => false,
         'message' => 'Sila isi semua medan yang diperlukan'
@@ -37,7 +37,7 @@ if (empty($username) || empty($password)) {
 
 // Attempt login
 $auth = getAuth();
-$result = $auth->login($username, $password);
+$result = $auth->login($email, $password);
 
 if ($result['success']) {
     // Login successful
@@ -48,22 +48,30 @@ if ($result['success']) {
     if (!$returnUrl) {
         switch ($result['user']['role']) {
             case 'ADMIN':
-                $returnUrl = BASE_URL . 'index.php';
+                $returnUrl = url('index.php');
                 break;
             case 'ORGANIZER':
-                $returnUrl = BASE_URL . 'index.php';
+                $returnUrl = url('index.php');
                 break;
             case 'JUDGE':
-                $returnUrl = BASE_URL . 'pages/results.php';
+                $returnUrl = url('pages/results.php');
                 break;
             case 'CONTINGENT':
-                $returnUrl = BASE_URL . 'pages/contingent.php';
+                $returnUrl = url('pages/contingent.php');
                 break;
             default:
-                $returnUrl = BASE_URL . 'index.php';
+                $returnUrl = url('index.php');
         }
     }
     
+    // Normalize return URL (handle relative paths like "index.php")
+    if ($returnUrl && !preg_match('#^https?://#i', $returnUrl)) {
+        $returnUrl = '/' . ltrim($returnUrl, '/');
+        if (BASE_URL !== '' && strpos($returnUrl, BASE_URL . '/') !== 0 && $returnUrl !== BASE_URL) {
+            $returnUrl = BASE_URL . $returnUrl;
+        }
+    }
+
     echo json_encode([
         'success' => true,
         'message' => 'Log masuk berjaya',
@@ -82,4 +90,3 @@ if ($result['success']) {
         'message' => $result['message'] ?? 'Log masuk gagal. Sila cuba lagi.'
     ]);
 }
-

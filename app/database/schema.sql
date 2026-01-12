@@ -2,8 +2,8 @@
 -- Role-Based Access Control (RBAC) Implementation
 
 -- Create database (if not exists)
-CREATE DATABASE IF NOT EXISTS sam2026 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE sam2026;
+CREATE DATABASE IF NOT EXISTS esportsdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE esportsdb;
 
 -- Users Table
 -- Supports RBAC with authentication, status, and auditing
@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_role (role),
     INDEX idx_status (status),
     INDEX idx_created_at (created_at),
+    INDEX idx_created_by (created_by),
+    INDEX idx_updated_by (updated_by),
     
     -- Foreign keys
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
@@ -140,4 +142,3 @@ ON DUPLICATE KEY UPDATE username=username;
 
 -- Note: The password hash above is for 'admin123'
 -- In production, generate a new hash using: password_hash('your_password', PASSWORD_DEFAULT)
-

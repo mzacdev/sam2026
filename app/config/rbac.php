@@ -39,14 +39,14 @@ class RBAC {
         // Dashboard - all authenticated users
         'index.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
         
-        // Main pages - all authenticated users
-        'pages/contingent.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
+        // Main pages - role-based defaults
+        'pages/contingent.php' => ['ADMIN', 'ORGANIZER', 'CONTINGENT'],
         'pages/sports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/athletes.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/venues.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
+        'pages/athletes.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT'],
+        'pages/venues.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/reports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
+        'pages/reports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         
         // Settings - ADMIN only
         'pages/settings.php' => ['ADMIN'],
@@ -220,7 +220,8 @@ class RBAC {
         }
         // If headers already sent, stop page rendering and let JavaScript handle redirect
         // Output minimal content and exit
-        echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . BASE_URL . 'pages/access-denied.php"></head><body><script>window.location.href="' . BASE_URL . 'pages/access-denied.php";</script></body></html>';
+        $deniedUrl = url('pages/access-denied.php');
+        echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($deniedUrl) . '"></head><body><script>window.location.href="' . htmlspecialchars($deniedUrl) . '";</script></body></html>';
         exit;
     }
     
@@ -307,7 +308,7 @@ class RBAC {
      * Redirect to login page with return URL (fallback for non-modal flow)
      */
     private function redirectToLogin($returnUrl = null) {
-        $loginUrl = BASE_URL . 'auth/login.php';
+        $loginUrl = url('auth/login.php');
         if ($returnUrl) {
             $loginUrl .= '?return=' . urlencode($returnUrl);
         }
@@ -332,17 +333,17 @@ class RBAC {
             // Check if user is logged in
             if ($this->auth->isLoggedIn()) {
                 // Authenticated user without permission - show access denied page
-                header('Location: ' . BASE_URL . 'pages/access-denied.php');
+                header('Location: ' . url('pages/access-denied.php'));
             } else {
                 // Unauthenticated user - redirect to login
-                header('Location: ' . BASE_URL . 'auth/login.php');
+                header('Location: ' . url('auth/login.php'));
             }
             exit; // Stop execution after redirect
         } else {
             // Headers already sent - use JavaScript redirect as fallback
             $redirectUrl = $this->auth->isLoggedIn() 
-                ? BASE_URL . 'pages/access-denied.php'
-                : BASE_URL . 'auth/login.php';
+                ? url('pages/access-denied.php')
+                : url('auth/login.php');
             echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($redirectUrl) . '"></head><body><script>window.location.href="' . htmlspecialchars($redirectUrl) . '";</script><p>Redirecting...</p></body></html>';
             exit;
         }
@@ -492,4 +493,3 @@ function getRBAC() {
     }
     return $rbac;
 }
-

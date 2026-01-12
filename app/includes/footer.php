@@ -1,19 +1,29 @@
-<footer class="footer footer-fixed">
-    <div>
-        <img src="<?php echo logo('apple-icon-60x60.png'); ?>" alt="<?php echo SITE_NAME; ?>" class="footer-logo" height="24">
-        <span class="ms-2">&copy; <?php echo date('Y'); ?> <?php echo SITE_NAME; ?>. Hak cipta terpelihara.</span>
+<?php
+/**
+ * Footer Section (Light theme)
+ */
+?>
+<!-- Footer Section Start -->
+<div class="footer-section">
+    <div class="container-fluid">
+        <div class="footer-copyright text-center">
+            <p class="text-body-light">
+                <?php echo date('Y'); ?> &copy; <?php echo SITE_NAME; ?>. Dikuasakan oleh Universiti Pertahanan Nasional Malaysia (UPNM)
+            </p>
+        </div>
     </div>
-    <div class="ms-auto">
-        Dikuasakan oleh&nbsp;<a href="https://coreui.io/">CoreUI</a>
-    </div>
-</footer>
+</div>
+<!-- Footer Section End -->
 
-<!-- CoreUI JS -->
-<script src="https://cdn.jsdelivr.net/npm/@coreui/coreui@4.3.0/dist/js/coreui.bundle.min.js"></script>
-<!-- Note: CoreUI bundle already includes all necessary utilities, so separate utils file is not needed -->
+</div>
 
-<!-- Custom JS -->
-<script src="<?php echo asset('js/custom.js'); ?>"></script>
+<!-- JS -->
+<script src="<?php echo asset('light/js/vendor/modernizr-3.6.0.min.js'); ?>"></script>
+<script src="<?php echo asset('light/js/vendor/jquery-3.3.1.min.js'); ?>"></script>
+<script src="<?php echo asset('light/js/vendor/popper.min.js'); ?>"></script>
+<script src="<?php echo asset('light/js/vendor/bootstrap.min.js'); ?>"></script>
+<script src="<?php echo asset('light/js/plugins/perfect-scrollbar.min.js'); ?>"></script>
+<script src="<?php echo asset('light/js/plugins/tippy4.min.js.js'); ?>"></script>
+<script src="<?php echo asset('light/js/main.js'); ?>"></script>
 </body>
 </html>
-

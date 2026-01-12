@@ -14,7 +14,7 @@ $auth = getAuth();
 
 // If not logged in, redirect to login
 if (!$auth->isLoggedIn()) {
-    header('Location: ' . BASE_URL . 'auth/login.php');
+    header('Location: ' . url('auth/login.php'));
     exit;
 }
 
@@ -67,4 +67,3 @@ ob_start();
 $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
 ?>
-

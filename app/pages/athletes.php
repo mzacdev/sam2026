@@ -16,7 +16,7 @@ ob_start();
                     <h2 class="mb-0">Atlet</h2>
                     <p class="text-muted">Urus pendaftaran atlet</p>
                 </div>
-                <button class="btn btn-primary">
+                <button class="btn btn-primary" onclick="showAddAthlete()">
                     <i class="cil cil-plus me-1"></i> Daftar Atlet Baru
                 </button>
             </div>
@@ -78,4 +78,91 @@ ob_start();
 $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
 ?>
+
+<!-- Add Athlete Modal -->
+<div class="modal fade" id="addAthleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Daftar Atlet Baru</h5>
+                <button type="button" class="btn-close" aria-label="Close" onclick="closeAddAthleteModal()"></button>
+            </div>
+            <div class="modal-body">
+                <form id="athleteForm">
+                    <div class="mb-3">
+                        <label for="athleteName" class="form-label">Nama Penuh</label>
+                        <input type="text" id="athleteName" name="athleteName" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="athleteIdNo" class="form-label">No. Kad Pengenalan</label>
+                        <input type="text" id="athleteIdNo" name="athleteIdNo" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="athleteContingent" class="form-label">Kontinjen</label>
+                        <select id="athleteContingent" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="athleteSport" class="form-label">Sukan</label>
+                        <select id="athleteSport" class="form-select"></select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeAddAthleteModal()">Batal</button>
+                <button type="button" class="btn btn-primary" onclick="submitAthlete()">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let addAthleteModalInstance = null;
+
+function showAddAthlete() {
+    const modalEl = document.getElementById('addAthleteModal');
+    if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
+
+    if (typeof coreui !== 'undefined' && coreui.Modal) {
+        addAthleteModalInstance = new coreui.Modal(modalEl, {backdrop:true,keyboard:true,focus:true});
+        addAthleteModalInstance.show();
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        addAthleteModalInstance = new bootstrap.Modal(modalEl, {backdrop:true,keyboard:true,focus:true});
+        addAthleteModalInstance.show();
+    } else {
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        document.body.classList.add('modal-open');
+    }
+}
+
+function closeAddAthleteModal() {
+    const modalEl = document.getElementById('addAthleteModal');
+    if (addAthleteModalInstance && typeof addAthleteModalInstance.hide === 'function') {
+        addAthleteModalInstance.hide();
+    } else if (typeof coreui !== 'undefined' && coreui.Modal) {
+        const inst = coreui.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+}
+
+function submitAthlete() {
+    const form = document.getElementById('athleteForm');
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+    const name = document.getElementById('athleteName').value;
+
+    // Simulate save; replace with AJAX to backend as needed
+    setTimeout(() => {
+        alert('Atlet "' + name + '" berjaya disimpan (simulasi).');
+        closeAddAthleteModal();
+        location.reload();
+    }, 500);
+}
+</script>
 

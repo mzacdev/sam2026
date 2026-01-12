@@ -116,25 +116,23 @@ class Auth {
     /**
      * Authenticate user
      */
-    public function login($username, $password) {
+    public function login($email, $password) {
         try {
-            // Get user by username or email
-            // Use separate parameters for username and email to avoid PDO parameter binding issues
+            // Get user by email only
             $stmt = $this->db->prepare("
                 SELECT id, username, email, password_hash, full_name, role, status, 
                        login_attempts, locked_until
                 FROM users 
-                WHERE (username = :username OR email = :email) 
+                WHERE email = :email 
                 AND deleted_at IS NULL
             ");
             $stmt->execute([
-                'username' => $username,
-                'email' => $username  // Same value for both username and email search
+                'email' => $email
             ]);
             $user = $stmt->fetch();
             
             if (!$user) {
-                return ['success' => false, 'message' => 'Nama pengguna atau kata laluan tidak sah'];
+                return ['success' => false, 'message' => 'E-mel atau kata laluan tidak sah'];
             }
             
             // Check if account is locked
@@ -159,7 +157,7 @@ class Auth {
                         // Continue - don't let this block login attempt
                     }
                 }
-                return ['success' => false, 'message' => 'Nama pengguna atau kata laluan tidak sah'];
+                return ['success' => false, 'message' => 'E-mel atau kata laluan tidak sah'];
             }
             
             // All active users with valid credentials can login
@@ -230,21 +228,21 @@ class Auth {
     public function requireAuth() {
         if (!$this->isLoggedIn()) {
             // Store return URL for redirect after login
-            $returnUrl = $_SERVER['REQUEST_URI'] ?? BASE_URL . 'index.php';
+            $returnUrl = $_SERVER['REQUEST_URI'] ?? url('index.php');
             
             // For AJAX requests, return JSON
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
                 header('Content-Type: application/json');
                 echo json_encode([
                     'requires_auth' => true,
-                    'redirect' => BASE_URL . 'auth/login.php?return=' . urlencode($returnUrl)
+                    'redirect' => url('auth/login.php?return=' . urlencode($returnUrl))
                 ]);
                 exit;
             }
             
             // For regular requests, redirect to login page
-            $loginUrl = BASE_URL . 'auth/login.php';
-            if ($returnUrl && $returnUrl !== BASE_URL . 'index.php') {
+            $loginUrl = url('auth/login.php');
+            if ($returnUrl && $returnUrl !== url('index.php')) {
                 $loginUrl .= '?return=' . urlencode($returnUrl);
             }
             header('Location: ' . $loginUrl);
@@ -258,7 +256,7 @@ class Auth {
     public function requireRole($role) {
         $this->requireAuth();
         if (!$this->hasRole($role)) {
-            header('Location: ' . BASE_URL . 'auth/unauthorized.php');
+            header('Location: ' . url('auth/unauthorized.php'));
             exit;
         }
     }
@@ -443,4 +441,3 @@ function getAuth() {
     }
     return $auth;
 }
-

@@ -47,13 +47,13 @@ header('Content-Type: text/html; charset=utf-8');
                             }
                             
                             $sql = file_get_contents($sqlFile);
+                            $sql = preg_replace('/^\s*--.*$/m', '', $sql);
                             
                             // Split SQL into individual statements
                             $statements = array_filter(
                                 array_map('trim', explode(';', $sql)),
                                 function($stmt) {
-                                    return !empty($stmt) && 
-                                           !preg_match('/^(--|USE|CREATE DATABASE)/i', $stmt);
+                                    return !empty($stmt);
                                 }
                             );
                             
@@ -149,4 +149,3 @@ header('Content-Type: text/html; charset=utf-8');
     </div>
 </body>
 </html>
-

@@ -1,7 +1,7 @@
 -- Dynamic RBAC Migration Script
 -- SAM 2026 - Extends existing schema for database-driven access control
 
-USE sam2026;
+USE esportsdb;
 
 -- ============================================
 -- 1. User Roles Table (Many-to-Many)
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     INDEX idx_user_id (user_id),
     INDEX idx_role_id (role_id),
     INDEX idx_is_active (is_active),
+    INDEX idx_assigned_by (assigned_by),
     
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
@@ -43,6 +44,9 @@ CREATE TABLE IF NOT EXISTS page_access_rules (
     UNIQUE KEY unique_page_path (page_path),
     INDEX idx_is_public (is_public),
     INDEX idx_requires_auth (requires_auth),
+    INDEX idx_created_by (created_by),
+    INDEX idx_updated_by (updated_by),
+    INDEX idx_page_access_public (is_public, requires_auth),
     
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
@@ -62,6 +66,7 @@ CREATE TABLE IF NOT EXISTS page_role_access (
     UNIQUE KEY unique_page_role (page_rule_id, role_id),
     INDEX idx_page_rule_id (page_rule_id),
     INDEX idx_role_id (role_id),
+    INDEX idx_created_by (created_by),
     
     FOREIGN KEY (page_rule_id) REFERENCES page_access_rules(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
@@ -123,20 +128,107 @@ CREATE TABLE IF NOT EXISTS rbac_cache (
 -- ============================================
 -- 7. Insert Initial Page Access Rules
 -- ============================================
--- Settings page - ADMIN only
-INSERT INTO page_access_rules (page_path, is_public, requires_auth, created_by) 
-VALUES ('pages/settings.php', FALSE, TRUE, 1)
+INSERT INTO page_access_rules (page_path, is_public, requires_auth, created_by) VALUES
+('index.php', FALSE, TRUE, 1),
+('pages/contingent.php', FALSE, TRUE, 1),
+('pages/sports.php', FALSE, TRUE, 1),
+('pages/athletes.php', FALSE, TRUE, 1),
+('pages/venues.php', FALSE, TRUE, 1),
+('pages/results.php', FALSE, TRUE, 1),
+('pages/medal-tally.php', FALSE, TRUE, 1),
+('pages/reports.php', FALSE, TRUE, 1),
+('pages/settings.php', FALSE, TRUE, 1)
 ON DUPLICATE KEY UPDATE requires_auth=TRUE, is_public=FALSE;
 
--- Get ADMIN role ID and link to settings page
-SET @admin_role_id = (SELECT id FROM roles WHERE role_code = 'ADMIN' LIMIT 1);
-SET @settings_page_id = (SELECT id FROM page_access_rules WHERE page_path = 'pages/settings.php' LIMIT 1);
+-- Role mappings for page access
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','CONTINGENT','VIEWER')
+WHERE par.page_path = 'index.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
 
 INSERT INTO page_role_access (page_rule_id, role_id, created_by)
-SELECT @settings_page_id, @admin_role_id, 1
-WHERE NOT EXISTS (
-    SELECT 1 FROM page_role_access 
-    WHERE page_rule_id = @settings_page_id AND role_id = @admin_role_id
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','CONTINGENT')
+WHERE par.page_path = 'pages/contingent.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','CONTINGENT','VIEWER')
+WHERE par.page_path = 'pages/sports.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','CONTINGENT')
+WHERE par.page_path = 'pages/athletes.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','VIEWER')
+WHERE par.page_path = 'pages/venues.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','CONTINGENT','VIEWER')
+WHERE par.page_path = 'pages/results.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','CONTINGENT','VIEWER')
+WHERE par.page_path = 'pages/medal-tally.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN','ORGANIZER','JUDGE','VIEWER')
+WHERE par.page_path = 'pages/reports.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
+);
+
+INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+SELECT par.id, r.id, 1
+FROM page_access_rules par
+INNER JOIN roles r ON r.role_code IN ('ADMIN')
+WHERE par.page_path = 'pages/settings.php'
+AND NOT EXISTS (
+    SELECT 1 FROM page_role_access pra
+    WHERE pra.page_rule_id = par.id AND pra.role_id = r.id
 );
 
 -- ============================================
@@ -220,11 +312,61 @@ WHERE NOT EXISTS (
 -- ============================================
 -- 11. Create indexes for performance
 -- ============================================
--- Additional indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_user_roles_active ON user_roles(user_id, is_active);
-CREATE INDEX IF NOT EXISTS idx_page_access_public ON page_access_rules(is_public, requires_auth);
+-- Additional indexes for common queries (safe for MySQL 8)
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'user_roles'
+      AND index_name = 'idx_user_roles_active'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_user_roles_active ON user_roles(user_id, is_active)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'page_access_rules'
+      AND index_name = 'idx_page_access_public'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_page_access_public ON page_access_rules(is_public, requires_auth)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'user_roles'
+      AND index_name = 'idx_user_roles_assigned_by'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_user_roles_assigned_by ON user_roles(assigned_by)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'page_access_rules'
+      AND index_name = 'idx_page_access_created_by'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_page_access_created_by ON page_access_rules(created_by)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'page_access_rules'
+      AND index_name = 'idx_page_access_updated_by'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_page_access_updated_by ON page_access_rules(updated_by)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'page_role_access'
+      AND index_name = 'idx_page_role_access_created_by'
+);
+SET @sql_stmt = IF(@idx_exists = 0, 'CREATE INDEX idx_page_role_access_created_by ON page_role_access(created_by)', 'SELECT 1');
+PREPARE stmt FROM @sql_stmt; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ============================================
 -- Migration Complete
 -- ============================================
-

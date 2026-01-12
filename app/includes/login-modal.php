@@ -40,13 +40,13 @@
                     <input type="hidden" name="return_url" id="loginReturnUrl" value="">
                     
                     <div class="mb-3">
-                        <label for="modalUsername" class="form-label">Nama Pengguna atau E-mel <span class="text-danger">*</span></label>
+                        <label for="modalEmail" class="form-label">E-mel <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text">
                                 <i class="cil cil-user"></i>
                             </span>
-                            <input type="text" class="form-control" id="modalUsername" name="username" autocomplete="username" 
-                                   placeholder="Masukkan nama pengguna atau e-mel" required autofocus>
+                            <input type="email" class="form-control" id="modalEmail" name="email" autocomplete="email" 
+                                   placeholder="Masukkan e-mel" required autofocus>
                         </div>
                     </div>
                     
@@ -144,9 +144,9 @@ const LoginModal = {
             document.body.classList.add('modal-open');
         }
         
-        // Focus on username field
+        // Focus on email field
         setTimeout(() => {
-            document.getElementById('modalUsername').focus();
+            document.getElementById('modalEmail').focus();
         }, 300);
     },
     
@@ -285,8 +285,8 @@ const LoginModal = {
                     LoadingOverlay.hide();
                 }
                 
-                // Focus on username field
-                document.getElementById('modalUsername').focus();
+                // Focus on email field
+                document.getElementById('modalEmail').focus();
             }
         })
         .catch(error => {
@@ -321,4 +321,3 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-

@@ -15,6 +15,5 @@ $auth = getAuth();
 $auth->logout();
 
 // Redirect to login
-header('Location: ' . BASE_URL . 'auth/login.php');
+header('Location: ' . url('auth/login.php'));
 exit;
-

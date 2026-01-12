@@ -26,11 +26,12 @@ if (!defined('SKIP_AUTH_CHECK')) {
     if (!$rbac->hasPageAccess('pages/settings.php')) {
         // Access denied - redirect or show error
         if (!headers_sent()) {
-            header('Location: ' . BASE_URL . 'pages/access-denied.php');
+            header('Location: ' . url('pages/access-denied.php'));
             exit;
         } else {
             // Headers already sent - output redirect and stop
-            echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . BASE_URL . 'pages/access-denied.php"></head><body><script>window.location.href="' . BASE_URL . 'pages/access-denied.php";</script></body></html>';
+            $deniedUrl = url('pages/access-denied.php');
+            echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($deniedUrl) . '"></head><body><script>window.location.href="' . htmlspecialchars($deniedUrl) . '";</script></body></html>';
             exit;
         }
     }
@@ -42,80 +43,81 @@ ob_start();
 ?>
 <div class="w-100 px-3">
     <!-- Page Header -->
-    <div class="row mb-4">
+    <div class="row mb-30">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-0">Tetapan Sistem</h2>
-                    <p class="text-muted">Konfigurasi dan urus tetapan sistem pengurusan kejohanan</p>
-                </div>
-                <div>
-                    <button type="button" class="btn btn-outline-secondary me-2" onclick="resetAllSettings()">
-                        <i class="cil cil-reload me-1"></i> Reset
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="saveAllSettings()">
-                        <i class="cil cil-save me-1"></i> Simpan Semua
-                    </button>
+            <div class="page-heading">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <h3>Tetapan Sistem <span>Konfigurasi dan urus tetapan sistem pengurusan kejohanan</span></h3>
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="button button-outline button-secondary mr-10" onclick="resetAllSettings()">
+                            <i class="zmdi zmdi-refresh mr-5"></i> Reset
+                        </button>
+                        <button type="button" class="button button-primary" onclick="saveAllSettings()">
+                            <i class="zmdi zmdi-save mr-5"></i> Simpan Semua
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Settings Navigation Tabs -->
-    <div class="row mb-4">
+    <div class="row mb-30">
         <div class="col-12">
-            <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="general-tab" data-coreui-toggle="tab" data-coreui-target="#general" type="button" role="tab">
-                        <i class="cil cil-cog me-1"></i> Umum
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tournament-tab" data-coreui-toggle="tab" data-coreui-target="#tournament" type="button" role="tab">
-                        <i class="cil cil-trophy me-1"></i> Kejohanan
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="registration-tab" data-coreui-toggle="tab" data-coreui-target="#registration" type="button" role="tab">
-                        <i class="cil cil-user-plus me-1"></i> Pendaftaran
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="notification-tab" data-coreui-toggle="tab" data-coreui-target="#notification" type="button" role="tab">
-                        <i class="cil cil-bell me-1"></i> Notifikasi
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="user-tab" data-coreui-toggle="tab" data-coreui-target="#user" type="button" role="tab">
-                        <i class="cil cil-people me-1"></i> Pengguna & Akses
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="display-tab" data-coreui-toggle="tab" data-coreui-target="#display" type="button" role="tab">
-                        <i class="cil cil-paint me-1"></i> Paparan
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="system-tab" data-coreui-toggle="tab" data-coreui-target="#system" type="button" role="tab">
-                        <i class="cil cil-devices me-1"></i> Sistem
-                    </button>
-                </li>
-            </ul>
-        </div>
-    </div>
+            <div class="box">
+                <div class="box-body">
+                    <ul class="nav nav-tabs mb-15" id="settingsTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab">
+                                <i class="zmdi zmdi-settings mr-5"></i> Umum
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="tournament-tab" data-bs-toggle="tab" href="#tournament" role="tab">
+                                <i class="zmdi zmdi-trophy mr-5"></i> Kejohanan
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="registration-tab" data-bs-toggle="tab" href="#registration" role="tab">
+                                <i class="zmdi zmdi-account-add mr-5"></i> Pendaftaran
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="notification-tab" data-bs-toggle="tab" href="#notification" role="tab">
+                                <i class="zmdi zmdi-notifications mr-5"></i> Notifikasi
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="user-tab" data-bs-toggle="tab" href="#user" role="tab">
+                                <i class="zmdi zmdi-accounts mr-5"></i> Pengguna & Akses
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="display-tab" data-bs-toggle="tab" href="#display" role="tab">
+                                <i class="zmdi zmdi-palette mr-5"></i> Paparan
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="system-tab" data-bs-toggle="tab" href="#system" role="tab">
+                                <i class="zmdi zmdi-devices mr-5"></i> Sistem
+                            </a>
+                        </li>
+                    </ul>
 
-    <!-- Settings Content -->
-    <div class="tab-content" id="settingsTabContent">
+                    <!-- Settings Content -->
+                    <div class="tab-content" id="settingsTabContent">
         
         <!-- Tab 1: General Settings -->
         <div class="tab-pane fade show active" id="general" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-primary text-white">
-                            <i class="cil cil-info me-2"></i><strong>Maklumat Sistem</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-info-outline me-2"></i> Maklumat Sistem</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="generalSettingsForm">
                                 <div class="mb-3">
                                     <label for="siteName" class="form-label">Nama Sistem <span class="text-danger">*</span></label>
@@ -161,11 +163,11 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-primary text-white">
-                            <i class="cil cil-globe-alt me-2"></i><strong>Lokal & Zon Masa</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-globe me-2"></i> Lokal & Zon Masa</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="localeSettingsForm">
                                 <div class="mb-3">
                                     <label for="timezone" class="form-label">Zon Masa <span class="text-danger">*</span></label>
@@ -224,11 +226,11 @@ ob_start();
         <div class="tab-pane fade" id="tournament" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-success text-white">
-                            <i class="cil cil-trophy me-2"></i><strong>Maklumat Kejohanan</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-trophy me-2"></i> Maklumat Kejohanan</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="tournamentSettingsForm">
                                 <div class="mb-3">
                                     <label for="tournamentName" class="form-label">Nama Kejohanan <span class="text-danger">*</span></label>
@@ -269,11 +271,11 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-success text-white">
-                            <i class="cil cil-map me-2"></i><strong>Lokasi & Venue</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-pin me-2"></i> Lokasi & Venue</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="venueSettingsForm">
                                 <div class="mb-3">
                                     <label for="mainVenue" class="form-label">Venue Utama <span class="text-danger">*</span></label>
@@ -320,11 +322,11 @@ ob_start();
         <div class="tab-pane fade" id="registration" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <i class="cil cil-calendar me-2"></i><strong>Tempoh Pendaftaran</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-calendar me-2"></i> Tempoh Pendaftaran</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="registrationPeriodForm">
                                 <div class="mb-3">
                                     <label for="regOpenDate" class="form-label">Tarikh Buka Pendaftaran <span class="text-danger">*</span></label>
@@ -337,31 +339,29 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="regAutoClose" name="regAutoClose" checked>
-                                        <label class="form-check-label" for="regAutoClose">
-                                            Tutup pendaftaran secara automatik selepas tarikh tutup
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="regAutoClose" name="regAutoClose" checked>
+                                        <i class="lever"></i>
+                                        <span class="text">Tutup pendaftaran secara automatik selepas tarikh tutup</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="regAllowLate" name="regAllowLate">
-                                        <label class="form-check-label" for="regAllowLate">
-                                            Benarkan pendaftaran lewat (dengan kelulusan)
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="regAllowLate" name="regAllowLate">
+                                        <i class="lever"></i>
+                                        <span class="text">Benarkan pendaftaran lewat (dengan kelulusan)</span>
+                                    </label>
                                 </div>
                             </form>
                         </div>
                     </div>
 
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <i class="cil cil-dollar me-2"></i><strong>Yuran & Bayaran</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-money me-2"></i> Yuran & Bayaran</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="feeSettingsForm">
                                 <div class="mb-3">
                                     <label for="regFeePerContingent" class="form-label">Yuran Pendaftaran Kontinjen</label>
@@ -382,12 +382,11 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="regFeeRequired" name="regFeeRequired">
-                                        <label class="form-check-label" for="regFeeRequired">
-                                            Yuran pendaftaran wajib
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="regFeeRequired" name="regFeeRequired">
+                                        <i class="lever"></i>
+                                        <span class="text">Yuran pendaftaran wajib</span>
+                                    </label>
                                 </div>
                             </form>
                         </div>
@@ -395,11 +394,11 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <i class="cil cil-limit-e875 me-2"></i><strong>Had & Sekatan</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-alert-triangle me-2"></i> Had & Sekatan</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="limitSettingsForm">
                                 <div class="mb-3">
                                     <label for="maxContingents" class="form-label">Bilangan Maksimum Kontinjen</label>
@@ -429,11 +428,11 @@ ob_start();
                         </div>
                     </div>
 
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <i class="cil cil-file me-2"></i><strong>Syarat & Dokumen</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-file-text me-2"></i> Syarat & Dokumen</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="requirementSettingsForm">
                                 <div class="mb-3">
                                     <label for="requiredDocuments" class="form-label">Dokumen Wajib</label>
@@ -471,19 +470,18 @@ ob_start();
         <div class="tab-pane fade" id="notification" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-danger text-white">
-                            <i class="cil cil-envelope-letter me-2"></i><strong>E-mel Notifikasi</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-email me-2"></i> E-mel Notifikasi</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="emailNotificationForm">
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="emailEnabled" name="emailEnabled" checked>
-                                        <label class="form-check-label" for="emailEnabled">
-                                            Aktifkan notifikasi e-mel
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="emailEnabled" name="emailEnabled" checked>
+                                        <i class="lever"></i>
+                                        <span class="text">Aktifkan notifikasi e-mel</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
@@ -525,19 +523,18 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-danger text-white">
-                            <i class="cil cil-phone me-2"></i><strong>SMS Notifikasi</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-phone me-2"></i> SMS Notifikasi</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="smsNotificationForm">
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="smsEnabled" name="smsEnabled">
-                                        <label class="form-check-label" for="smsEnabled">
-                                            Aktifkan notifikasi SMS
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="smsEnabled" name="smsEnabled">
+                                        <i class="lever"></i>
+                                        <span class="text">Aktifkan notifikasi SMS</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
@@ -564,11 +561,11 @@ ob_start();
                         </div>
                     </div>
 
-                    <div class="card mb-4">
-                        <div class="card-header bg-danger text-white">
-                            <i class="cil cil-bell me-2"></i><strong>Jenis Notifikasi</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-notifications me-2"></i> Jenis Notifikasi</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="notificationTypesForm">
                                 <div class="mb-3">
                                     <label class="form-label">Aktifkan Notifikasi untuk:</label>
@@ -602,21 +599,18 @@ ob_start();
             
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-
-                    <div class="card mb-4">
-                        <div class="card-header bg-secondary text-white">
-                            <i class="cil cil-shield-alt me-2"></i><strong>Keselamatan</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-shield-security me-2"></i> Keselamatan</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="securitySettingsForm">
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="twoFactorAuth" name="twoFactorAuth">
-                                        <label class="form-check-label" for="twoFactorAuth">
-                                            Aktifkan Pengesahan Dua Faktor (2FA)
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="twoFactorAuth" name="twoFactorAuth">
+                                        <i class="lever"></i>
+                                        <span class="text">Aktifkan Pengesahan Dua Faktor (2FA)</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
@@ -632,30 +626,27 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="passwordRequireUppercase" name="passwordRequireUppercase" checked>
-                                        <label class="form-check-label" for="passwordRequireUppercase">
-                                            Perlu huruf besar
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="passwordRequireUppercase" name="passwordRequireUppercase" checked>
+                                        <i class="lever"></i>
+                                        <span class="text">Perlu huruf besar</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="passwordRequireNumber" name="passwordRequireNumber" checked>
-                                        <label class="form-check-label" for="passwordRequireNumber">
-                                            Perlu nombor
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="passwordRequireNumber" name="passwordRequireNumber" checked>
+                                        <i class="lever"></i>
+                                        <span class="text">Perlu nombor</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="passwordRequireSpecial" name="passwordRequireSpecial">
-                                        <label class="form-check-label" for="passwordRequireSpecial">
-                                            Perlu aksara khas
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="passwordRequireSpecial" name="passwordRequireSpecial">
+                                        <i class="lever"></i>
+                                        <span class="text">Perlu aksara khas</span>
+                                    </label>
                                 </div>
                             </form>
                         </div>
@@ -663,11 +654,11 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-secondary text-white">
-                            <i class="cil cil-lock-locked me-2"></i><strong>Kebenaran Akses</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-lock me-2"></i> Kebenaran Akses</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="permissionsForm">
                                 <div class="mb-3">
                                     <label class="form-label">Kebenaran untuk Kontinjen:</label>
@@ -707,11 +698,11 @@ ob_start();
         <div class="tab-pane fade" id="display" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark text-white">
-                            <i class="cil cil-paint me-2"></i><strong>Logo & Ikon</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-palette me-2"></i> Logo & Ikon</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="logoSettingsForm">
                                 <div class="mb-3">
                                     <label for="headerLogo" class="form-label">Logo Header</label>
@@ -739,11 +730,11 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark text-white">
-                            <i class="cil cil-palette me-2"></i><strong>Tema & Warna</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-palette me-2"></i> Tema & Warna</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="themeSettingsForm">
                                 <div class="mb-3">
                                     <label for="primaryColor" class="form-label">Warna Utama</label>
@@ -779,11 +770,11 @@ ob_start();
         <div class="tab-pane fade" id="system" role="tabpanel">
             <div class="row">
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark text-white">
-                            <i class="cil cil-data-transfer-down me-2"></i><strong>Backup & Eksport</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-download me-2"></i> Backup & Eksport</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="backupSettingsForm">
                                 <div class="mb-3">
                                     <label for="autoBackup" class="form-label">Backup Automatik</label>
@@ -802,30 +793,29 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <button type="button" class="btn btn-outline-primary" onclick="createBackup()">
-                                        <i class="cil cil-save me-1"></i> Buat Backup Sekarang
+                                    <button type="button" class="button button-outline button-primary mr-10" onclick="createBackup()">
+                                        <i class="zmdi zmdi-save mr-5"></i> Buat Backup Sekarang
                                     </button>
-                                    <button type="button" class="btn btn-outline-success" onclick="exportData()">
-                                        <i class="cil cil-arrow-bottom me-1"></i> Eksport Data
+                                    <button type="button" class="button button-outline button-success" onclick="exportData()">
+                                        <i class="zmdi zmdi-download mr-5"></i> Eksport Data
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
 
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark text-white">
-                            <i class="cil cil-wrench me-2"></i><strong>Mod Penyelenggaraan</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-wrench me-2"></i> Mod Penyelenggaraan</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="maintenanceForm">
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="maintenanceMode" name="maintenanceMode">
-                                        <label class="form-check-label" for="maintenanceMode">
-                                            Aktifkan Mod Penyelenggaraan
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="maintenanceMode" name="maintenanceMode">
+                                        <i class="lever"></i>
+                                        <span class="text">Aktifkan Mod Penyelenggaraan</span>
+                                    </label>
                                     <div class="form-text">Sistem akan tidak boleh diakses oleh pengguna biasa</div>
                                 </div>
 
@@ -840,19 +830,18 @@ ob_start();
                 </div>
 
                 <div class="col-lg-6">
-                    <div class="card mb-4">
-                        <div class="card-header bg-dark text-white">
-                            <i class="cil cil-list me-2"></i><strong>Log & Audit</strong>
+                    <div class="box mb-30">
+                        <div class="box-head">
+                            <h4 class="title"><i class="zmdi zmdi-format-list-bulleted me-2"></i> Log & Audit</h4>
                         </div>
-                        <div class="card-body">
+                        <div class="box-body">
                             <form id="logSettingsForm">
                                 <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="enableAuditLog" name="enableAuditLog" checked>
-                                        <label class="form-check-label" for="enableAuditLog">
-                                            Aktifkan Log Audit
-                                        </label>
-                                    </div>
+                                    <label class="adomx-switch">
+                                        <input type="checkbox" id="enableAuditLog" name="enableAuditLog" checked>
+                                        <i class="lever"></i>
+                                        <span class="text">Aktifkan Log Audit</span>
+                                    </label>
                                 </div>
 
                                 <div class="mb-3">
@@ -878,11 +867,11 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <button type="button" class="btn btn-outline-info" onclick="viewLogs()">
-                                        <i class="cil cil-list me-1"></i> Lihat Log
+                                    <button type="button" class="button button-outline button-info mr-10" onclick="viewLogs()">
+                                        <i class="zmdi zmdi-format-list-bulleted mr-5"></i> Lihat Log
                                     </button>
-                                    <button type="button" class="btn btn-outline-warning" onclick="clearLogs()">
-                                        <i class="cil cil-trash me-1"></i> Kosongkan Log
+                                    <button type="button" class="button button-outline button-warning" onclick="clearLogs()">
+                                        <i class="zmdi zmdi-delete mr-5"></i> Kosongkan Log
                                     </button>
                                 </div>
                             </form>
@@ -896,16 +885,16 @@ ob_start();
 
     <!-- Save Success Alert -->
     <div class="alert alert-success alert-dismissible fade d-none" id="saveSuccessAlert" role="alert">
-        <i class="cil cil-check-circle me-2"></i>
+        <i class="zmdi zmdi-check-circle me-2"></i>
         <strong>Berjaya!</strong> Tetapan telah disimpan.
-        <button type="button" class="btn-close" data-coreui-dismiss="alert"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
     <!-- Save Error Alert -->
     <div class="alert alert-danger alert-dismissible fade d-none" id="saveErrorAlert" role="alert">
-        <i class="cil cil-warning me-2"></i>
+        <i class="zmdi zmdi-alert-triangle me-2"></i>
         <strong>Ralat!</strong> Gagal menyimpan tetapan. Sila cuba lagi.
-        <button type="button" class="btn-close" data-coreui-dismiss="alert"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 </div>
 

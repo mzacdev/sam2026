@@ -20,6 +20,7 @@
     display: flex;
     align-items: center;
     padding: 0.5rem 0;
+    margin: 8px 0 8px 12px;
 }
 
 .navbar-logo {
@@ -27,6 +28,11 @@
     width: auto;
     object-fit: contain;
     transition: opacity 0.3s ease;
+    border-radius: 10px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    margin-right: 8px;
 }
 
 .navbar-logo:hover {
@@ -56,8 +62,24 @@
 .navbar-nav .nav-link {
     display: flex;
     align-items: center;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 0.9rem;
     transition: all 0.3s ease;
+}
+
+/* Right menu spacing & polish */
+.navbar-nav {
+    gap: 6px;
+}
+
+/* User profile menu spacing */
+.navbar-nav .nav-item.dropdown {
+    margin-left: 10px;
+}
+
+.navbar-nav .nav-link {
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
 }
 
 .navbar-nav .nav-link.active {
@@ -68,6 +90,14 @@
 .navbar-nav .nav-link:hover {
     background-color: rgba(255, 255, 255, 0.05);
     border-radius: 0.375rem;
+}
+
+.navbar-nav .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.navbar .dropdown-menu {
+    margin-top: 8px;
 }
 
 /* Icon styling for navigation */
@@ -207,16 +237,11 @@ body::before {
     left: 0;
     width: 100%;
     height: 100%;
-    background-image: url('/sam2026/assets/img/background/sam2026.png');
-    background-size: contain; /* Changed from cover to contain - shows full image */
-    background-position: center center; /* Centered both horizontally and vertically */
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    opacity: 0.2; /* Increased for visibility - adjust between 0.1-0.3 as needed */
+    background-image: none;
+    opacity: 0;
     z-index: 0;
     pointer-events: none;
-    filter: blur(0.5px); /* Subtle blur for softer appearance */
-    display: block; /* Ensure it's displayed */
+    display: none;
 }
 
 /* Ensure all content is above the background */
@@ -257,6 +282,27 @@ body::before {
 .navbar {
     width: 100%;
     max-width: 100%;
+}
+
+/* Header layout: full width, no outer spacing */
+.header,
+.header-sticky,
+.navbar {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.header .w-100,
+.navbar .w-100,
+.header .px-3,
+.navbar .px-3 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.header,
+.header-sticky {
+    top: 0 !important;
 }
 
 /* Footer full width and fixed at bottom */
@@ -418,8 +464,27 @@ body.modal-open .navbar,
 }
 
 /* Breadcrumb styling */
-.breadcrumb {
-    margin-bottom: 0;
+.header nav[aria-label="breadcrumb"] {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 16px;
+}
+
+.header .breadcrumb {
+    margin: 4px 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.header .breadcrumb .breadcrumb-item,
+.header .breadcrumb .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+}
+
+.header .breadcrumb .breadcrumb-item.active {
+    color: #212529;
 }
 
 /* Table responsive improvements */
@@ -614,6 +679,7 @@ body.modal-open .navbar,
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    display: none; /* Keep hidden unless explicitly shown */
     z-index: 1060 !important; /* INCREASED: Must be above navbar (1000) and backdrop (1040) */
     width: 100% !important;
     height: 100% !important;
@@ -835,6 +901,15 @@ body.modal-open .header-sticky {
     background-color: #fff;
     position: relative;
     z-index: 1000; /* Above background */
+}
+
+/* Ensure fixed footer stays pinned at bottom */
+.footer.footer-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1020;
 }
 
 /* Add subtle background to main content wrapper for better readability */
@@ -1195,4 +1270,3 @@ body.page-loading .loading-overlay {
     visibility: visible !important;
     position: relative !important;
 }
-

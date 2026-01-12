@@ -12,7 +12,7 @@ $auth = getAuth();
 
 // If not logged in, redirect to login
 if (!$auth->isLoggedIn()) {
-    header('Location: ' . BASE_URL . 'auth/login.php');
+    header('Location: ' . url('auth/login.php'));
     exit;
 }
 
@@ -73,10 +73,10 @@ ob_start();
                 <?php endif; ?>
                 
                 <div class="d-grid gap-2">
-                    <a href="<?php echo BASE_URL; ?>index.php" class="btn btn-primary">
+                    <a href="<?php echo url('index.php'); ?>" class="btn btn-primary">
                         <i class="cil cil-home me-2"></i> Kembali ke Papan Pemuka
                     </a>
-                    <a href="<?php echo BASE_URL; ?>auth/logout.php" class="btn btn-outline-secondary">
+                    <a href="<?php echo url('auth/logout.php'); ?>" class="btn btn-outline-secondary">
                         <i class="cil cil-account-logout me-2"></i> Log Keluar
                     </a>
                 </div>
@@ -98,4 +98,3 @@ ob_start();
 $content = ob_get_clean();
 echo $content;
 ?>
-

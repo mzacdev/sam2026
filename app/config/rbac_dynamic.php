@@ -373,7 +373,8 @@ class DynamicRBAC {
             exit;
         }
         
-        echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . BASE_URL . 'pages/access-denied.php"></head><body><script>window.location.href="' . BASE_URL . 'pages/access-denied.php";</script></body></html>';
+        $deniedUrl = url('pages/access-denied.php');
+        echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($deniedUrl) . '"></head><body><script>window.location.href="' . htmlspecialchars($deniedUrl) . '";</script></body></html>';
         exit;
     }
     
@@ -382,9 +383,9 @@ class DynamicRBAC {
      */
     private function redirectToUnauthorized() {
         if ($this->auth->isLoggedIn()) {
-            header('Location: ' . BASE_URL . 'pages/access-denied.php');
+            header('Location: ' . url('pages/access-denied.php'));
         } else {
-            header('Location: ' . BASE_URL . 'auth/login.php');
+            header('Location: ' . url('auth/login.php'));
         }
         exit;
     }
@@ -437,4 +438,3 @@ function getDynamicRBAC() {
     }
     return $rbac;
 }
-

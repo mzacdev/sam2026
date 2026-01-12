@@ -1,0 +1,16 @@
+{
+  "ensure_admin": true,
+  "public_pages": [],
+  "pages": {
+    "index.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+    "pages/contingent.php": ["ADMIN", "ORGANIZER", "CONTINGENT"],
+    "pages/sports.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+    "pages/athletes.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT"],
+    "pages/venues.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+    "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+    "pages/medal-tally.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+    "pages/reports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+    "pages/settings.php": ["ADMIN"],
+    "pages/users.php": ["ADMIN"]
+  }
+}

@@ -3,8 +3,8 @@
 # Enable Rewrite Engine
 RewriteEngine On
 
-# Set base directory
-RewriteBase /sam2026/
+# Set base directory (root)
+RewriteBase /
 
 # Prevent directory listing
 Options -Indexes
@@ -24,4 +24,3 @@ DirectoryIndex index.php
     php_value upload_max_filesize 10M
     php_value post_max_size 10M
 </IfModule>
-

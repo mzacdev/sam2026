@@ -25,7 +25,7 @@ ob_start();
 
     <!-- Registration Form Modal/Wizard -->
     <div class="modal fade" id="registrationModal" tabindex="-1" aria-labelledby="registrationModalLabel" aria-hidden="true" data-coreui-backdrop="static">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="registrationModalLabel">Pendaftaran Kontinjen Baru</h5>
@@ -583,37 +583,76 @@ function showRegistrationForm() {
         document.body.appendChild(modalElement);
     }
     
-    registrationModalInstance = new coreui.Modal(modalElement, {
-        backdrop: true,
-        keyboard: true,
-        focus: true
-    });
-    
-    // Hide loading overlay when modal is shown
-    modalElement.addEventListener('show.coreui.modal', function() {
+    // Create modal instance: prefer CoreUI, fallback to Bootstrap, final manual fallback
+    if (typeof coreui !== 'undefined' && coreui.Modal) {
+        registrationModalInstance = new coreui.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+
+        // Hide loading overlay when modal is shown (CoreUI event)
+        modalElement.addEventListener('show.coreui.modal', function() {
+            if (typeof hideLoadingOverlayForModal === 'function') {
+                hideLoadingOverlayForModal();
+            }
+            if (typeof fixModalZIndex === 'function') {
+                fixModalZIndex();
+            }
+        });
+
+        // Clean up backdrop on hidden (CoreUI event)
+        modalElement.addEventListener('hidden.coreui.modal', function() {
+            if (typeof cleanupModalBackdrops === 'function') {
+                cleanupModalBackdrops();
+            }
+        });
+
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        registrationModalInstance = new bootstrap.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+
+        // Bootstrap events
+        modalElement.addEventListener('show.bs.modal', function() {
+            if (typeof hideLoadingOverlayForModal === 'function') {
+                hideLoadingOverlayForModal();
+            }
+            if (typeof fixModalZIndex === 'function') {
+                fixModalZIndex();
+            }
+        });
+
+        modalElement.addEventListener('hidden.bs.modal', function() {
+            if (typeof cleanupModalBackdrops === 'function') {
+                cleanupModalBackdrops();
+            }
+        });
+
+    } else {
+        // Final fallback: simple class toggle if no modal library available
+        modalElement.classList.add('show');
+        modalElement.style.display = 'block';
+        document.body.classList.add('modal-open');
         if (typeof hideLoadingOverlayForModal === 'function') {
             hideLoadingOverlayForModal();
         }
-        // Ensure z-index is correct
         if (typeof fixModalZIndex === 'function') {
             fixModalZIndex();
         }
-    });
-    
-    // Clean up backdrop on hidden
-    modalElement.addEventListener('hidden.coreui.modal', function() {
-        if (typeof cleanupModalBackdrops === 'function') {
-            cleanupModalBackdrops();
-        }
-    });
+    }
     
     // CRITICAL: Ensure modal is at body level before showing
     if (modalElement.parentElement !== document.body) {
         document.body.appendChild(modalElement);
     }
     
-    // Show modal
-    registrationModalInstance.show();
+    // Show modal (if library instance exists), otherwise fallback already showed it
+    if (registrationModalInstance && typeof registrationModalInstance.show === 'function') {
+        registrationModalInstance.show();
+    }
     
     // CRITICAL: Force z-index immediately and continuously
     modalElement.style.zIndex = '1060';
@@ -1025,18 +1064,13 @@ function closeModal() {
 
 // Confirm cancel
 function confirmCancel() {
-    if (confirm('Adakah anda pasti mahu membatalkan pendaftaran? Semua data akan hilang.')) {
-        // Clear saved data
-        localStorage.removeItem('contingentRegistrationData');
-        
-        // Close modal
-        closeModal();
-        
-        // Reset form
-        document.getElementById('registrationForm')?.reset();
-        currentStep = 1;
-        updateStepDisplay();
-    }
+    // Immediate cancel: clear saved data and close without confirmation
+    localStorage.removeItem('contingentRegistrationData');
+    closeModal();
+    // Reset form and step state
+    document.getElementById('registrationForm')?.reset();
+    currentStep = 1;
+    updateStepDisplay();
 }
 
 // Real-time validation
