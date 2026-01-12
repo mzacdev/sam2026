@@ -1,0 +1,446 @@
+<?php
+/**
+ * Authentication Configuration
+ * SAM 2026 - Role-Based Access Control
+ */
+
+// Session configuration
+define('SESSION_NAME', 'SAM2026_SESSION');
+define('SESSION_LIFETIME', 3600); // 1 hour in seconds
+define('SESSION_PATH', '/');
+define('SESSION_DOMAIN', '');
+define('SESSION_SECURE', false); // Set to true in production with HTTPS
+define('SESSION_HTTPONLY', true);
+
+// Password configuration
+define('PASSWORD_MIN_LENGTH', 8);
+define('PASSWORD_REQUIRE_UPPERCASE', true);
+define('PASSWORD_REQUIRE_NUMBER', true);
+define('PASSWORD_REQUIRE_SPECIAL', false);
+
+// Login security
+define('MAX_LOGIN_ATTEMPTS', 5);
+define('LOCKOUT_DURATION', 900); // 15 minutes in seconds
+
+// Session management
+class Session {
+    private static $started = false;
+    
+    public static function start() {
+        // Check if session is already started
+        if (self::$started || session_status() === PHP_SESSION_ACTIVE) {
+            return;
+        }
+        
+        // Check if headers have been sent
+        if (headers_sent()) {
+            // Headers already sent - can't configure session, but try to start if not started
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+                self::$started = true;
+            }
+            return;
+        }
+        
+        // Headers not sent - can configure and start session
+        if (session_status() === PHP_SESSION_NONE) {
+            session_name(SESSION_NAME);
+            session_set_cookie_params([
+                'lifetime' => SESSION_LIFETIME,
+                'path' => SESSION_PATH,
+                'domain' => SESSION_DOMAIN,
+                'secure' => SESSION_SECURE,
+                'httponly' => SESSION_HTTPONLY,
+                'samesite' => 'Strict'
+            ]);
+            session_start();
+            self::$started = true;
+        }
+    }
+    
+    public static function set($key, $value) {
+        // Ensure session is started before accessing
+        if (session_status() === PHP_SESSION_NONE) {
+            self::start();
+        }
+        $_SESSION[$key] = $value;
+    }
+    
+    public static function get($key, $default = null) {
+        // Ensure session is started before accessing
+        if (session_status() === PHP_SESSION_NONE) {
+            self::start();
+        }
+        return $_SESSION[$key] ?? $default;
+    }
+    
+    public static function has($key) {
+        // Ensure session is started before accessing
+        if (session_status() === PHP_SESSION_NONE) {
+            self::start();
+        }
+        return isset($_SESSION[$key]);
+    }
+    
+    public static function remove($key) {
+        // Ensure session is started before accessing
+        if (session_status() === PHP_SESSION_NONE) {
+            self::start();
+        }
+        unset($_SESSION[$key]);
+    }
+    
+    public static function destroy() {
+        self::start();
+        $_SESSION = [];
+        if (isset($_COOKIE[session_name()])) {
+            setcookie(session_name(), '', time() - 3600, SESSION_PATH, SESSION_DOMAIN, SESSION_SECURE, SESSION_HTTPONLY);
+        }
+        session_destroy();
+    }
+    
+    public static function regenerate() {
+        self::start();
+        session_regenerate_id(true);
+    }
+}
+
+// Authentication class
+class Auth {
+    private $db;
+    
+    public function __construct() {
+        $this->db = getDB();
+    }
+    
+    /**
+     * Authenticate user
+     */
+    public function login($username, $password) {
+        try {
+            // Get user by username or email
+            // Use separate parameters for username and email to avoid PDO parameter binding issues
+            $stmt = $this->db->prepare("
+                SELECT id, username, email, password_hash, full_name, role, status, 
+                       login_attempts, locked_until
+                FROM users 
+                WHERE (username = :username OR email = :email) 
+                AND deleted_at IS NULL
+            ");
+            $stmt->execute([
+                'username' => $username,
+                'email' => $username  // Same value for both username and email search
+            ]);
+            $user = $stmt->fetch();
+            
+            if (!$user) {
+                return ['success' => false, 'message' => 'Nama pengguna atau kata laluan tidak sah'];
+            }
+            
+            // Check if account is locked
+            if ($user['locked_until'] && strtotime($user['locked_until']) > time()) {
+                $remaining = ceil((strtotime($user['locked_until']) - time()) / 60);
+                return ['success' => false, 'message' => "Akaun dikunci. Cuba lagi dalam {$remaining} minit."];
+            }
+            
+            // Check if account is active
+            if ($user['status'] !== 'active') {
+                return ['success' => false, 'message' => 'Akaun tidak aktif. Sila hubungi pentadbir.'];
+            }
+            
+            // Verify password
+            if (empty($user['password_hash']) || !password_verify($password, $user['password_hash'])) {
+                // Only increment attempts if password hash exists (wrap in try-catch to prevent login failure)
+                if (!empty($user['password_hash'])) {
+                    try {
+                        $this->incrementLoginAttempts($user['id']);
+                    } catch (Exception $e) {
+                        error_log("Failed to increment login attempts: " . $e->getMessage());
+                        // Continue - don't let this block login attempt
+                    }
+                }
+                return ['success' => false, 'message' => 'Nama pengguna atau kata laluan tidak sah'];
+            }
+            
+            // All active users with valid credentials can login
+            // No role restriction - all roles (ADMIN, ORGANIZER, JUDGE, CONTINGENT, VIEWER) can login
+            
+            // Create session FIRST (before any database operations that might fail)
+            $this->createSession($user);
+            
+            // Reset login attempts (wrap in try-catch to prevent login failure)
+            try {
+                $this->resetLoginAttempts($user['id']);
+            } catch (Exception $e) {
+                error_log("Reset login attempts error: " . $e->getMessage());
+                // Continue - session already created
+            }
+            
+            // Update last login (wrap in try-catch to prevent login failure)
+            try {
+                $this->updateLastLogin($user['id']);
+            } catch (Exception $e) {
+                error_log("Update last login error: " . $e->getMessage());
+                // Continue - session already created
+            }
+            
+            // Log login (non-critical, don't let it fail login)
+            try {
+                $this->logActivity($user['id'], 'login', 'User logged in');
+            } catch (Exception $e) {
+                error_log("Log activity error: " . $e->getMessage());
+                // Continue - session already created
+            }
+            
+            return ['success' => true, 'user' => $user];
+            
+        } catch (PDOException $e) {
+            error_log("Login Error: " . $e->getMessage());
+            error_log("Login Error Trace: " . $e->getTraceAsString());
+            // Return more detailed error in development (remove in production)
+            $errorMessage = 'Ralat sistem. Sila cuba lagi.';
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                $errorMessage .= ' (' . $e->getMessage() . ')';
+            }
+            return ['success' => false, 'message' => $errorMessage, 'error' => $e->getMessage()];
+        } catch (Exception $e) {
+            error_log("Login General Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Ralat sistem. Sila cuba lagi.', 'error' => $e->getMessage()];
+        }
+    }
+    
+    /**
+     * Check if user is logged in
+     */
+    public function isLoggedIn() {
+        return Session::has('user_id') && Session::has('user_role');
+    }
+    
+    /**
+     * Check if user has specific role
+     */
+    public function hasRole($role) {
+        return $this->isLoggedIn() && Session::get('user_role') === $role;
+    }
+    
+    /**
+     * Require authentication
+     * Redirects to login page if user is not logged in
+     */
+    public function requireAuth() {
+        if (!$this->isLoggedIn()) {
+            // Store return URL for redirect after login
+            $returnUrl = $_SERVER['REQUEST_URI'] ?? BASE_URL . 'index.php';
+            
+            // For AJAX requests, return JSON
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'requires_auth' => true,
+                    'redirect' => BASE_URL . 'auth/login.php?return=' . urlencode($returnUrl)
+                ]);
+                exit;
+            }
+            
+            // For regular requests, redirect to login page
+            $loginUrl = BASE_URL . 'auth/login.php';
+            if ($returnUrl && $returnUrl !== BASE_URL . 'index.php') {
+                $loginUrl .= '?return=' . urlencode($returnUrl);
+            }
+            header('Location: ' . $loginUrl);
+            exit;
+        }
+    }
+    
+    /**
+     * Require specific role
+     */
+    public function requireRole($role) {
+        $this->requireAuth();
+        if (!$this->hasRole($role)) {
+            header('Location: ' . BASE_URL . 'auth/unauthorized.php');
+            exit;
+        }
+    }
+    
+    /**
+     * Get current user
+     */
+    public function getUser() {
+        if (!$this->isLoggedIn()) {
+            return null;
+        }
+        
+        $userId = Session::get('user_id');
+        $stmt = $this->db->prepare("SELECT id, username, email, full_name, role, status FROM users WHERE id = :id AND deleted_at IS NULL");
+        $stmt->execute([':id' => $userId]);
+        return $stmt->fetch();
+    }
+    
+    /**
+     * Logout user
+     */
+    public function logout() {
+        if ($this->isLoggedIn()) {
+            $userId = Session::get('user_id');
+            $this->logActivity($userId, 'logout', 'User logged out');
+            $this->destroySession();
+        }
+        Session::destroy();
+    }
+    
+    /**
+     * Increment login attempts
+     */
+    private function incrementLoginAttempts($userId) {
+        try {
+            // First, get current login attempts
+            $stmt = $this->db->prepare("SELECT login_attempts FROM users WHERE id = :id");
+            $stmt->execute(['id' => $userId]);
+            $current = $stmt->fetch();
+            $newAttempts = ($current['login_attempts'] ?? 0) + 1;
+            
+            // Check if we should lock the account
+            $lockedUntil = null;
+            if ($newAttempts >= MAX_LOGIN_ATTEMPTS) {
+                $lockedUntil = date('Y-m-d H:i:s', time() + LOCKOUT_DURATION);
+            }
+            
+            // Update with calculated values (avoid CASE statement parameter issues)
+            if ($lockedUntil) {
+                $stmt = $this->db->prepare("
+                    UPDATE users 
+                    SET login_attempts = :attempts, locked_until = :locked_until
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    'id' => $userId,
+                    'attempts' => $newAttempts,
+                    'locked_until' => $lockedUntil
+                ]);
+            } else {
+                $stmt = $this->db->prepare("
+                    UPDATE users 
+                    SET login_attempts = :attempts, locked_until = NULL
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    'id' => $userId,
+                    'attempts' => $newAttempts
+                ]);
+            }
+        } catch (PDOException $e) {
+            error_log("Increment Login Attempts Error: " . $e->getMessage());
+            // Don't throw - just log the error
+        }
+    }
+    
+    /**
+     * Reset login attempts
+     */
+    private function resetLoginAttempts($userId) {
+        try {
+            $stmt = $this->db->prepare("UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = :id");
+            $stmt->execute(['id' => $userId]);
+        } catch (PDOException $e) {
+            error_log("Reset Login Attempts Error: " . $e->getMessage());
+            // Don't throw - just log the error
+        }
+    }
+    
+    /**
+     * Update last login
+     */
+    private function updateLastLogin($userId) {
+        try {
+            $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            $stmt = $this->db->prepare("
+                UPDATE users 
+                SET last_login = NOW(), last_login_ip = :ip 
+                WHERE id = :id
+            ");
+            $stmt->execute(['id' => $userId, 'ip' => $ip]);
+        } catch (PDOException $e) {
+            error_log("Update Last Login Error: " . $e->getMessage());
+            // Don't throw - just log the error
+        }
+    }
+    
+    /**
+     * Create user session
+     */
+    private function createSession($user) {
+        Session::regenerate();
+        Session::set('user_id', $user['id']);
+        Session::set('user_username', $user['username']);
+        Session::set('user_email', $user['email']);
+        Session::set('user_name', $user['full_name']);
+        Session::set('user_role', $user['role']);
+        Session::set('logged_in_at', date('Y-m-d H:i:s'));
+    }
+    
+    /**
+     * Destroy session
+     */
+    private function destroySession() {
+        Session::remove('user_id');
+        Session::remove('user_username');
+        Session::remove('user_email');
+        Session::remove('user_name');
+        Session::remove('user_role');
+        Session::remove('logged_in_at');
+    }
+    
+    /**
+     * Log user activity
+     */
+    private function logActivity($userId, $action, $description = null, $entityType = null, $entityId = null) {
+        try {
+            // Check if audit_logs table exists (use try-catch to handle if table doesn't exist)
+            try {
+                $checkTable = $this->db->query("SHOW TABLES LIKE 'audit_logs'");
+                if ($checkTable->rowCount() == 0) {
+                    // Table doesn't exist, skip logging
+                    return;
+                }
+            } catch (PDOException $e) {
+                // Table check failed, skip logging
+                return;
+            }
+            
+            $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+            
+            // Use simple INSERT with all fields (allow NULL values in database)
+            $stmt = $this->db->prepare("
+                INSERT INTO audit_logs (user_id, action, entity_type, entity_id, description, ip_address, user_agent)
+                VALUES (:user_id, :action, :entity_type, :entity_id, :description, :ip, :user_agent)
+            ");
+            $stmt->execute([
+                'user_id' => $userId,
+                'action' => $action,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'description' => $description,
+                'ip' => $ip,
+                'user_agent' => $userAgent
+            ]);
+        } catch (PDOException $e) {
+            error_log("Audit Log Error: " . $e->getMessage());
+            // Don't throw - logging is not critical for login
+        } catch (Exception $e) {
+            error_log("Audit Log General Error: " . $e->getMessage());
+            // Don't throw - logging is not critical for login
+        }
+    }
+}
+
+// Global auth instance
+function getAuth() {
+    static $auth = null;
+    if ($auth === null) {
+        $auth = new Auth();
+    }
+    return $auth;
+}
+
