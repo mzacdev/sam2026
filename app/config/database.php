@@ -6,9 +6,9 @@
 
 // Database configuration
 define('DB_HOST', '172.16.2.141');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'esports');
+define('DB_USER', 'pendaftar');
+define('DB_PASS', 'Pend@ftar@2025?');
+define('DB_NAME', 'esportsdb');
 define('DB_CHARSET', 'utf8mb4');
 
 // Database connection class
