@@ -5,10 +5,10 @@
  */
 
 // Database configuration
-define('DB_HOST', 'localhost');
+define('DB_HOST', '172.16.2.141');
 define('DB_USER', 'root');
 define('DB_PASS', '');
-define('DB_NAME', 'sport_centre');
+define('DB_NAME', 'esports');
 define('DB_CHARSET', 'utf8mb4');
 
 // Database connection class
