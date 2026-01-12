@@ -1,6 +1,6 @@
 # SAM 2026 - Sukan Asasi Malaysia
 
-Sistem Pengurusan Kejohanan Sukan Asasi Malaysia (SAM 2026) - A modular PHP application built with CoreUI Bootstrap admin template.
+Sistem Pengurusan Kejohanan Sukan Asasi Malaysia (SAM 2026) - A modular PHP application built with CoreUI Bootstrap admin template. Diedit oleh firdaus...aa
 
 ## Project Structure
 
