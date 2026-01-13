@@ -197,14 +197,5 @@ function submitVenue() {
     }, 500);
 }
 </script>
-    const name = document.getElementById('venueName').value;
 
-    // Simulate save; replace with AJAX to backend as needed
-    setTimeout(() => {
-        alert('Venue "' + name + '" berjaya disimpan (simulasi).');
-        closeAddVenueModal();
-        location.reload();
-    }, 500);
-}
-</script>
 

@@ -236,18 +236,19 @@ $userEmail = $currentUser['email'] ?? '';
     </script>
     <script>
         (function(){
-            function setActiveForHref(href){
+            function basename(path){
+                try { return path.split('/').filter(Boolean).pop() || path; } catch(e) { return path; }
+            }
+
+            function setActiveOnElement(link){
                 try {
                     var menu = document.getElementById('side-header-menu');
-                    if (!menu) return;
-                    // remove existing active markers
+                    if (!menu || !link) return;
+                    // clear active/open
                     menu.querySelectorAll('li').forEach(function(li){ li.classList.remove('active'); });
-                    menu.querySelectorAll('li.has-sub-menu').forEach(function(li){ li.classList.remove('open','active'); });
+                    menu.querySelectorAll('li.has-sub-menu').forEach(function(li){ li.classList.remove('open','active'); li.querySelectorAll('.side-header-sub-menu').forEach(function(ul){ ul.style.display='none'; }); });
 
-                    var link = menu.querySelector('a[href="' + href + '"]');
-                    if (!link) return;
-                    var li = link.closest('li');
-                    if (li) li.classList.add('active');
+                    var li = link.closest('li'); if (li) li.classList.add('active');
                     var parentSub = link.closest('.side-header-sub-menu');
                     if (parentSub) {
                         parentSub.style.display = 'block';
@@ -257,6 +258,41 @@ $userEmail = $currentUser['email'] ?? '';
                 } catch(e) { console && console.warn && console.warn(e); }
             }
 
+            function findAndActivateByHref(href){
+                try{
+                    var menu = document.getElementById('side-header-menu'); if (!menu) return false;
+                    // try exact selector match first
+                    var el = menu.querySelector('a[href="' + href + '"]'); if (el) { setActiveOnElement(el); return true; }
+
+                    var anchors = menu.querySelectorAll('a[href]');
+                    var loc = window.location;
+                    var currentPath = loc.pathname || '/';
+                    var currentFull = (loc.pathname || '') + (loc.search || '');
+
+                    for (var i=0;i<anchors.length;i++){
+                        var a = anchors[i];
+                        var raw = a.getAttribute('href');
+                        if (!raw) continue;
+                        // resolve to absolute URL using location as base
+                        var target;
+                        try { target = new URL(raw, loc.origin + '/'); } catch(e) { continue; }
+
+                        var tPath = target.pathname || '/';
+                        var tFull = (target.pathname || '') + (target.search || '');
+
+                        // exact pathname or pathname+search match
+                        if (tFull === currentFull || tPath === currentPath) { setActiveOnElement(a); return true; }
+
+                        // endsWith match (handles directories or different base prefixes)
+                        if (currentPath.endsWith(tPath) || tPath.endsWith(currentPath)) { setActiveOnElement(a); return true; }
+
+                        // fallback to basename match
+                        if (basename(tPath) && basename(tPath) === basename(currentPath)) { setActiveOnElement(a); return true; }
+                    }
+                    return false;
+                } catch(e) { console && console.warn && console.warn(e); return false; }
+            }
+
             function bindSidebarClicks(){
                 try{
                     document.querySelectorAll('#side-header-menu a[href]').forEach(function(a){
@@ -264,13 +300,29 @@ $userEmail = $currentUser['email'] ?? '';
                             var href = this.getAttribute('href');
                             if (!href || href.indexOf('#') === 0) return;
                             try { localStorage.setItem('sidebar_active', href); } catch(e) {}
-                            setActiveForHref(href);
+                            setActiveOnElement(this);
                         });
                     });
                 }catch(e){ console && console.warn && console.warn(e); }
             }
 
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ bindSidebarClicks(); var s=localStorage.getItem('sidebar_active'); if(s) setActiveForHref(s); });
-            else { bindSidebarClicks(); var s=localStorage.getItem('sidebar_active'); if(s) setActiveForHref(s); }
+            function initSidebarActive(){
+                try{
+                    // Prefer matching current URL to highlight
+                    if (!findAndActivateByHref(window.location.href)){
+                        var s = null;
+                        try { s = localStorage.getItem('sidebar_active'); } catch(e) {}
+                        if (s) findAndActivateByHref(s);
+                    }
+                }catch(e){ console && console.warn && console.warn(e); }
+            }
+
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ bindSidebarClicks(); initSidebarActive(); });
+            else { bindSidebarClicks(); initSidebarActive(); }
+
+            // Ensure activation runs after other template scripts (in footer) by re-applying on window load
+            try {
+                window.addEventListener('load', function(){ setTimeout(initSidebarActive, 120); });
+            } catch(e) {}
         })();
     </script>
