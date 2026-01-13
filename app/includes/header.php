@@ -152,7 +152,7 @@ $userEmail = $currentUser['email'] ?? '';
                                             <div class="body">
                                                 <ul>
                                                     <li><a href="<?php echo url('pages/settings.php'); ?>"><i class="zmdi zmdi-settings"></i>Tetapan</a></li>
-                                                    <li><a href="<?php echo url('auth/logout.php'); ?>"><i class="zmdi zmdi-lock-open"></i>Log keluar</a></li>
+                                                    <li><a class="confirm-logout" href="<?php echo url('auth/logout.php'); ?>"><i class="zmdi zmdi-lock-open"></i>Log keluar</a></li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -200,4 +200,77 @@ $userEmail = $currentUser['email'] ?? '';
                 location.reload();
             } catch(e) { console && console.warn && console.warn(e); }
         }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function(){
+            function bindLogoutConfirm() {
+                try {
+                    document.querySelectorAll('.confirm-logout').forEach(function(el){
+                        el.addEventListener('click', function(e){
+                            e.preventDefault();
+                            var href = this.getAttribute('href');
+                            if (window.Swal) {
+                                Swal.fire({
+                                    title: 'Log Keluar?',
+                                    text: 'Anda pasti mahu log keluar?',
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Ya, log keluar!',
+                                    cancelButtonText: 'Batal'
+                                }).then(function(result){
+                                    if (result.isConfirmed) {
+                                        window.location.href = href;
+                                    }
+                                });
+                            } else {
+                                if (confirm('Log keluar?')) window.location.href = href;
+                            }
+                        });
+                    });
+                } catch(e) { console && console.warn && console.warn(e); }
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindLogoutConfirm);
+            else bindLogoutConfirm();
+        })();
+    </script>
+    <script>
+        (function(){
+            function setActiveForHref(href){
+                try {
+                    var menu = document.getElementById('side-header-menu');
+                    if (!menu) return;
+                    // remove existing active markers
+                    menu.querySelectorAll('li').forEach(function(li){ li.classList.remove('active'); });
+                    menu.querySelectorAll('li.has-sub-menu').forEach(function(li){ li.classList.remove('open','active'); });
+
+                    var link = menu.querySelector('a[href="' + href + '"]');
+                    if (!link) return;
+                    var li = link.closest('li');
+                    if (li) li.classList.add('active');
+                    var parentSub = link.closest('.side-header-sub-menu');
+                    if (parentSub) {
+                        parentSub.style.display = 'block';
+                        var parentLi = parentSub.closest('li.has-sub-menu');
+                        if (parentLi) parentLi.classList.add('open','active');
+                    }
+                } catch(e) { console && console.warn && console.warn(e); }
+            }
+
+            function bindSidebarClicks(){
+                try{
+                    document.querySelectorAll('#side-header-menu a[href]').forEach(function(a){
+                        a.addEventListener('click', function(e){
+                            var href = this.getAttribute('href');
+                            if (!href || href.indexOf('#') === 0) return;
+                            try { localStorage.setItem('sidebar_active', href); } catch(e) {}
+                            setActiveForHref(href);
+                        });
+                    });
+                }catch(e){ console && console.warn && console.warn(e); }
+            }
+
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ bindSidebarClicks(); var s=localStorage.getItem('sidebar_active'); if(s) setActiveForHref(s); });
+            else { bindSidebarClicks(); var s=localStorage.getItem('sidebar_active'); if(s) setActiveForHref(s); }
+        })();
     </script>

@@ -142,6 +142,36 @@ $nav_items = [
 ];
 
 /* ============================================================
+ * NAVIGATION SECTIONS (grouped)
+ * Rendered by sidebar as collapsible groups. Individual child
+ * visibility is controlled by RBAC via `isNavItemVisible()`.
+ */
+$nav_sections = [
+    [
+        'title' => 'Pengurusan',
+        'children' => [
+            ['title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent.php'],
+            ['title' => 'Sukan', 'icon' => 'cil-gamepad', 'url' => 'pages/sports.php'],
+            ['title' => 'Atlet', 'icon' => 'cil-user', 'url' => 'pages/athletes.php'],
+            ['title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php'],
+        ],
+    ],
+    [
+        'title' => 'Laporan',
+        'children' => [
+            ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
+        ],
+    ],
+    [
+        'title' => 'Tetapan',
+        'children' => [
+            ['title' => 'General', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
+            ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/universiti.php'],
+        ],
+    ],
+];
+
+/* ============================================================
  * ACTIVE MENU DETECTION
  * ============================================================ */
 $current_page = basename($_SERVER['PHP_SELF']);
