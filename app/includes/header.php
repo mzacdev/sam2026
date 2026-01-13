@@ -40,13 +40,27 @@ $userEmail = $currentUser['email'] ?? '';
                 var themeLink = document.getElementById('themeStylesheet');
                 if (themeLink && theme) {
                     // ensure we only use filenames (no path injection)
-                    var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css'];
+                    var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
                     if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
                     themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
                 }
             } catch(e) { console && console.warn && console.warn(e); }
         })();
     </script>
+        <script>
+            (function(){
+                try {
+                    var theme = localStorage.getItem('sam_theme') || 'style-primary.css';
+                    var themeLink = document.getElementById('themeStylesheet');
+                    if (themeLink && theme) {
+                        // ensure we only use filenames (no path injection)
+                        var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
+                        if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
+                        themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
+                    }
+                } catch(e) { console && console.warn && console.warn(e); }
+            })();
+        </script>
 </head>
 <body>
 
@@ -123,8 +137,8 @@ $userEmail = $currentUser['email'] ?? '';
 
                                 <!-- Language & Theme Selector -->
                                 <li class="adomx-dropdown col-auto">
-                                    <a class="toggle" href="#" id="headerLocaleToggle">
-                                        <i class="zmdi zmdi-globe"></i>
+                                    <a class="toggle header-action-avatar" href="#" id="headerLocaleToggle" title="Paparan / Bahasa">
+                                        <img class="header-locale-img" src="<?php echo asset('img/avatar/logo_translation.png'); ?>" alt="Paparan" width="48" height="48" onerror="this.onerror=null;this.src='<?php echo asset('img/avatar/profiles.jpg'); ?>'">
                                     </a>
                                     <div class="adomx-dropdown-menu dropdown-menu-user">
                                         <div class="head">
@@ -150,6 +164,10 @@ $userEmail = $currentUser['email'] ?? '';
                                                         <button class="theme-swatch" onclick="setTheme('style-brown.css')" aria-label="Coklat" style="background:#795548"></button>
                                                         <button class="theme-swatch" onclick="setTheme('style-pink.css')" aria-label="Pink" style="background:#ff6fa3"></button>
                                                         <button class="theme-swatch" onclick="setTheme('style-purple.css')" aria-label="Purple" style="background:#6f42c1"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-cyan.css')" aria-label="Cyan" style="background:#17a2b8"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-teal.css')" aria-label="Teal" style="background:#20c997"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-yellow.css')" aria-label="Kuning" style="background:#ffc107"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-gray.css')" aria-label="Kelabu" style="background:#6c757d"></button>
                                                     </div>
                                                 </li>
                                             </ul>
@@ -157,11 +175,51 @@ $userEmail = $currentUser['email'] ?? '';
                                     </div>
                                 </li>
                                 <?php if ($currentUser): ?>
+                                    <?php
+                                    // Resolve avatar: prefer explicit user fields, allow URL or local filenames, fallback to default in assets/img/avatar
+                                    $defaultAvatar = asset('img/avatar/profiles.jpg');
+                                    $avatarSrc = $defaultAvatar;
+                                    $candidateKeys = ['avatar','f_avatar','profile_image','photo','image','avatar_url'];
+                                    foreach ($candidateKeys as $k) {
+                                        if (!empty($currentUser[$k])) {
+                                            $val = trim((string)$currentUser[$k]);
+                                            if ($val === '') continue;
+                                            // If looks like absolute URL or root-relative path, use as-is
+                                            if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) {
+                                                $avatarSrc = $val;
+                                                break;
+                                            }
+
+                                            // Try common local asset locations (server-side existence check)
+                                            $candidates = [
+                                                __DIR__ . '/../../assets/img/avatar/' . $val,
+                                                __DIR__ . '/../../assets/light/images/avatar/' . $val,
+                                                __DIR__ . '/../../assets/img/users/' . $val,
+                                                __DIR__ . '/../../assets/img/' . $val,
+                                            ];
+                                            foreach ($candidates as $i => $sp) {
+                                                if (file_exists($sp)) {
+                                                    // map server path index to public asset helper
+                                                    switch ($i) {
+                                                        case 0: $avatarSrc = asset('img/avatar/' . $val); break;
+                                                        case 1: $avatarSrc = asset('light/images/avatar/' . $val); break;
+                                                        case 2: $avatarSrc = asset('img/users/' . $val); break;
+                                                        default: $avatarSrc = asset('img/' . $val); break;
+                                                    }
+                                                    break 2;
+                                                }
+                                            }
+                                            // If no server file found, still try treating value as filename under avatar folder
+                                            $avatarSrc = asset('img/avatar/' . $val);
+                                            break;
+                                        }
+                                    }
+                                    ?>
                                     <li class="adomx-dropdown col-auto">
                                         <a class="toggle" href="#">
                                             <span class="user">
                                                 <span class="avatar">
-                                                    <img src="<?php echo asset('light/images/avatar/avatar-1.jpg'); ?>" alt="">
+                                                    <img src="<?php echo htmlspecialchars($avatarSrc, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='<?php echo $defaultAvatar; ?>'">
                                                     <span class="status"></span>
                                                 </span>
                                                 <span class="name"><?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></span>
@@ -179,7 +237,7 @@ $userEmail = $currentUser['email'] ?? '';
                                             </div>
                                             <div class="body">
                                                 <ul>
-                                                    <li><a href="<?php echo url('pages/settings.php'); ?>"><i class="zmdi zmdi-settings"></i>Tetapan</a></li>
+                                                    <!-- Removed duplicate 'Tetapan' entry from header (already in sidebar) -->
                                                     <li><a class="confirm-logout" href="<?php echo url('auth/logout.php'); ?>"><i class="zmdi zmdi-lock-open"></i>Log keluar</a></li>
                                                 </ul>
                                             </div>
@@ -207,7 +265,7 @@ $userEmail = $currentUser['email'] ?? '';
         var __themeBase = '<?php echo asset("light/css/"); ?>';
         function setTheme(filename) {
             try {
-                var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css'];
+                var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
                 if (allowed.indexOf(filename) === -1) return;
                 localStorage.setItem('sam_theme', filename);
                 var link = document.getElementById('themeStylesheet');
@@ -228,6 +286,63 @@ $userEmail = $currentUser['email'] ?? '';
                 location.reload();
             } catch(e) { console && console.warn && console.warn(e); }
         }
+            // Base URL for theme CSS files
+            var __themeBase = '<?php echo asset("light/css/"); ?>';
+
+            // Map theme filename to an authoritative primary color for uniform overrides
+            var __themeColorMap = {
+                'style-primary.css': '#0d6efd',
+                'style-red.css': '#dc3545',
+                'style-green.css': '#198754',
+                'style-brown.css': '#795548',
+                'style-indigo.css': '#6610f2',
+                'style-orange.css': '#fd7e14',
+                'style-pink.css': '#ff6fa3',
+                'style-purple.css': '#6f42c1',
+                'style-cyan.css': '#17a2b8',
+                'style-teal.css': '#20c997',
+                'style-yellow.css': '#ffc107',
+                'style-gray.css': '#6c757d'
+            };
+
+            function applyThemeColorOverrides(hex) {
+                try {
+                    if (!hex) return;
+                    var id = 'themeColorOverrides';
+                    var existing = document.getElementById(id);
+                    var css = ':root{--app-primary:' + hex + '}\n';
+                    css += '.bg-primary, .btn-primary, .header-section, .adomx-sidebar, .side-header, .site-navbar, .text-primary { background-color: ' + hex + ' !important; color: #fff !important; }\n';
+                    css += '.text-primary, a.text-primary { color: ' + hex + ' !important; }\n';
+                    css += '.btn-primary, .btn-primary:hover, .btn-primary:focus { background-color: ' + hex + ' !important; border-color: ' + hex + ' !important; color:#fff !important; }\n';
+                    css += '.btn-outline-primary { border-color: ' + hex + ' !important; color: ' + hex + ' !important; }\n';
+                    css += '.btn-outline-primary:hover { background-color: ' + hex + ' !important; color:#fff !important; }\n';
+                    css += '.side-header-menu li.active > a, .side-header-menu li.has-sub-menu.open > a { background: linear-gradient(90deg, ' + hex + ' 0%, rgba(0,0,0,0.04) 100%) !important; color:#fff !important; }\n';
+                    css += '.theme-swatch[aria-pressed="true"]{ box-shadow:0 0 0 2px rgba(0,0,0,0.12) inset, 0 0 0 3px ' + hex + '33 !important; }\n';
+
+                    if (existing) {
+                        existing.textContent = css;
+                    } else {
+                        var style = document.createElement('style');
+                        style.id = id;
+                        style.type = 'text/css';
+                        style.appendChild(document.createTextNode(css));
+                        document.head.appendChild(style);
+                    }
+                } catch (e) { console && console.warn && console.warn(e); }
+            }
+
+            function setTheme(filename) {
+                try {
+                    var allowed = Object.keys(__themeColorMap);
+                    if (allowed.indexOf(filename) === -1) return;
+                    localStorage.setItem('sam_theme', filename);
+                    var link = document.getElementById('themeStylesheet');
+                    if (link) link.href = __themeBase + filename;
+                    var hex = __themeColorMap[filename] || null;
+                    applyThemeColorOverrides(hex);
+                } catch(e) { console && console.warn && console.warn(e); }
+            }
+
     </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
