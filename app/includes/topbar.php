@@ -27,7 +27,7 @@ if (!defined('SKIP_AUTH_CHECK')) {
 <header class="header header-sticky mb-4">
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark w-100">
         <div class="w-100 px-3">
-            <a class="navbar-brand" href="<?php echo url('index.php'); ?>">
+                    <a class="navbar-brand" href="<?php echo url('pages/dashboard.php'); ?>">
                 <img src="<?php echo logo(LOGO_HEADER); ?>" alt="<?php echo SITE_NAME; ?>" class="navbar-logo" height="40">
                 <span class="ms-2 d-none d-md-inline"><strong><?php echo SITE_NAME; ?></strong></span>
             </a>
@@ -132,7 +132,7 @@ if (!defined('SKIP_AUTH_CHECK')) {
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb my-0">
                 <li class="breadcrumb-item">
-                    <a href="<?php echo url('index.php'); ?>">Utama</a>
+                    <a href="<?php echo url('pages/dashboard.php'); ?>">Utama</a>
                 </li>
                 <?php if (isset($page_title) && $page_title !== 'Papan Pemuka'): ?>
                     <li class="breadcrumb-item active"><?php echo $page_title; ?></li>

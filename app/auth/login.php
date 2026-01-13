@@ -9,8 +9,8 @@ require_once __DIR__ . '/../config/auth.php';
 Session::start();
 $auth = getAuth();
 
-if ($auth->isLoggedIn()) {
-    header('Location: ' . url('index.php'));
+    if ($auth->isLoggedIn()) {
+    header('Location: ' . url('pages/dashboard.php'));
     exit;
 }
 
@@ -29,9 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$returnUrl) {
                 switch ($result['user']['role']) {
-                    case 'ADMIN':
+                        case 'ADMIN':
                     case 'ORGANIZER':
-                        $returnUrl = url('index.php');
+                        $returnUrl = url('pages/dashboard.php');
                         break;
                     case 'JUDGE':
                         $returnUrl = url('pages/results.php');
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($returnUrl && (strpos($returnUrl, BASE_URL) === 0 || strpos($returnUrl, '/') === 0)) {
                 header('Location: ' . $returnUrl . '?login=success');
             } else {
-                header('Location: ' . url('index.php?login=success'));
+                header('Location: ' . url('pages/dashboard.php?login=success'));
             }
             exit;
         }

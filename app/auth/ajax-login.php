@@ -45,24 +45,24 @@ if ($result['success']) {
     $returnUrl = $_POST['return_url'] ?? null;
     
     // If no return URL, redirect based on role
-    if (!$returnUrl) {
-        switch ($result['user']['role']) {
-            case 'ADMIN':
-                $returnUrl = url('index.php');
-                break;
-            case 'ORGANIZER':
-                $returnUrl = url('index.php');
-                break;
-            case 'JUDGE':
-                $returnUrl = url('pages/results.php');
-                break;
-            case 'CONTINGENT':
-                $returnUrl = url('pages/contingent.php');
-                break;
-            default:
-                $returnUrl = url('index.php');
+        if (!$returnUrl) {
+            switch ($result['user']['role']) {
+                case 'ADMIN':
+                    $returnUrl = url('pages/dashboard.php');
+                    break;
+                case 'ORGANIZER':
+                    $returnUrl = url('pages/dashboard.php');
+                    break;
+                case 'JUDGE':
+                    $returnUrl = url('pages/results.php');
+                    break;
+                case 'CONTINGENT':
+                    $returnUrl = url('pages/contingent.php');
+                    break;
+                default:
+                    $returnUrl = url('index.php');
+            }
         }
-    }
     
     // Normalize return URL (handle relative paths like "index.php")
     if ($returnUrl && !preg_match('#^https?://#i', $returnUrl)) {

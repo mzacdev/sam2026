@@ -266,7 +266,7 @@ const LoginModal = {
                 
                 // Redirect after short delay
                 setTimeout(() => {
-                    const returnUrl = document.getElementById('loginReturnUrl').value || '<?php echo url('index.php'); ?>';
+                    const returnUrl = document.getElementById('loginReturnUrl').value || '<?php echo url('pages/dashboard.php'); ?>';
                     window.location.href = returnUrl;
                 }, 500);
             } else {

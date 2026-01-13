@@ -3,6 +3,9 @@
  * Dashboard Page
  */
 require_once 'config.php';
+// Redirect to pages/dashboard.php
+header('Location: ' . url('pages/dashboard.php'));
+exit;
 // Authentication is handled in layout.php
 
 $page_title = 'Papan Pemuka';

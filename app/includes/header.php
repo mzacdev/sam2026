@@ -45,7 +45,7 @@ $userEmail = $currentUser['email'] ?? '';
 
                 <!-- Header Logo (Header Left) Start -->
                 <div class="header-logo col-auto">
-                    <a href="<?php echo url('index.php'); ?>">
+                    <a href="<?php echo url('pages/dashboard.php'); ?>">
                         <img src="<?php echo asset('img/logos/logo-main.png'); ?>" alt="<?php echo SITE_NAME; ?>">
                         <img src="<?php echo asset('img/logos/logo-main.png'); ?>" class="logo-light" alt="<?php echo SITE_NAME; ?>">
                     </a>

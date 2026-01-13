@@ -51,7 +51,7 @@ ob_start();
                     <?php endif; ?>
                     
                     <div class="mt-4">
-                        <a href="<?php echo url('index.php'); ?>" class="btn btn-primary me-2">
+                        <a href="<?php echo url('pages/dashboard.php'); ?>" class="btn btn-primary me-2">
                             <i class="cil cil-home me-1"></i> Kembali ke Papan Pemuka
                         </a>
                         <a href="<?php echo url('auth/logout.php'); ?>" class="btn btn-outline-secondary">

@@ -9,16 +9,40 @@ $page_title = 'Kontinjen';
 ob_start();
 ?>
 <div class="w-100 px-3">
+    <!-- Hero -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-0">Kontinjen</h2>
-                    <p class="text-muted">Urus pendaftaran kontinjen</p>
+            <div class="card bg-light border-0 shadow-sm overflow-hidden">
+                <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+                    <div>
+                        <h2 class="mb-1">Kontinjen</h2>
+                        <p class="text-muted mb-0">Urus pendaftaran kontinjen — ringkasan dan tindakan pantas</p>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-none d-md-flex">
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Kontinjen</div>
+                            </div>
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Atlet</div>
+                            </div>
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Sukan</div>
+                            </div>
+                        </div>
+
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary">Laporan</button>
+                            <button class="btn btn-primary" onclick="showRegistrationForm()">
+                                <i class="cil cil-plus me-1"></i> Daftar Kontinjen Baru
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="showRegistrationForm()">
-                    <i class="cil cil-plus me-1"></i> Daftar Kontinjen Baru
-                </button>
             </div>
         </div>
     </div>
@@ -330,28 +354,37 @@ ob_start();
     <!-- Contingent List -->
     <div class="row">
         <div class="col-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <strong>Senarai Kontinjen</strong>
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Senarai Kontinjen</strong>
+                        <div class="small text-muted">Urus semua kontinjen yang didaftarkan</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="input-group input-group-sm me-2" style="min-width:220px;">
+                            <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
+                            <input type="search" class="form-control" id="contingentSearch" placeholder="Cari nama atau kod...">
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-light">
                                 <tr>
-                                    <th scope="col">#</th>
+                                    <th scope="col" style="width:70px;">#</th>
                                     <th scope="col">Nama Kontinjen</th>
                                     <th scope="col">Kod</th>
-                                    <th scope="col">Jumlah Atlet</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Tindakan</th>
+                                    <th scope="col" style="width:140px;">Jumlah Atlet</th>
+                                    <th scope="col" style="width:120px;">Status</th>
+                                    <th scope="col" style="width:160px;">Tindakan</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="contingentTableBody">
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
+                                    <td colspan="6" class="text-center text-muted py-5">
                                         <i class="cil cil-info" style="font-size: 2rem;"></i>
-                                        <p class="mt-2">Tiada kontinjen didaftarkan</p>
+                                        <p class="mt-2">Tiada kontinjen didaftarkan — klik "Daftar Baru" untuk mula mendaftar.</p>
                                     </td>
                                 </tr>
                             </tbody>

@@ -1,5 +1,7 @@
 <?php
 /**
+<?php
+/**
  * Venues Management Page
  */
 require_once __DIR__ . '/../config.php';
@@ -117,6 +119,38 @@ function showAddVenue() {
         modalEl.style.display = 'block';
         document.body.classList.add('modal-open');
     }
+}
+
+function closeAddVenueModal() {
+    const modalEl = document.getElementById('addVenueModal');
+    if (addVenueModalInstance && typeof addVenueModalInstance.hide === 'function') {
+        addVenueModalInstance.hide();
+    } else if (typeof coreui !== 'undefined' && coreui.Modal) {
+        const inst = coreui.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+}
+
+function submitVenue() {
+    const form = document.getElementById('venueForm');
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+    const name = document.getElementById('venueName').value;
+
+    // Simulate save; replace with AJAX to backend when ready
+    setTimeout(() => {
+        alert('Venue "' + name + '" berjaya disimpan (simulasi).');
+        closeAddVenueModal();
+        location.reload();
+    }, 500);
+}
+</script>
 }
 
 function closeAddVenueModal() {
