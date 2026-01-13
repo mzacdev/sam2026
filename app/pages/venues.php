@@ -1,7 +1,5 @@
 <?php
 /**
-<?php
-/**
  * Venues Management Page
  */
 require_once __DIR__ . '/../config.php';
@@ -11,45 +9,93 @@ $page_title = 'Venue';
 ob_start();
 ?>
 <div class="w-100 px-3">
+    <!-- Hero -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-0">Venue</h2>
-                    <p class="text-muted">Urus lokasi dan tempat pertandingan</p>
+            <div class="card bg-light border-0 shadow-sm overflow-hidden">
+                <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+                    <div>
+                        <h2 class="mb-1">Venue</h2>
+                        <p class="text-muted mb-0">Urus lokasi dan tempat pertandingan</p>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-none d-md-flex">
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Venue</div>
+                            </div>
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Kapasiti</div>
+                            </div>
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Sukan</div>
+                            </div>
+                        </div>
+
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary">Laporan</button>
+                            <button class="btn btn-primary" onclick="showAddVenue()">
+                                <i class="cil cil-plus me-1"></i> Daftar Venue Baru
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="showAddVenue()">
-                    <i class="cil cil-plus me-1"></i> Daftar Venue Baru
-                </button>
             </div>
         </div>
     </div>
 
+    <!-- Filters & Search -->
+    <div class="row mb-3">
+        <div class="col-lg-4 mb-2 mb-lg-0">
+            <select class="form-select" id="filterSport">
+                <option value="">Semua Sukan</option>
+            </select>
+        </div>
+        <div class="col-lg-4 mb-2 mb-lg-0">
+            <select class="form-select" id="filterLocation">
+                <option value="">Semua Lokasi</option>
+            </select>
+        </div>
+        <div class="col-lg-4">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
+                <input type="text" class="form-control" id="venuesSearch" placeholder="Cari nama atau lokasi...">
+            </div>
+        </div>
+    </div>
+
+    <!-- Venues List -->
     <div class="row">
         <div class="col-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <strong>Senarai Venue</strong>
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Senarai Venue</strong>
+                        <div class="small text-muted">Urus semua venue berdaftar</div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-light">
                                 <tr>
-                                    <th scope="col">#</th>
+                                    <th scope="col" style="width:70px;">#</th>
                                     <th scope="col">Nama Venue</th>
                                     <th scope="col">Lokasi</th>
                                     <th scope="col">Kapasiti</th>
                                     <th scope="col">Sukan</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Tindakan</th>
+                                    <th scope="col" style="width:120px;">Status</th>
+                                    <th scope="col" style="width:160px;">Tindakan</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="venuesTableBody">
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-5">
                                         <i class="cil cil-map" style="font-size: 2rem;"></i>
-                                        <p class="mt-2">Tiada venue didaftarkan</p>
+                                        <p class="mt-2">Tiada venue didaftarkan — klik "Daftar Venue Baru" untuk mula menambah.</p>
                                     </td>
                                 </tr>
                             </tbody>
@@ -143,7 +189,7 @@ function submitVenue() {
     if (!form.checkValidity()) { form.reportValidity(); return; }
     const name = document.getElementById('venueName').value;
 
-    // Simulate save; replace with AJAX to backend when ready
+    // Simulate save; replace with AJAX to backend as needed
     setTimeout(() => {
         alert('Venue "' + name + '" berjaya disimpan (simulasi).');
         closeAddVenueModal();
@@ -151,31 +197,9 @@ function submitVenue() {
     }, 500);
 }
 </script>
-}
-
-function closeAddVenueModal() {
-    const modalEl = document.getElementById('addVenueModal');
-    if (addVenueModalInstance && typeof addVenueModalInstance.hide === 'function') {
-        addVenueModalInstance.hide();
-    } else if (typeof coreui !== 'undefined' && coreui.Modal) {
-        const inst = coreui.Modal.getInstance(modalEl);
-        if (inst) inst.hide();
-    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-        const inst = bootstrap.Modal.getInstance(modalEl);
-        if (inst) inst.hide();
-    } else {
-        modalEl.classList.remove('show');
-        modalEl.style.display = 'none';
-        document.body.classList.remove('modal-open');
-    }
-}
-
-function submitVenue() {
-    const form = document.getElementById('venueForm');
-    if (!form.checkValidity()) { form.reportValidity(); return; }
     const name = document.getElementById('venueName').value;
 
-    // Simulate save; replace with AJAX to backend when ready
+    // Simulate save; replace with AJAX to backend as needed
     setTimeout(() => {
         alert('Venue "' + name + '" berjaya disimpan (simulasi).');
         closeAddVenueModal();
