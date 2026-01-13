@@ -135,45 +135,7 @@ $userEmail = $currentUser['email'] ?? '';
                                     </li>
                                 <?php endif; ?>
 
-                                <!-- Language & Theme Selector -->
-                                <li class="adomx-dropdown col-auto">
-                                    <a class="toggle header-action-avatar" href="#" id="headerLocaleToggle" title="Paparan / Bahasa">
-                                        <img class="header-locale-img" src="<?php echo asset('img/avatar/logo_translation.png'); ?>" alt="Paparan" width="48" height="48" onerror="this.onerror=null;this.src='<?php echo asset('img/avatar/profiles.jpg'); ?>'">
-                                    </a>
-                                    <div class="adomx-dropdown-menu dropdown-menu-user">
-                                        <div class="head">
-                                            <h5 class="name">Paparan</h5>
-                                        </div>
-                                        <div class="body">
-                                            <ul>
-                                                <li class="mb-2 px-3">
-                                                    <div class="small text-muted">Bahasa</div>
-                                                    <div class="mt-1">
-                                                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="setLanguage('ms')">MS</button>
-                                                        <button class="btn btn-sm btn-outline-secondary" onclick="setLanguage('en')">EN</button>
-                                                    </div>
-                                                </li>
-                                                <li class="px-3">
-                                                    <div class="small text-muted">Warna Tema</div>
-                                                    <div class="mt-2 d-flex gap-2 flex-wrap">
-                                                        <button class="theme-swatch" onclick="setTheme('style-primary.css')" aria-label="Default" style="background:#0d6efd"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-red.css')" aria-label="Merah" style="background:#dc3545"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-green.css')" aria-label="Hijau" style="background:#198754"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-orange.css')" aria-label="Oren" style="background:#fd7e14"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-indigo.css')" aria-label="Indigo" style="background:#6610f2"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-brown.css')" aria-label="Coklat" style="background:#795548"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-pink.css')" aria-label="Pink" style="background:#ff6fa3"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-purple.css')" aria-label="Purple" style="background:#6f42c1"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-cyan.css')" aria-label="Cyan" style="background:#17a2b8"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-teal.css')" aria-label="Teal" style="background:#20c997"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-yellow.css')" aria-label="Kuning" style="background:#ffc107"></button>
-                                                        <button class="theme-swatch" onclick="setTheme('style-gray.css')" aria-label="Kelabu" style="background:#6c757d"></button>
-                                                    </div>
-                                                </li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </li>
+                                <!-- Language & Theme Selector removed per request -->
                                 <?php if ($currentUser): ?>
                                     <?php
                                     // Resolve avatar: prefer explicit user fields, allow URL or local filenames, fallback to default in assets/img/avatar
@@ -260,90 +222,7 @@ $userEmail = $currentUser['email'] ?? '';
         </div>
     </div><!-- Header Section End -->
 
-    <script>
-        // Base URL for theme CSS files
-        var __themeBase = '<?php echo asset("light/css/"); ?>';
-        function setTheme(filename) {
-            try {
-                var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
-                if (allowed.indexOf(filename) === -1) return;
-                localStorage.setItem('sam_theme', filename);
-                var link = document.getElementById('themeStylesheet');
-                if (link) link.href = __themeBase + filename;
-            } catch(e) { console && console.warn && console.warn(e); }
-        }
-
-        function setLanguage(lang) {
-            try {
-                if (!lang) return;
-                // set cookie (server-side will read this on next request)
-                var d = new Date(); d.setTime(d.getTime() + (365*24*60*60*1000));
-                document.cookie = 'sam_lang=' + encodeURIComponent(lang) + '; path=/; expires=' + d.toUTCString();
-                localStorage.setItem('sam_lang', lang);
-                // update html lang immediately
-                document.documentElement.lang = lang;
-                // reload so server-side translations (if any) can apply
-                location.reload();
-            } catch(e) { console && console.warn && console.warn(e); }
-        }
-            // Base URL for theme CSS files
-            var __themeBase = '<?php echo asset("light/css/"); ?>';
-
-            // Map theme filename to an authoritative primary color for uniform overrides
-            var __themeColorMap = {
-                'style-primary.css': '#0d6efd',
-                'style-red.css': '#dc3545',
-                'style-green.css': '#198754',
-                'style-brown.css': '#795548',
-                'style-indigo.css': '#6610f2',
-                'style-orange.css': '#fd7e14',
-                'style-pink.css': '#ff6fa3',
-                'style-purple.css': '#6f42c1',
-                'style-cyan.css': '#17a2b8',
-                'style-teal.css': '#20c997',
-                'style-yellow.css': '#ffc107',
-                'style-gray.css': '#6c757d'
-            };
-
-            function applyThemeColorOverrides(hex) {
-                try {
-                    if (!hex) return;
-                    var id = 'themeColorOverrides';
-                    var existing = document.getElementById(id);
-                    var css = ':root{--app-primary:' + hex + '}\n';
-                    css += '.bg-primary, .btn-primary, .header-section, .adomx-sidebar, .side-header, .site-navbar, .text-primary { background-color: ' + hex + ' !important; color: #fff !important; }\n';
-                    css += '.text-primary, a.text-primary { color: ' + hex + ' !important; }\n';
-                    css += '.btn-primary, .btn-primary:hover, .btn-primary:focus { background-color: ' + hex + ' !important; border-color: ' + hex + ' !important; color:#fff !important; }\n';
-                    css += '.btn-outline-primary { border-color: ' + hex + ' !important; color: ' + hex + ' !important; }\n';
-                    css += '.btn-outline-primary:hover { background-color: ' + hex + ' !important; color:#fff !important; }\n';
-                    css += '.side-header-menu li.active > a, .side-header-menu li.has-sub-menu.open > a { background: linear-gradient(90deg, ' + hex + ' 0%, rgba(0,0,0,0.04) 100%) !important; color:#fff !important; }\n';
-                    css += '.theme-swatch[aria-pressed="true"]{ box-shadow:0 0 0 2px rgba(0,0,0,0.12) inset, 0 0 0 3px ' + hex + '33 !important; }\n';
-
-                    if (existing) {
-                        existing.textContent = css;
-                    } else {
-                        var style = document.createElement('style');
-                        style.id = id;
-                        style.type = 'text/css';
-                        style.appendChild(document.createTextNode(css));
-                        document.head.appendChild(style);
-                    }
-                } catch (e) { console && console.warn && console.warn(e); }
-            }
-
-            function setTheme(filename) {
-                try {
-                    var allowed = Object.keys(__themeColorMap);
-                    if (allowed.indexOf(filename) === -1) return;
-                    localStorage.setItem('sam_theme', filename);
-                    var link = document.getElementById('themeStylesheet');
-                    if (link) link.href = __themeBase + filename;
-                    var hex = __themeColorMap[filename] || null;
-                    applyThemeColorOverrides(hex);
-                } catch(e) { console && console.warn && console.warn(e); }
-            }
-
-    </script>
+    <!-- Language and theme selection UI removed -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function(){

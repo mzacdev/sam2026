@@ -24,7 +24,24 @@
 }
 
 /* smaller locale icon (language toggle) */
-.header-locale-img{width:48px;height:48px;object-fit:cover;border-radius:50%;border:1px solid rgba(0,0,0,0.06);background:#fff}
-@media (max-width:767px){
-	.header-locale-img{width:36px;height:36px}
+
+/* Ensure user avatar in header matches locale/action icon sizing */
+.header-notification-area .avatar img,
+.header-notification-area .avatar img[alt],
+.header-notification-area img.header-locale-img {
+	width:48px !important;
+	height:48px !important;
+	object-fit:cover !important;
+	border-radius:50% !important;
+	border:1px solid rgba(0,0,0,0.06) !important;
+	background:#fff !important;
 }
+@media (max-width:767px){
+	.header-notification-area .avatar img,
+	.header-notification-area img.header-locale-img {
+		width:36px !important;
+		height:36px !important;
+	}
+}
+
+/* header-locale-img and overlay styles removed (selection UI disabled) */
