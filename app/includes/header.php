@@ -20,7 +20,7 @@ $userEmail = $currentUser['email'] ?? '';
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="<?php echo defined('SITE_DESCRIPTION') ? SITE_DESCRIPTION : SITE_NAME; ?>">
-    <link rel="shortcut icon" type="image/x-icon" href="<?php echo asset('light/images/favicon.ico'); ?>">
+    <link rel="shortcut icon" type="image/x-icon" href="<?php echo asset('img/favicon.ico'); ?>">
 
     <!-- CSS -->
     <link rel="stylesheet" href="<?php echo asset('light/css/vendor/bootstrap.min.css'); ?>">
@@ -93,6 +93,34 @@ $userEmail = $currentUser['email'] ?? '';
                         <!-- Header User Area Start -->
                         <div class="col-auto">
                             <ul class="header-notification-area">
+                                <!-- Sports icons (up to 10) loaded from assets/img/sukan -->
+                                <?php
+                                $sukanDir = realpath(__DIR__ . '/../../assets/img/sukan');
+                                $sukanLogos = [];
+                                if ($sukanDir && is_dir($sukanDir)) {
+                                    $files = glob($sukanDir . '/*.{png,jpg,jpeg,svg,gif}', GLOB_BRACE);
+                                    if ($files) {
+                                        // sort alphabetically
+                                        usort($files, function($a,$b){ return strcmp(basename($a), basename($b)); });
+                                        foreach (array_slice($files, 0, 10) as $f) {
+                                            $sukanLogos[] = basename($f);
+                                        }
+                                    }
+                                }
+                                // If scanning failed, provide a safe fallback list of common icons
+                                if (empty($sukanLogos)) {
+                                    $fallback = ['badminton.png','bola-jaring.png','bola-sepak.png','catur.png','mlbb-pubg.png','olahraga.png','ragbi.png','takraw.png','tenpin-bowling.png','volleyball.png'];
+                                    $sukanLogos = $fallback;
+                                }
+                                if (!empty($sukanLogos)): ?>
+                                    <li class="col-auto d-flex align-items-center header-sukan-logos" style="gap:.5rem;">
+                                        <?php foreach ($sukanLogos as $logo): ?>
+                                            <?php $label = htmlspecialchars(ucwords(str_replace(array('-', '_'), ' ', pathinfo($logo, PATHINFO_FILENAME))), ENT_QUOTES, 'UTF-8'); ?>
+                                            <img src="<?php echo asset('img/sukan/' . $logo); ?>" alt="<?php echo $label; ?>" title="<?php echo $label; ?>" aria-label="<?php echo $label; ?>" width="48" height="48" onerror="this.style.display='none'" />
+                                        <?php endforeach; ?>
+                                    </li>
+                                <?php endif; ?>
+
                                 <!-- Language & Theme Selector -->
                                 <li class="adomx-dropdown col-auto">
                                     <a class="toggle" href="#" id="headerLocaleToggle">
@@ -114,14 +142,14 @@ $userEmail = $currentUser['email'] ?? '';
                                                 <li class="px-3">
                                                     <div class="small text-muted">Warna Tema</div>
                                                     <div class="mt-2 d-flex gap-2 flex-wrap">
-                                                        <button class="btn btn-sm btn-light border" onclick="setTheme('style-primary.css')">Default</button>
-                                                        <button class="btn btn-sm btn-danger" onclick="setTheme('style-red.css')">Merah</button>
-                                                        <button class="btn btn-sm btn-success" onclick="setTheme('style-green.css')">Hijau</button>
-                                                        <button class="btn btn-sm btn-warning" onclick="setTheme('style-orange.css')">Oren</button>
-                                                        <button class="btn btn-sm btn-info" onclick="setTheme('style-indigo.css')">Indigo</button>
-                                                        <button class="btn btn-sm btn-dark" onclick="setTheme('style-brown.css')">Coklat</button>
-                                                        <button class="btn btn-sm btn-pink" style="background:#ff6fa3;color:#fff;border:none;" onclick="setTheme('style-pink.css')">Pink</button>
-                                                        <button class="btn btn-sm btn-purple" style="background:#6f42c1;color:#fff;border:none;" onclick="setTheme('style-purple.css')">Purple</button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-primary.css')" aria-label="Default" style="background:#0d6efd"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-red.css')" aria-label="Merah" style="background:#dc3545"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-green.css')" aria-label="Hijau" style="background:#198754"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-orange.css')" aria-label="Oren" style="background:#fd7e14"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-indigo.css')" aria-label="Indigo" style="background:#6610f2"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-brown.css')" aria-label="Coklat" style="background:#795548"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-pink.css')" aria-label="Pink" style="background:#ff6fa3"></button>
+                                                        <button class="theme-swatch" onclick="setTheme('style-purple.css')" aria-label="Purple" style="background:#6f42c1"></button>
                                                     </div>
                                                 </li>
                                             </ul>
