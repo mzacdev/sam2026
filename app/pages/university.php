@@ -52,7 +52,7 @@ ob_start();
 						</div>
 
 						<div class="btn-group">
-							<button class="btn btn-outline-secondary">Laporan</button>
+							<button class="btn btn-outline-secondary" id="btnPrint">Cetak</button>
 							<button class="btn btn-primary" id="btnAddUniversity">
 								<i class="cil cil-plus me-1"></i> Tambah Universiti
 							</button>
@@ -336,6 +336,67 @@ ob_start();
 			btnAdd.addEventListener('click', function(e){
 				e.preventDefault();
 				showEditModal({});
+			});
+		}
+
+		// Hook up Print button to print inline (no new window).
+		// It injects a temporary print container containing only the title and table,
+		// applies print-only styles, triggers print, then cleans up.
+		var btnPrint = document.getElementById('btnPrint');
+		if (btnPrint) {
+			btnPrint.addEventListener('click', function(e){
+				e.preventDefault();
+				var table = document.querySelector('.table-responsive table');
+				if (!table) { alert('Tiada jadual untuk dicetak'); return; }
+
+				// Clone table and remove the last column (Tindakan)
+				var tableClone = table.cloneNode(true);
+				try {
+					var ths = tableClone.querySelectorAll('thead th');
+					if (ths.length > 0) ths[ths.length - 1].remove();
+					var rows = tableClone.querySelectorAll('tbody tr');
+					rows.forEach(function(r){
+						var tds = r.querySelectorAll('td');
+						if (tds.length > 0) tds[tds.length - 1].remove();
+					});
+				} catch (err) { console && console.warn && console.warn(err); }
+
+				var printTitle = '<?php echo addslashes($page_title); ?>';
+				var siteName = '<?php echo addslashes(SITE_NAME); ?>';
+
+				// Create container
+				var printContainer = document.createElement('div');
+				printContainer.className = 'print-container';
+				printContainer.style.display = 'none';
+
+				var titleEl = document.createElement('h1');
+				titleEl.textContent = siteName + ' — ' + printTitle;
+				printContainer.appendChild(titleEl);
+				printContainer.appendChild(tableClone);
+				document.body.appendChild(printContainer);
+
+				// Inject print styles that hide everything except .print-container during print
+				var styleEl = document.createElement('style');
+				styleEl.id = 'printStyles';
+				styleEl.type = 'text/css';
+				styleEl.appendChild(document.createTextNode('@media print { body * { visibility: hidden !important; } .print-container, .print-container * { visibility: visible !important; } .print-container { position: absolute; left:0; top:0; width:100%; } } .print-container h1{font-size:18pt;margin-bottom:8px;} .print-container table{width:100%;border-collapse:collapse;} .print-container th, .print-container td{border:1px solid #ddd;padding:6px;}'));
+				document.head.appendChild(styleEl);
+
+				// Show container then print
+				printContainer.style.display = '';
+
+				var cleanup = function(){
+					try { if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl); } catch(e){}
+					try { if (printContainer && printContainer.parentNode) printContainer.parentNode.removeChild(printContainer); } catch(e){}
+					window.removeEventListener('afterprint', cleanup);
+				};
+
+				window.addEventListener('afterprint', cleanup);
+				// Fallback cleanup in case afterprint isn't supported
+				setTimeout(function(){
+					try { window.print(); } catch(e){ console && console.warn && console.warn(e); }
+					setTimeout(cleanup, 1000);
+				}, 50);
 			});
 		}
 	})();
