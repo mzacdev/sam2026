@@ -166,7 +166,7 @@ $nav_sections = [
         'title' => 'Tetapan',
         'children' => [
             ['title' => 'General', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
-            ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/universiti.php'],
+            ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/university.php'],
         ],
     ],
 ];

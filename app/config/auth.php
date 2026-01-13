@@ -34,9 +34,11 @@ class Session {
         
         // Check if headers have been sent
         if (headers_sent()) {
-            // Headers already sent - can't configure session, but try to start if not started
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
+            // Headers already sent - cannot safely start a session here.
+            // Avoid calling session_start() after output to prevent warnings.
+            error_log('[Session] headers already sent; cannot start session in ' . __FILE__ . ' on line ' . __LINE__);
+            // If a session is already active, mark as started.
+            if (session_status() === PHP_SESSION_ACTIVE) {
                 self::$started = true;
             }
             return;
