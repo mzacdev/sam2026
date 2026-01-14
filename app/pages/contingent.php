@@ -382,6 +382,101 @@ let currentStep = 1;
 const totalSteps = 1;
 let formData = {};
 
+// Reload datatable function
+function reloadContingentTable(callback) {
+    const tbody = document.getElementById('contingentTableBody');
+    if (!tbody) {
+        if (callback) callback();
+        return;
+    }
+    
+    // Show loading state
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>Memuatkan data...</td></tr>';
+    
+    fetch('<?php echo url("ajax/contingent_list.php"); ?>', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(json) {
+        if (json && json.success) {
+            const contingents = json.data || [];
+            const stats = json.stats || {total: 0, active: 0, inactive: 0};
+            
+            // Update statistics in hero section
+            const heroSection = document.querySelector('.card.bg-light .d-none.d-md-flex');
+            if (heroSection) {
+                const statDivs = heroSection.querySelectorAll('.me-3 .h5.mb-0');
+                if (statDivs.length >= 3) {
+                    statDivs[0].textContent = stats.total || 0;
+                    statDivs[1].textContent = stats.active || 0;
+                    statDivs[2].textContent = stats.inactive || 0;
+                }
+            }
+            
+            // Update table
+            if (contingents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="cil cil-info" style="font-size: 2rem;"></i><p class="mt-2">Tiada kontinjen didaftarkan — klik "Daftar Kontinjen Baru" untuk mula mendaftar.</p></td></tr>';
+            } else {
+                let html = '';
+                contingents.forEach(function(c, i) {
+                    const status = c.status !== undefined ? parseInt(c.status) : 0;
+                    const badgeClass = status == 1 ? 'bg-success' : 'bg-secondary';
+                    const statusText = status == 1 ? 'Aktif' : 'Tidak Aktif';
+                    
+                    html += '<tr>';
+                    html += '<td>' + (i + 1) + '</td>';
+                    html += '<td><div class="fw-semibold">' + escapeHtml(c.nama_universiti || '-') + '</div></td>';
+                    html += '<td>' + escapeHtml(c.kod_universiti || '') + '</td>';
+                    html += '<td><div class="small">';
+                    html += '<div class="fw-semibold">' + escapeHtml(c.nama_pegawai_untuk_dihubungi || '-') + '</div>';
+                    if (c.emel) {
+                        html += '<div class="text-muted"><i class="cil cil-envelope me-1"></i><a href="mailto:' + escapeHtml(c.emel) + '">' + escapeHtml(c.emel) + '</a></div>';
+                    }
+                    if (c.no_telefon) {
+                        html += '<div class="text-muted"><i class="cil cil-phone me-1"></i><a href="tel:' + escapeHtml(c.no_telefon) + '">' + escapeHtml(c.no_telefon) + '</a></div>';
+                    }
+                    html += '</div></td>';
+                    html += '<td class="text-center">-</td>';
+                    html += '<td><span class="badge ' + badgeClass + '">' + statusText + '</span></td>';
+                    html += '<td>';
+                    html += '<a class="btn btn-sm btn-outline-primary edit-contingent" title="Edit" href="#" ';
+                    html += 'data-id="' + (c.id || 0) + '" ';
+                    html += 'data-kod="' + escapeHtml(c.kod_universiti || '') + '" ';
+                    html += 'data-nama="' + escapeHtml(c.nama_pegawai_untuk_dihubungi || '') + '" ';
+                    html += 'data-alamat="' + escapeHtml(c.alamat || '') + '" ';
+                    html += 'data-emel="' + escapeHtml(c.emel || '') + '" ';
+                    html += 'data-phone="' + escapeHtml(c.no_telefon || '') + '" ';
+                    html += 'data-status="' + status + '">';
+                    html += '<i class="fa fa-edit"></i></a> ';
+                    html += '<a class="btn btn-sm btn-outline-danger delete-contingent" title="Padam" href="#" data-id="' + (c.id || 0) + '">';
+                    html += '<i class="fa fa-trash"></i></a>';
+                    html += '</td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            }
+        } else {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Ralat memuatkan data. Sila muat semula halaman.</td></tr>';
+        }
+        
+        // Execute callback after reload completes
+        if (callback) callback();
+    })
+    .catch(function(err) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Ralat sambungan. Sila muat semula halaman.</td></tr>';
+        if (callback) callback();
+    });
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Global modal instance for registration modal
 let registrationModalInstance = null;
 
@@ -826,22 +921,32 @@ function submitRegistration() {
         .then(function(json) {
             if (window.Swal) Swal.close();
             
+            // Reset button state immediately
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+            
             if (json && json.success) {
                 // Clear saved data
                 localStorage.removeItem('contingentRegistrationData');
                 
-                // Show success message
-                if (window.Swal) {
-                    Swal.fire({
-                        text: json.message || 'Kontinjen berjaya disimpan',
-                        icon: 'success'
-                    }).then(function() {
-                        location.reload();
-                    });
-                } else {
-                    alert(json.message || 'Kontinjen berjaya disimpan');
-                    location.reload();
-                }
+                // Close modal first
+                closeModal();
+                
+                // Reset form completely
+                resetModalForm();
+                
+                // Reload datatable, then show success message after reload completes
+                reloadContingentTable(function() {
+                    // Show success message after datatable is reloaded
+                    if (window.Swal) {
+                        Swal.fire({
+                            text: json.message || 'Kontinjen berjaya disimpan',
+                            icon: 'success'
+                        });
+                    } else {
+                        alert(json.message || 'Kontinjen berjaya disimpan');
+                    }
+                });
             } else {
                 // Show error message
                 if (window.Swal) {
@@ -852,8 +957,6 @@ function submitRegistration() {
                 } else {
                     alert((json && json.message) || 'Ralat menyimpan kontinjen');
                 }
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
             }
         })
         .catch(function(err) {
@@ -866,9 +969,52 @@ function submitRegistration() {
             } else {
                 alert('Ralat sambungan. Sila cuba lagi.');
             }
+            // Reset button state on error
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
         });
+    }
+}
+
+// Reset modal form completely
+function resetModalForm() {
+    const form = document.getElementById('contingentForm');
+    if (form) {
+        form.reset();
+        document.getElementById('contingentId').value = '';
+        document.getElementById('registrationModalLabel').textContent = 'Pendaftaran Kontinjen Baru';
+        
+        // Clear all validation states
+        form.querySelectorAll('input, select, textarea').forEach(field => {
+            field.classList.remove('is-valid', 'is-invalid');
+        });
+        
+        // Reset institution select placeholder
+        const institutionSelect = document.getElementById('institution');
+        if (institutionSelect) {
+            const placeholderOption = institutionSelect.querySelector('option[value=""]');
+            if (placeholderOption) {
+                placeholderOption.setAttribute('disabled', 'disabled');
+                placeholderOption.setAttribute('selected', 'selected');
+            }
+        }
+        
+        // Reset submit button state
+        const submitBtn = document.getElementById('submitButton');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="cil cil-check me-1"></i> Hantar Pendaftaran';
+        }
+        
+        // Reset step display
+        currentStep = 1;
+        updateStepDisplay();
+        
+        // Clear error summary
+        const errorSummary = document.getElementById('errorSummary');
+        if (errorSummary) {
+            errorSummary.classList.add('d-none');
+        }
     }
 }
 
@@ -898,6 +1044,11 @@ function closeModal() {
     if (typeof cleanupModalBackdrops === 'function') {
         cleanupModalBackdrops();
     }
+    
+    // Reset form after modal is closed
+    setTimeout(function() {
+        resetModalForm();
+    }, 300); // Small delay to ensure modal is fully closed
 }
 
 // Confirm cancel
@@ -905,18 +1056,7 @@ function confirmCancel() {
     // Immediate cancel: clear saved data and close without confirmation
     localStorage.removeItem('contingentRegistrationData');
     closeModal();
-    // Reset form and step state
-    const form = document.getElementById('contingentForm');
-    if (form) {
-        form.reset();
-        document.getElementById('contingentId').value = '';
-        document.getElementById('registrationModalLabel').textContent = 'Pendaftaran Kontinjen Baru';
-        form.querySelectorAll('input, select, textarea').forEach(field => {
-            field.classList.remove('is-valid', 'is-invalid');
-        });
-    }
-    currentStep = 1;
-    updateStepDisplay();
+    // Form will be reset by closeModal's setTimeout
 }
 
 // Real-time validation
@@ -1181,11 +1321,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         .then(function(res) { return res.json(); })
                         .then(function(json) {
                             if (json && json.success) {
-                                Swal.fire({
-                                    text: json.message || 'Kontinjen dipadam',
-                                    icon: 'success'
-                                }).then(function() {
-                                    location.reload();
+                                // Reload datatable, then show success message after reload completes
+                                reloadContingentTable(function() {
+                                    Swal.fire({
+                                        text: json.message || 'Kontinjen dipadam',
+                                        icon: 'success'
+                                    });
                                 });
                             } else {
                                 Swal.fire({

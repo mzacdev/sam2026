@@ -14,13 +14,74 @@ class ContingentModel {
     }
     
     /**
-     * Create a new contingent
+     * Create a new contingent and user account for pegawai hubungan
      * 
      * @param array $data Contingent data
      * @return array Result with success status and data
      */
     public function create($data) {
+        // Start transaction
+        $this->db->beginTransaction();
+        
         try {
+            // Check if user with this email already exists
+            $email = trim($data['emel'] ?? '');
+            if (!empty($email)) {
+                $checkUser = $this->db->prepare("SELECT id FROM users WHERE email = :email AND deleted_at IS NULL");
+                $checkUser->execute([':email' => $email]);
+                $existingUser = $checkUser->fetch(PDO::FETCH_ASSOC);
+                
+                if ($existingUser) {
+                    // User already exists, skip user creation
+                    $userId = $existingUser['id'];
+                } else {
+                    // Create user account for pegawai hubungan
+                    $username = $this->generateUsername($email, $data['nama_pegawai_untuk_dihubungi'] ?? '');
+                    $defaultPassword = $this->generateDefaultPassword();
+                    $passwordHash = password_hash($defaultPassword, PASSWORD_DEFAULT);
+                    
+                    // Set user status based on contingent status
+                    $userStatus = (isset($data['status']) && (int)$data['status'] === 1) ? 'active' : 'pending';
+                    
+                    $createUser = $this->db->prepare("
+                        INSERT INTO users (
+                            username,
+                            email,
+                            password_hash,
+                            full_name,
+                            role,
+                            status,
+                            phone,
+                            created_by
+                        ) VALUES (
+                            :username,
+                            :email,
+                            :password_hash,
+                            :full_name,
+                            'CONTINGENT',
+                            :status,
+                            :phone,
+                            :created_by
+                        )
+                    ");
+                    
+                    $createUser->execute([
+                        ':username' => $username,
+                        ':email' => $email,
+                        ':password_hash' => $passwordHash,
+                        ':full_name' => $data['nama_pegawai_untuk_dihubungi'] ?? '',
+                        ':status' => $userStatus,
+                        ':phone' => !empty($data['no_telefon']) ? $data['no_telefon'] : null,
+                        ':created_by' => $data['created_by'] ?? null
+                    ]);
+                    
+                    $userId = $this->db->lastInsertId();
+                }
+            } else {
+                $userId = null;
+            }
+            
+            // Create contingent
             $stmt = $this->db->prepare("
                 INSERT INTO table_kontinjen (
                     kod_universiti,
@@ -52,25 +113,115 @@ class ContingentModel {
             ]);
             
             if ($result) {
-                $id = $this->db->lastInsertId();
+                $contingentId = $this->db->lastInsertId();
+                
+                // Commit transaction
+                $this->db->commit();
+                
                 return [
                     'success' => true,
-                    'message' => 'Kontinjen berjaya didaftarkan',
-                    'data' => ['id' => $id]
+                    'message' => 'Kontinjen berjaya didaftarkan' . ($userId ? ' dan akaun pengguna telah dicipta' : ''),
+                    'data' => [
+                        'id' => $contingentId,
+                        'user_id' => $userId
+                    ]
                 ];
             }
             
+            // Rollback on failure
+            $this->db->rollBack();
             return [
                 'success' => false,
                 'message' => 'Gagal mendaftar kontinjen'
             ];
         } catch (PDOException $e) {
+            // Rollback on error
+            $this->db->rollBack();
             error_log('[ContingentModel::create] Error: ' . $e->getMessage());
             return [
                 'success' => false,
                 'message' => 'Ralat sistem: ' . $e->getMessage()
             ];
         }
+    }
+    
+    /**
+     * Generate username from email or name
+     * 
+     * @param string $email Email address
+     * @param string $name Full name
+     * @return string Username
+     */
+    private function generateUsername($email, $name = '') {
+        // Try to use email prefix first
+        if (!empty($email) && strpos($email, '@') !== false) {
+            $emailPrefix = strtolower(trim(explode('@', $email)[0]));
+            $emailPrefix = preg_replace('/[^a-z0-9]/', '', $emailPrefix);
+            
+            if (!empty($emailPrefix) && strlen($emailPrefix) >= 3) {
+                // Check if username exists, if so append number
+                $baseUsername = substr($emailPrefix, 0, 50);
+                $username = $baseUsername;
+                $counter = 1;
+                
+                while ($this->usernameExists($username)) {
+                    $username = substr($baseUsername, 0, 47) . $counter;
+                    $counter++;
+                    if ($counter > 999) break;
+                }
+                
+                return $username;
+            }
+        }
+        
+        // Fallback to name-based username
+        if (!empty($name)) {
+            $nameParts = explode(' ', trim($name));
+            $firstPart = strtolower(preg_replace('/[^a-z0-9]/', '', $nameParts[0]));
+            if (strlen($firstPart) >= 3) {
+                $baseUsername = substr($firstPart, 0, 50);
+                $username = $baseUsername;
+                $counter = 1;
+                
+                while ($this->usernameExists($username)) {
+                    $username = substr($baseUsername, 0, 47) . $counter;
+                    $counter++;
+                    if ($counter > 999) break;
+                }
+                
+                return $username;
+            }
+        }
+        
+        // Final fallback: generate random username
+        $random = 'user' . time() . rand(100, 999);
+        return substr($random, 0, 50);
+    }
+    
+    /**
+     * Check if username exists
+     * 
+     * @param string $username Username to check
+     * @return bool True if exists
+     */
+    private function usernameExists($username) {
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE username = :username AND deleted_at IS NULL");
+            $stmt->execute([':username' => $username]);
+            return $stmt->fetch() !== false;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Generate default password
+     * 
+     * @return string Default password
+     */
+    private function generateDefaultPassword() {
+        // Fixed default password for contingent users
+        return 'sam@2026';
     }
     
     /**
