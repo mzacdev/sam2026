@@ -82,11 +82,12 @@ try {
         ]);
     } else {
         http_response_code(500);
+        $errorMessage = $result['message'] ?? 'Gagal memuatkan data pasukan';
         echo json_encode([
             'success' => false,
-            'message' => 'Gagal memuatkan data pasukan',
+            'message' => $errorMessage,
             'data' => [],
-            'stats' => ['total' => 0, 'active' => 0, 'inactive' => 0]
+            'stats' => $statsResult['data'] ?? ['total' => 0, 'active' => 0, 'inactive' => 0]
         ]);
     }
 } catch (Exception $e) {
