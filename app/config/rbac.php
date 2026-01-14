@@ -42,7 +42,7 @@ class RBAC {
         // Main pages - role-based defaults
         'pages/contingent.php' => ['ADMIN', 'ORGANIZER', 'CONTINGENT'],
         'pages/sports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/athletes.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT'],
+        'pages/pasukan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT'],
         'pages/venues.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],

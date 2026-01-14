@@ -66,7 +66,7 @@ ob_start();
                         </span>
                     </div>
                     <div>
-                        <div class="text-muted small">Atlet</div>
+                        <div class="text-muted small">Pasukan</div>
                         <div class="fs-4 fw-bold">0</div>
                     </div>
                 </div>

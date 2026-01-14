@@ -59,7 +59,7 @@ ob_start();
                     <div class="d-flex justify-content-between">
                         <div>
                             <div class="fs-4 fw-semibold">0</div>
-                            <div class="text-medium-emphasis small">Jumlah Atlet</div>
+                            <div class="text-medium-emphasis small">Jumlah Pasukan</div>
                         </div>
                         <div>
                             <i class="icon cil cil-user text-info" style="font-size: 2rem; opacity: 0.3;"></i>

@@ -104,9 +104,9 @@ $nav_items = [
         'active'=> false
     ],
     [
-        'title' => 'Atlet',
-        'icon'  => 'cil-user',
-        'url'   => 'pages/athletes.php',
+        'title' => 'Pasukan',
+        'icon'  => 'cil-people',
+        'url'   => 'pages/pasukan.php',
         'active'=> false
     ],
     [
@@ -152,7 +152,7 @@ $nav_sections = [
         'children' => [
             ['title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent.php'],
             ['title' => 'Sukan', 'icon' => 'cil-gamepad', 'url' => 'pages/sports.php'],
-            ['title' => 'Atlet', 'icon' => 'cil-user', 'url' => 'pages/athletes.php'],
+            ['title' => 'Pasukan', 'icon' => 'cil-people', 'url' => 'pages/pasukan.php'],
             ['title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php'],
         ],
     ],
