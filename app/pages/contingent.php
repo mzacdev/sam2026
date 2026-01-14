@@ -223,20 +223,11 @@ ob_start();
                                                 <div class="small">
                                                     <div class="fw-semibold"><?php echo htmlspecialchars($c['nama_pegawai_untuk_dihubungi'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
                                                     <?php if (!empty($c['emel'])): ?>
-                                                        <div class="text-muted">
-                                                            <i class="cil cil-envelope me-1"></i>
-                                                            <a href="mailto:<?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>">
-                                                                <?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>
-                                                            </a>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                    <?php if (!empty($c['no_telefon'])): ?>
-                                                        <div class="text-muted">
-                                                            <i class="cil cil-phone me-1"></i>
-                                                            <a href="tel:<?php echo htmlspecialchars($c['no_telefon'], ENT_QUOTES, 'UTF-8'); ?>">
-                                                                <?php echo htmlspecialchars($c['no_telefon'], ENT_QUOTES, 'UTF-8'); ?>
-                                                            </a>
-                                                        </div>
+                                                    <div class="text-muted small">
+                                                        <a href="mailto:<?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                            <?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>
+                                                        </a>
+                                                    </div>
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
@@ -432,10 +423,7 @@ function reloadContingentTable(callback) {
                     html += '<td><div class="small">';
                     html += '<div class="fw-semibold">' + escapeHtml(c.nama_pegawai_untuk_dihubungi || '-') + '</div>';
                     if (c.emel) {
-                        html += '<div class="text-muted"><i class="cil cil-envelope me-1"></i><a href="mailto:' + escapeHtml(c.emel) + '">' + escapeHtml(c.emel) + '</a></div>';
-                    }
-                    if (c.no_telefon) {
-                        html += '<div class="text-muted"><i class="cil cil-phone me-1"></i><a href="tel:' + escapeHtml(c.no_telefon) + '">' + escapeHtml(c.no_telefon) + '</a></div>';
+                        html += '<div class="text-muted small"><a href="mailto:' + escapeHtml(c.emel) + '">' + escapeHtml(c.emel) + '</a></div>';
                     }
                     html += '</div></td>';
                     html += '<td class="text-center">-</td>';
