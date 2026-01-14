@@ -132,11 +132,15 @@ class PasukanModel {
                     INSERT INTO table_pasukan_atlet (
                         pasukan_id,
                         nama,
-                        no_kad_pengenalan
+                        no_kad_pengenalan,
+                        no_matrik,
+                        kategori_id
                     ) VALUES (
                         :pasukan_id,
                         :nama,
-                        :no_kad_pengenalan
+                        :no_kad_pengenalan,
+                        :no_matrik,
+                        :kategori_id
                     )
                 ");
                 
@@ -145,7 +149,9 @@ class PasukanModel {
                         $atletStmt->execute([
                             ':pasukan_id' => $pasukanId,
                             ':nama' => trim($atlet['nama']),
-                            ':no_kad_pengenalan' => !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null
+                            ':no_kad_pengenalan' => !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null,
+                            ':no_matrik' => !empty($atlet['no_matrik']) ? trim($atlet['no_matrik']) : null,
+                            ':kategori_id' => !empty($atlet['kategori_id']) ? (int)$atlet['kategori_id'] : null
                         ]);
                     }
                 }
@@ -188,6 +194,16 @@ class PasukanModel {
      */
     public function getAll($params = []) {
         try {
+            // Check if table exists
+            $checkTable = $this->db->query("SHOW TABLES LIKE 'table_pasukan'");
+            if ($checkTable->rowCount() === 0) {
+                return [
+                    'success' => false,
+                    'message' => 'Jadual database tidak wujud. Sila pastikan jadual table_pasukan telah dicipta.',
+                    'data' => []
+                ];
+            }
+            
             $limit = $params['limit'] ?? 50;
             $offset = $params['offset'] ?? 0;
             $search = $params['search'] ?? '';
@@ -200,7 +216,7 @@ class PasukanModel {
             
             if (!empty($search)) {
                 $where[] = "(p.nama_pasukan LIKE :search 
-                            OR k.nama_universiti LIKE :search
+                            OR u.nama_universiti LIKE :search
                             OR s.nama_sukan LIKE :search
                             OR peng.nama LIKE :search
                             OR jur.nama LIKE :search
@@ -234,7 +250,7 @@ class PasukanModel {
                     p.status,
                     p.created_at,
                     p.updated_at,
-                    k.nama_universiti,
+                    u.nama_universiti,
                     s.nama_sukan,
                     COUNT(DISTINCT peng.id) AS pengurus_count,
                     COUNT(DISTINCT jur.id) AS jurulatih_count,
@@ -299,9 +315,21 @@ class PasukanModel {
             ];
         } catch (PDOException $e) {
             error_log('[PasukanModel::getAll] Error: ' . $e->getMessage());
+            error_log('[PasukanModel::getAll] SQL State: ' . $e->getCode());
+            
+            // Check if it's a table doesn't exist error
+            if (strpos($e->getMessage(), "doesn't exist") !== false || 
+                strpos($e->getMessage(), "Unknown table") !== false) {
+                return [
+                    'success' => false,
+                    'message' => 'Jadual database tidak wujud. Sila jalankan migration SQL untuk membuat jadual table_pasukan.',
+                    'data' => []
+                ];
+            }
+            
             return [
                 'success' => false,
-                'message' => 'Ralat sistem: ' . $e->getMessage(),
+                'message' => 'Ralat sistem: ' . (defined('DEBUG_MODE') && DEBUG_MODE ? $e->getMessage() : 'Ralat memuatkan data pasukan'),
                 'data' => []
             ];
         }
@@ -315,6 +343,16 @@ class PasukanModel {
      */
     public function getById($id) {
         try {
+            // Check if table exists
+            $checkTable = $this->db->query("SHOW TABLES LIKE 'table_pasukan'");
+            if ($checkTable->rowCount() === 0) {
+                return [
+                    'success' => false,
+                    'message' => 'Jadual database tidak wujud. Sila pastikan jadual table_pasukan telah dicipta.',
+                    'data' => null
+                ];
+            }
+            
             $stmt = $this->db->prepare("
                 SELECT 
                     p.id,
@@ -326,7 +364,7 @@ class PasukanModel {
                     p.updated_at,
                     p.created_by,
                     p.updated_by,
-                    k.nama_universiti,
+                    u.nama_universiti,
                     s.nama_sukan,
                     creator.full_name AS created_by_name,
                     updater.full_name AS updated_by_name
@@ -381,7 +419,9 @@ class PasukanModel {
                     SELECT 
                         id,
                         nama,
-                        no_kad_pengenalan
+                        no_kad_pengenalan,
+                        no_matrik,
+                        kategori_id
                     FROM table_pasukan_atlet
                     WHERE pasukan_id = :pasukan_id
                     AND deleted_at IS NULL
@@ -403,9 +443,20 @@ class PasukanModel {
             ];
         } catch (PDOException $e) {
             error_log('[PasukanModel::getById] Error: ' . $e->getMessage());
+            
+            // Check if it's a table doesn't exist error
+            if (strpos($e->getMessage(), "doesn't exist") !== false || 
+                strpos($e->getMessage(), "Unknown table") !== false) {
+                return [
+                    'success' => false,
+                    'message' => 'Jadual database tidak wujud. Sila jalankan migration SQL untuk membuat jadual table_pasukan.',
+                    'data' => null
+                ];
+            }
+            
             return [
                 'success' => false,
-                'message' => 'Ralat sistem: ' . $e->getMessage(),
+                'message' => 'Ralat sistem: ' . (defined('DEBUG_MODE') && DEBUG_MODE ? $e->getMessage() : 'Ralat memuatkan data pasukan'),
                 'data' => null
             ];
         }
@@ -568,11 +619,15 @@ class PasukanModel {
                         INSERT INTO table_pasukan_atlet (
                             pasukan_id,
                             nama,
-                            no_kad_pengenalan
+                            no_kad_pengenalan,
+                            no_matrik,
+                            kategori_id
                         ) VALUES (
                             :pasukan_id,
                             :nama,
-                            :no_kad_pengenalan
+                            :no_kad_pengenalan,
+                            :no_matrik,
+                            :kategori_id
                         )
                     ");
                     
@@ -581,7 +636,9 @@ class PasukanModel {
                             $atletStmt->execute([
                                 ':pasukan_id' => $id,
                                 ':nama' => trim($atlet['nama']),
-                                ':no_kad_pengenalan' => !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null
+                                ':no_kad_pengenalan' => !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null,
+                                ':no_matrik' => !empty($atlet['no_matrik']) ? trim($atlet['no_matrik']) : null,
+                                ':kategori_id' => !empty($atlet['kategori_id']) ? (int)$atlet['kategori_id'] : null
                             ]);
                         }
                     }
@@ -697,6 +754,19 @@ class PasukanModel {
      */
     public function getStatistics() {
         try {
+            // Check if table exists
+            $checkTable = $this->db->query("SHOW TABLES LIKE 'table_pasukan'");
+            if ($checkTable->rowCount() === 0) {
+                return [
+                    'success' => true,
+                    'data' => [
+                        'total' => 0,
+                        'active' => 0,
+                        'inactive' => 0
+                    ]
+                ];
+            }
+            
             $stmt = $this->db->query("
                 SELECT 
                     COUNT(*) AS total,
@@ -719,8 +789,7 @@ class PasukanModel {
         } catch (PDOException $e) {
             error_log('[PasukanModel::getStatistics] Error: ' . $e->getMessage());
             return [
-                'success' => false,
-                'message' => 'Ralat sistem: ' . $e->getMessage(),
+                'success' => true, // Return success with zeros to prevent breaking the UI
                 'data' => [
                     'total' => 0,
                     'active' => 0,

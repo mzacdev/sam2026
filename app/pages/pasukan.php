@@ -340,26 +340,12 @@ require_once __DIR__ . '/../includes/layout.php';
 
                     <!-- Atlet (Athletes) -->
                     <div class="mb-4">
-                        <h6 class="border-bottom pb-2 mb-3">Senarai Atlet</h6>
-                        <div id="atletContainer">
-                            <div class="atlet-item border rounded p-3 mb-2">
-                                <div class="row">
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Nama <span class="text-danger">*</span></label>
-                                        <input type="text" class="form-control atlet-nama" placeholder="Nama penuh">
-                                    </div>
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">No. Kad Pengenalan</label>
-                                        <input type="text" class="form-control atlet-ic" placeholder="Contoh: 123456789012">
-                                    </div>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="removeAtlet(this)">
-                                    <i class="cil cil-trash"></i> Buang
-                                </button>
-                            </div>
+                        <h6 class="border-bottom pb-2 mb-3">Senarai Atlet mengikut Kategori</h6>
+                        <div id="kategoriContainer">
+                            <!-- Category sections will be added here -->
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addAtlet()">
-                            <i class="cil cil-plus"></i> Tambah Atlet
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addKategoriSection()">
+                            <i class="cil cil-plus"></i> Tambah Kategori
                         </button>
                     </div>
                 </form>
@@ -385,6 +371,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('filterSport')?.addEventListener('change', loadPasukanList);
     document.getElementById('pasukanSearch')?.addEventListener('input', debounce(loadPasukanList, 300));
     
+    // Load categories when sport is selected in modal
+    document.getElementById('pasukanSukan')?.addEventListener('change', function() {
+        const sukanId = this.value;
+        loadCategoriesForSport(sukanId);
+    });
+    
     // Setup edit/delete handlers
     document.addEventListener('click', function(e) {
         if (e.target.closest('.edit-pasukan')) {
@@ -409,7 +401,7 @@ function showAddPasukan() {
     // Reset containers
     resetPengurusContainer();
     resetJurulatihContainer();
-    resetAtletContainer();
+    resetKategoriContainer();
     
     const modalEl = document.getElementById('addPasukanModal');
     if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
@@ -496,25 +488,9 @@ function resetJurulatihContainer() {
     `;
 }
 
-function resetAtletContainer() {
-    const container = document.getElementById('atletContainer');
-    container.innerHTML = `
-        <div class="atlet-item border rounded p-3 mb-2">
-            <div class="row">
-                <div class="col-md-6 mb-2">
-                    <label class="form-label">Nama <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control atlet-nama" placeholder="Nama penuh">
-                </div>
-                <div class="col-md-6 mb-2">
-                    <label class="form-label">No. Kad Pengenalan</label>
-                    <input type="text" class="form-control atlet-ic" placeholder="Contoh: 123456789012">
-                </div>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="removeAtlet(this)">
-                <i class="cil cil-trash"></i> Buang
-            </button>
-        </div>
-    `;
+function resetKategoriContainer() {
+    const container = document.getElementById('kategoriContainer');
+    container.innerHTML = '';
 }
 
 function addPengurus() {
@@ -591,26 +567,133 @@ function removeJurulatih(btn) {
     btn.closest('.jurulatih-item').remove();
 }
 
-function addAtlet() {
-    const container = document.getElementById('atletContainer');
-    const newItem = document.createElement('div');
-    newItem.className = 'atlet-item border rounded p-3 mb-2';
-    newItem.innerHTML = `
-        <div class="row">
-            <div class="col-md-6 mb-2">
-                <label class="form-label">Nama <span class="text-danger">*</span></label>
-                <input type="text" class="form-control atlet-nama" placeholder="Nama penuh">
+function addKategoriSection() {
+    const container = document.getElementById('kategoriContainer');
+    const sukanId = document.getElementById('pasukanSukan')?.value || '';
+    
+    if (!sukanId || sukanId === '') {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila pilih sukan dahulu sebelum menambah kategori.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila pilih sukan dahulu sebelum menambah kategori.');
+        }
+        return;
+    }
+    
+    const kategoriSection = document.createElement('div');
+    kategoriSection.className = 'kategori-section border rounded p-3 mb-3';
+    kategoriSection.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Pilih Kategori <span class="text-danger">*</span></label>
+                <select class="form-select kategori-select" required onchange="loadCategoryOptions(this)">
+                    <option value="">Sila Pilih Kategori</option>
+                </select>
             </div>
-            <div class="col-md-6 mb-2">
-                <label class="form-label">No. Kad Pengenalan</label>
-                <input type="text" class="form-control atlet-ic" placeholder="Contoh: 123456789012">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKategoriSection(this)">
+                <i class="cil cil-trash"></i> Buang Kategori
+            </button>
+        </div>
+        <div class="atlet-list" data-kategori-id="">
+            <div class="small text-muted mb-2">Senarai Atlet untuk kategori ini:</div>
+            <div class="atlet-items"></div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addAtletToKategori(this)">
+                <i class="cil cil-plus"></i> Tambah Atlet
+            </button>
+        </div>
+    `;
+    container.appendChild(kategoriSection);
+    
+    // Load categories for this dropdown
+    loadCategoriesForSport(sukanId).then(() => {
+        const select = kategoriSection.querySelector('.kategori-select');
+        if (select) {
+            // Categories are already loaded by loadCategoriesForSport
+            // Just need to populate this specific select
+            populateCategorySelect(select);
+        }
+    });
+}
+
+function populateCategorySelect(selectElement) {
+    // Get categories from the first available select or reload
+    const sukanId = document.getElementById('pasukanSukan')?.value || '';
+    if (sukanId && selectElement) {
+        return fetch('<?php echo url("ajax/get_categories.php"); ?>?sukan_id=' + sukanId)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.data) {
+                let html = '<option value="">Sila Pilih Kategori</option>';
+                data.data.forEach(cat => {
+                    if (cat.status == 1) {
+                        html += `<option value="${cat.id}">${escapeHtml(cat.nama_kategori || '')}</option>`;
+                    }
+                });
+                selectElement.innerHTML = html;
+            }
+        });
+    }
+    return Promise.resolve();
+}
+
+function loadCategoryOptions(selectElement) {
+    const kategoriId = selectElement.value;
+    const kategoriSection = selectElement.closest('.kategori-section');
+    const atletList = kategoriSection.querySelector('.atlet-list');
+    if (atletList) {
+        atletList.setAttribute('data-kategori-id', kategoriId);
+    }
+}
+
+function removeKategoriSection(btn) {
+    btn.closest('.kategori-section').remove();
+}
+
+function addAtletToKategori(btn) {
+    const kategoriSection = btn.closest('.kategori-section');
+    const kategoriSelect = kategoriSection.querySelector('.kategori-select');
+    const kategoriId = kategoriSelect?.value || '';
+    
+    if (!kategoriId || kategoriId === '') {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila pilih kategori dahulu sebelum menambah atlet.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila pilih kategori dahulu sebelum menambah atlet.');
+        }
+        return;
+    }
+    
+    const atletItems = kategoriSection.querySelector('.atlet-items');
+    if (!atletItems) return;
+    
+    const atletItem = document.createElement('div');
+    atletItem.className = 'atlet-item border rounded p-2 mb-2 bg-light';
+    atletItem.innerHTML = `
+        <div class="row">
+            <div class="col-md-4 mb-2">
+                <label class="form-label small">Nama <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm atlet-nama" placeholder="Nama penuh" required>
+            </div>
+            <div class="col-md-4 mb-2">
+                <label class="form-label small">No. Kad Pengenalan</label>
+                <input type="text" class="form-control form-control-sm atlet-ic" placeholder="Contoh: 123456789012">
+            </div>
+            <div class="col-md-4 mb-2">
+                <label class="form-label small">No. Matrik</label>
+                <input type="text" class="form-control form-control-sm atlet-matrik" placeholder="Contoh: ABC123456">
             </div>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="removeAtlet(this)">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeAtlet(this)">
             <i class="cil cil-trash"></i> Buang
         </button>
     `;
-    container.appendChild(newItem);
+    atletItems.appendChild(atletItem);
 }
 
 function removeAtlet(btn) {
@@ -663,23 +746,87 @@ function submitPasukan() {
     });
     formData.jurulatih = jurulatih;
     
-    // Collect atlet
+    // Collect atlet from category sections
     const atlet = [];
-    document.querySelectorAll('.atlet-item').forEach(item => {
-        const nama = item.querySelector('.atlet-nama')?.value.trim();
-        if (nama) {
-            atlet.push({
-                nama: nama,
-                no_kad_pengenalan: item.querySelector('.atlet-ic')?.value.trim() || ''
-            });
+    document.querySelectorAll('.kategori-section').forEach(kategoriSection => {
+        const kategoriSelect = kategoriSection.querySelector('.kategori-select');
+        const kategoriId = kategoriSelect?.value || '';
+        
+        if (!kategoriId) {
+            // Skip sections without selected category
+            return;
         }
+        
+        // Get all athletes in this category section
+        const atletItems = kategoriSection.querySelectorAll('.atlet-item');
+        atletItems.forEach(item => {
+            const nama = item.querySelector('.atlet-nama')?.value.trim();
+            if (nama) {
+                atlet.push({
+                    nama: nama,
+                    no_kad_pengenalan: item.querySelector('.atlet-ic')?.value.trim() || '',
+                    no_matrik: item.querySelector('.atlet-matrik')?.value.trim() || '',
+                    kategori_id: parseInt(kategoriId)
+                });
+            }
+        });
     });
     formData.atlet = atlet;
     
+    // Validate at least one category section with athletes
+    const kategoriSections = document.querySelectorAll('.kategori-section');
+    if (kategoriSections.length === 0) {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila tambah sekurang-kurangnya satu kategori.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila tambah sekurang-kurangnya satu kategori.');
+        }
+        return;
+    }
+    
+    // Validate all category sections have selected category
+    let hasInvalidCategory = false;
+    kategoriSections.forEach(section => {
+        const kategoriSelect = section.querySelector('.kategori-select');
+        const kategoriId = kategoriSelect?.value || '';
+        const atletCount = section.querySelectorAll('.atlet-item').length;
+        
+        if (!kategoriId && atletCount > 0) {
+            hasInvalidCategory = true;
+        }
+    });
+    
+    if (hasInvalidCategory) {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila pilih kategori untuk semua bahagian yang mempunyai atlet.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila pilih kategori untuk semua bahagian yang mempunyai atlet.');
+        }
+        return;
+    }
+    
     // Validate at least one athlete
     if (atlet.length === 0) {
-        alert('Sila tambah sekurang-kurangnya satu atlet.');
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila tambah sekurang-kurangnya satu atlet.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila tambah sekurang-kurangnya satu atlet.');
+        }
         return;
+    }
+    
+    // Show loading
+    if (window.Swal) {
+        Swal.showLoading();
     }
     
     // Submit via AJAX
@@ -693,17 +840,85 @@ function submitPasukan() {
     })
     .then(res => res.json())
     .then(data => {
+        if (window.Swal) Swal.close();
+        
         if (data.success) {
-            alert(data.message || 'Pasukan berjaya disimpan.');
+            // Close modal first
             closeAddPasukanModal();
+            
+            // Reload list, then show success message
             loadPasukanList();
+            
+            if (window.Swal) {
+                Swal.fire({
+                    text: data.message || 'Pasukan berjaya disimpan.',
+                    icon: 'success'
+                });
+            } else {
+                alert(data.message || 'Pasukan berjaya disimpan.');
+            }
         } else {
-            alert(data.message || 'Ralat menyimpan pasukan.');
+            if (window.Swal) {
+                Swal.fire({
+                    text: data.message || 'Ralat menyimpan pasukan.',
+                    icon: 'error'
+                });
+            } else {
+                alert(data.message || 'Ralat menyimpan pasukan.');
+            }
         }
     })
     .catch(err => {
+        if (window.Swal) Swal.close();
         console.error('Error:', err);
-        alert('Ralat menyimpan pasukan. Sila cuba lagi.');
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Ralat menyimpan pasukan. Sila cuba lagi.',
+                icon: 'error'
+            });
+        } else {
+            alert('Ralat menyimpan pasukan. Sila cuba lagi.');
+        }
+    });
+}
+
+// Load categories when sport is selected
+function loadCategoriesForSport(sukanId) {
+    if (!sukanId || sukanId === '') {
+        // Clear all category dropdowns
+        document.querySelectorAll('.kategori-select').forEach(select => {
+            select.innerHTML = '<option value="">Sila pilih sukan dahulu</option>';
+        });
+        return Promise.resolve();
+    }
+    
+    return fetch('<?php echo url("ajax/get_categories.php"); ?>?sukan_id=' + sukanId)
+    .then(res => res.json())
+    .then(data => {
+        if (data.success && data.data) {
+            const categories = data.data;
+            // Update all category dropdowns
+            document.querySelectorAll('.kategori-select').forEach(select => {
+                let html = '<option value="">Sila Pilih Kategori</option>';
+                categories.forEach(cat => {
+                    if (cat.status == 1) { // Only show active categories
+                        html += `<option value="${cat.id}">${escapeHtml(cat.nama_kategori || '')}</option>`;
+                    }
+                });
+                select.innerHTML = html;
+            });
+        } else {
+            // Clear dropdowns on error
+            document.querySelectorAll('.kategori-select').forEach(select => {
+                select.innerHTML = '<option value="">Tiada kategori tersedia</option>';
+            });
+        }
+    })
+    .catch(err => {
+        console.error('Error loading categories:', err);
+        document.querySelectorAll('.kategori-select').forEach(select => {
+            select.innerHTML = '<option value="">Ralat memuatkan kategori</option>';
+        });
     });
 }
 
@@ -714,20 +929,42 @@ function editPasukan(id) {
     // Show modal first
     showAddPasukan();
     
+    // Show loading
+    if (window.Swal) {
+        Swal.showLoading();
+    }
+    
     // Fetch team details
     fetch('<?php echo url("ajax/pasukan_list.php"); ?>?id=' + id)
     .then(res => res.json())
     .then(data => {
+        if (window.Swal) Swal.close();
+        
         if (data.success && data.data) {
             loadTeamIntoForm(data.data);
         } else {
-            alert('Ralat memuatkan data pasukan.');
+            if (window.Swal) {
+                Swal.fire({
+                    text: 'Ralat memuatkan data pasukan.',
+                    icon: 'error'
+                });
+            } else {
+                alert('Ralat memuatkan data pasukan.');
+            }
             closeAddPasukanModal();
         }
     })
     .catch(err => {
+        if (window.Swal) Swal.close();
         console.error('Error:', err);
-        alert('Ralat memuatkan data pasukan.');
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Ralat memuatkan data pasukan.',
+                icon: 'error'
+            });
+        } else {
+            alert('Ralat memuatkan data pasukan.');
+        }
         closeAddPasukanModal();
     });
 }
@@ -807,59 +1044,177 @@ function loadTeamIntoForm(team) {
         });
     }
     
-    // Load atlet
-    resetAtletContainer();
-    const atletContainer = document.getElementById('atletContainer');
+    // Load atlet grouped by category
+    resetKategoriContainer();
+    const kategoriContainer = document.getElementById('kategoriContainer');
+    
     if (team.atlet && team.atlet.length > 0) {
-        atletContainer.innerHTML = '';
-        team.atlet.forEach((a, index) => {
-            const item = document.createElement('div');
-            item.className = 'atlet-item border rounded p-3 mb-2';
-            item.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Nama <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control atlet-nama" value="${escapeHtml(a.nama || '')}" placeholder="Nama penuh">
+        // First load categories for the sport
+        loadCategoriesForSport(team.sukan_id).then(() => {
+            // Group athletes by kategori_id
+            const athletesByCategory = {};
+            team.atlet.forEach(a => {
+                const kategoriId = a.kategori_id || 'uncategorized';
+                if (!athletesByCategory[kategoriId]) {
+                    athletesByCategory[kategoriId] = [];
+                }
+                athletesByCategory[kategoriId].push(a);
+            });
+            
+            // Create a category section for each unique kategori_id
+            Object.keys(athletesByCategory).forEach(kategoriId => {
+                if (kategoriId === 'uncategorized') return; // Skip uncategorized
+                
+                const kategoriSection = document.createElement('div');
+                kategoriSection.className = 'kategori-section border rounded p-3 mb-3';
+                
+                // Get category name
+                let categoryName = '';
+                const categorySelect = document.querySelector('.kategori-select');
+                if (categorySelect) {
+                    const option = categorySelect.querySelector(`option[value="${kategoriId}"]`);
+                    if (option) {
+                        categoryName = option.textContent;
+                    }
+                }
+                
+                kategoriSection.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Pilih Kategori <span class="text-danger">*</span></label>
+                            <select class="form-select kategori-select" required onchange="loadCategoryOptions(this)">
+                                <option value="">Sila Pilih Kategori</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKategoriSection(this)">
+                            <i class="cil cil-trash"></i> Buang Kategori
+                        </button>
                     </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">No. Kad Pengenalan</label>
-                        <input type="text" class="form-control atlet-ic" value="${escapeHtml(a.no_kad_pengenalan || '')}" placeholder="Contoh: 123456789012">
+                    <div class="atlet-list" data-kategori-id="${kategoriId}">
+                        <div class="small text-muted mb-2">Senarai Atlet untuk kategori ini:</div>
+                        <div class="atlet-items"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addAtletToKategori(this)">
+                            <i class="cil cil-plus"></i> Tambah Atlet
+                        </button>
                     </div>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="removeAtlet(this)">
-                    <i class="cil cil-trash"></i> Buang
-                </button>
-            `;
-            atletContainer.appendChild(item);
+                `;
+                
+                kategoriContainer.appendChild(kategoriSection);
+                
+                // Populate category select
+                const select = kategoriSection.querySelector('.kategori-select');
+                populateCategorySelect(select).then(() => {
+                    // Set selected category
+                    if (select) {
+                        select.value = kategoriId;
+                        loadCategoryOptions(select);
+                    }
+                    
+                    // Add athletes to this category section
+                    const atletItems = kategoriSection.querySelector('.atlet-items');
+                    athletesByCategory[kategoriId].forEach(a => {
+                        const atletItem = document.createElement('div');
+                        atletItem.className = 'atlet-item border rounded p-2 mb-2 bg-light';
+                        atletItem.innerHTML = `
+                            <div class="row">
+                                <div class="col-md-4 mb-2">
+                                    <label class="form-label small">Nama <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control form-control-sm atlet-nama" value="${escapeHtml(a.nama || '')}" placeholder="Nama penuh" required>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="form-label small">No. Kad Pengenalan</label>
+                                    <input type="text" class="form-control form-control-sm atlet-ic" value="${escapeHtml(a.no_kad_pengenalan || '')}" placeholder="Contoh: 123456789012">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="form-label small">No. Matrik</label>
+                                    <input type="text" class="form-control form-control-sm atlet-matrik" value="${escapeHtml(a.no_matrik || '')}" placeholder="Contoh: ABC123456">
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeAtlet(this)">
+                                <i class="cil cil-trash"></i> Buang
+                            </button>
+                        `;
+                        atletItems.appendChild(atletItem);
+                    });
+                });
+            });
         });
     }
 }
 
 function deletePasukan(id) {
-    if (!confirm('Adakah anda pasti mahu memadam pasukan ini?')) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('id', id);
-    
-    fetch('<?php echo url("ajax/pasukan_delete.php"); ?>', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message || 'Pasukan berjaya dipadam.');
-            loadPasukanList();
-        } else {
-            alert(data.message || 'Ralat memadam pasukan.');
+    if (window.Swal) {
+        Swal.fire({
+            title: 'Padam pasukan?',
+            text: 'Pasukan akan dipadam dan tidak boleh dipulihkan',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Padam',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.showLoading();
+                
+                const formData = new FormData();
+                formData.append('id', id);
+                
+                fetch('<?php echo url("ajax/pasukan_delete.php"); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reload list, then show success message
+                        loadPasukanList();
+                        Swal.fire({
+                            text: data.message || 'Pasukan berjaya dipadam.',
+                            icon: 'success'
+                        });
+                    } else {
+                        Swal.fire({
+                            text: data.message || 'Ralat memadam pasukan.',
+                            icon: 'error'
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    Swal.fire({
+                        text: 'Ralat memadam pasukan. Sila cuba lagi.',
+                        icon: 'error'
+                    });
+                });
+            }
+        });
+    } else {
+        // Fallback to confirm if SweetAlert not available
+        if (!confirm('Adakah anda pasti mahu memadam pasukan ini?')) {
+            return;
         }
-    })
-    .catch(err => {
-        console.error('Error:', err);
-        alert('Ralat memadam pasukan. Sila cuba lagi.');
-    });
+        
+        const formData = new FormData();
+        formData.append('id', id);
+        
+        fetch('<?php echo url("ajax/pasukan_delete.php"); ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message || 'Pasukan berjaya dipadam.');
+                loadPasukanList();
+            } else {
+                alert(data.message || 'Ralat memadam pasukan.');
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Ralat memadam pasukan. Sila cuba lagi.');
+        });
+    }
 }
 
 function loadPasukanList() {
@@ -926,11 +1281,23 @@ function loadPasukanList() {
             }
         } else {
             tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">Ralat memuatkan data. Sila muat semula halaman.</td></tr>';
+            if (window.Swal) {
+                Swal.fire({
+                    text: 'Ralat memuatkan data pasukan.',
+                    icon: 'error'
+                });
+            }
         }
     })
     .catch(err => {
         console.error('Error:', err);
         tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">Ralat sambungan. Sila muat semula halaman.</td></tr>';
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Ralat sambungan. Sila muat semula halaman.',
+                icon: 'error'
+            });
+        }
     });
 }
 
