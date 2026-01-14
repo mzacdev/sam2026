@@ -89,6 +89,7 @@ class SportModel {
                         nama_kategori,
                         kod_kategori,
                         keterangan,
+                        penilaian,
                         status,
                         created_by
                     ) VALUES (
@@ -96,6 +97,7 @@ class SportModel {
                         :nama_kategori,
                         :kod_kategori,
                         :keterangan,
+                        :penilaian,
                         :status,
                         :created_by
                     )
@@ -123,6 +125,7 @@ class SportModel {
                             ':nama_kategori' => trim($category['nama_kategori']),
                             ':kod_kategori' => !empty($category['kod_kategori']) ? trim($category['kod_kategori']) : null,
                             ':keterangan' => !empty($category['keterangan']) ? trim($category['keterangan']) : null,
+                            ':penilaian' => !empty($category['penilaian']) && in_array($category['penilaian'], ['berkumpulan', 'individu']) ? $category['penilaian'] : null,
                             ':status' => isset($category['status']) ? (int)$category['status'] : 1,
                             ':created_by' => $data['created_by'] ?? null
                         ]);
@@ -298,6 +301,7 @@ class SportModel {
                         k.nama_kategori,
                         k.kod_kategori,
                         k.keterangan,
+                        k.penilaian,
                         k.status,
                         k.created_at
                     FROM table_kategori k
@@ -455,6 +459,7 @@ class SportModel {
                                     nama_kategori = :nama_kategori,
                                     kod_kategori = :kod_kategori,
                                     keterangan = :keterangan,
+                                    penilaian = :penilaian,
                                     status = :status,
                                     updated_by = :updated_by,
                                     updated_at = CURRENT_TIMESTAMP
@@ -469,6 +474,7 @@ class SportModel {
                                 ':nama_kategori' => trim($category['nama_kategori']),
                                 ':kod_kategori' => !empty($category['kod_kategori']) ? trim($category['kod_kategori']) : null,
                                 ':keterangan' => !empty($category['keterangan']) ? trim($category['keterangan']) : null,
+                                ':penilaian' => !empty($category['penilaian']) && in_array($category['penilaian'], ['berkumpulan', 'individu']) ? $category['penilaian'] : null,
                                 ':status' => isset($category['status']) ? (int)$category['status'] : 1,
                                 ':updated_by' => $data['updated_by'] ?? null
                             ]);
@@ -482,6 +488,7 @@ class SportModel {
                                     nama_kategori,
                                     kod_kategori,
                                     keterangan,
+                                    penilaian,
                                     status,
                                     created_by
                                 ) VALUES (
@@ -489,6 +496,7 @@ class SportModel {
                                     :nama_kategori,
                                     :kod_kategori,
                                     :keterangan,
+                                    :penilaian,
                                     :status,
                                     :created_by
                                 )
@@ -499,6 +507,7 @@ class SportModel {
                                 ':nama_kategori' => trim($category['nama_kategori']),
                                 ':kod_kategori' => !empty($category['kod_kategori']) ? trim($category['kod_kategori']) : null,
                                 ':keterangan' => !empty($category['keterangan']) ? trim($category['keterangan']) : null,
+                                ':penilaian' => !empty($category['penilaian']) && in_array($category['penilaian'], ['berkumpulan', 'individu']) ? $category['penilaian'] : null,
                                 ':status' => isset($category['status']) ? (int)$category['status'] : 1,
                                 ':created_by' => $data['updated_by'] ?? null
                             ]);

@@ -445,6 +445,11 @@ function viewSport(sportId) {
                     if (cat.keterangan) {
                         categoriesHtml += '<div class="small text-muted mt-1">' + escapeHtml(cat.keterangan) + '</div>';
                     }
+                    if (cat.penilaian) {
+                        const penilaianText = cat.penilaian === 'berkumpulan' ? 'Berkumpulan' : 'Individu';
+                        const penilaianBadge = cat.penilaian === 'berkumpulan' ? 'bg-primary' : 'bg-info';
+                        categoriesHtml += '<div class="mt-1"><span class="badge ' + penilaianBadge + '">' + escapeHtml(penilaianText) + '</span></div>';
+                    }
                     categoriesHtml += '</div>';
                     const catStatus = cat.status == 1 ? '<span class="badge bg-success">Aktif</span>' : '<span class="badge bg-secondary">Tidak Aktif</span>';
                     categoriesHtml += '<div>' + catStatus + '</div>';
@@ -577,6 +582,7 @@ function addEditCategoryField(categoryData = null) {
     const categoryName = categoryData ? categoryData.nama_kategori : '';
     const categoryCode = categoryData ? categoryData.kod_kategori : '';
     const categoryDesc = categoryData ? categoryData.keterangan : '';
+    const categoryPenilaian = categoryData ? categoryData.penilaian : '';
     
     const categoryHtml = `
         <div class="card mb-3 category-edit-item border" data-category-id="${categoryCounter}" data-db-id="${categoryId}">
@@ -608,13 +614,24 @@ function addEditCategoryField(categoryData = null) {
                                placeholder="cth: L, W, T">
                     </div>
                 </div>
-                <div class="mt-2">
-                    <label class="form-label small">Keterangan</label>
-                    <input type="text" 
-                           class="form-control form-control-sm category-edit-description" 
-                           name="editCategories[${categoryCounter}][keterangan]"
-                           value="${escapeHtml(categoryDesc)}"
-                           placeholder="Penerangan kategori (pilihan)">
+                <div class="row g-2 mt-2">
+                    <div class="col-md-6">
+                        <label class="form-label small">Keterangan</label>
+                        <input type="text" 
+                               class="form-control form-control-sm category-edit-description" 
+                               name="editCategories[${categoryCounter}][keterangan]"
+                               value="${escapeHtml(categoryDesc)}"
+                               placeholder="Penerangan kategori (pilihan)">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Penilaian</label>
+                        <select class="form-select form-select-sm category-edit-penilaian" 
+                                name="editCategories[${categoryCounter}][penilaian]">
+                            <option value="">Pilih jenis penilaian</option>
+                            <option value="berkumpulan" ${categoryPenilaian === 'berkumpulan' ? 'selected' : ''}>Berkumpulan</option>
+                            <option value="individu" ${categoryPenilaian === 'individu' ? 'selected' : ''}>Individu</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -719,6 +736,7 @@ function updateSport() {
                 nama_kategori: namaKategori,
                 kod_kategori: item.querySelector('.category-edit-code').value.trim() || null,
                 keterangan: item.querySelector('.category-edit-description').value.trim() || null,
+                penilaian: item.querySelector('.category-edit-penilaian').value.trim() || null,
                 status: 1
             };
             categories.push(categoryData);
@@ -961,12 +979,23 @@ function addCategoryField() {
                                placeholder="cth: L, W, T">
                     </div>
                 </div>
-                <div class="mt-2">
-                    <label class="form-label small">Keterangan</label>
-                    <input type="text" 
-                           class="form-control form-control-sm category-description" 
-                           name="categories[${categoryCounter}][keterangan]"
-                           placeholder="Penerangan kategori (pilihan)">
+                <div class="row g-2 mt-2">
+                    <div class="col-md-6">
+                        <label class="form-label small">Keterangan</label>
+                        <input type="text" 
+                               class="form-control form-control-sm category-description" 
+                               name="categories[${categoryCounter}][keterangan]"
+                               placeholder="Penerangan kategori (pilihan)">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Penilaian</label>
+                        <select class="form-select form-select-sm category-penilaian" 
+                                name="categories[${categoryCounter}][penilaian]">
+                            <option value="">Pilih jenis penilaian</option>
+                            <option value="berkumpulan">Berkumpulan</option>
+                            <option value="individu">Individu</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1019,6 +1048,7 @@ function submitSport() {
                 nama_kategori: namaKategori,
                 kod_kategori: item.querySelector('.category-code').value.trim() || null,
                 keterangan: item.querySelector('.category-description').value.trim() || null,
+                penilaian: item.querySelector('.category-penilaian').value.trim() || null,
                 status: 1  // Default active
             });
         }
