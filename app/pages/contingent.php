@@ -3,8 +3,46 @@
  * Contingent Management Page
  */
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../api/models/ContingentModel.php';
 
 $page_title = 'Kontinjen';
+
+// Get current user role for status control
+Session::start();
+$auth = getAuth();
+$currentUserRole = Session::get('user_role') ?? '';
+$canChangeStatus = in_array($currentUserRole, ['ADMIN', 'ORGANIZER']);
+
+// Fetch universities from database
+$universities = [];
+try {
+    $pdo = getDB();
+    $stmt = $pdo->query("SELECT kod_universiti, nama_universiti FROM table_ref_universiti where status = 1 ORDER BY nama_universiti ASC");
+    $universities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log('[contingent.php] DB error fetching universities: ' . $e->getMessage());
+    // Continue with empty array if database query fails
+}
+
+// Fetch contingents from database
+$contingents = [];
+$contingentStats = ['total' => 0, 'active' => 0, 'inactive' => 0];
+try {
+    $contingentModel = new ContingentModel();
+    $result = $contingentModel->getAll(['limit' => 1000]);
+    if ($result['success']) {
+        $contingents = $result['data'];
+    }
+    
+    $statsResult = $contingentModel->getStatistics();
+    if ($statsResult['success']) {
+        $contingentStats = $statsResult['data'];
+    }
+} catch (Exception $e) {
+    error_log('[contingent.php] DB error fetching contingents: ' . $e->getMessage());
+}
 
 ob_start();
 ?>
@@ -22,16 +60,16 @@ ob_start();
                     <div class="d-flex align-items-center gap-3">
                         <div class="d-none d-md-flex">
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0">0</div>
+                                <div class="h5 mb-0"><?php echo (int)$contingentStats['total']; ?></div>
                                 <div class="small text-muted">Kontinjen</div>
                             </div>
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0">0</div>
-                                <div class="small text-muted">Atlet</div>
+                                <div class="h5 mb-0"><?php echo (int)$contingentStats['active']; ?></div>
+                                <div class="small text-muted">Aktif</div>
                             </div>
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0">0</div>
-                                <div class="small text-muted">Sukan</div>
+                                <div class="h5 mb-0"><?php echo (int)$contingentStats['inactive']; ?></div>
+                                <div class="small text-muted">Tidak Aktif</div>
                             </div>
                         </div>
 
@@ -56,276 +94,66 @@ ob_start();
                     <button type="button" class="btn-close" data-coreui-dismiss="modal" aria-label="Close" onclick="confirmCancel()"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Progress Indicator -->
-                    <div class="mb-4">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Langkah <span id="currentStep">1</span> daripada <span id="totalSteps">5</span></span>
-                            <span class="text-muted small"><span id="progressPercent">20</span>% siap</span>
-                        </div>
-                        <div class="progress" style="height: 8px;">
-                            <div class="progress-bar" role="progressbar" id="progressBar" style="width: 20%"></div>
-                        </div>
-                    </div>
-
-                    <!-- Step 1: Institution Selection -->
-                    <div class="registration-step" id="step1" data-step="1">
-                        <h5 class="mb-4">Langkah 1: Pilih Institusi</h5>
-                        
-                        <div class="mb-3">
-                            <label for="institution" class="form-label">INSTITUTION/ INSTITUSI <span class="text-danger">*</span></label>
-                            <select class="form-select" id="institution" name="institution" autocomplete="organization" required>
-                                <option value="" selected disabled>Sila pilih institusi...</option>
-                                <option value="upnm">Universiti Pertahanan Nasional Malaysia (UPNM)</option>
-                                <option value="utm">Universiti Teknologi Malaysia (UTM)</option>
-                                <option value="usm">Universiti Sains Malaysia (USM)</option>
-                                <option value="ukm">Universiti Kebangsaan Malaysia (UKM)</option>
-                                <option value="um">Universiti Malaya (UM)</option>
-                                <option value="uitm">Universiti Teknologi MARA (UiTM)</option>
-                                <option value="upsi">Universiti Pendidikan Sultan Idris (UPSI)</option>
-                                <option value="unimas">Universiti Malaysia Sarawak (UNIMAS)</option>
-                                <option value="ums">Universiti Malaysia Sabah (UMS)</option>
-                                <option value="ump">Universiti Malaysia Pahang (UMP)</option>
-                                <option value="umt">Universiti Malaysia Terengganu (UMT)</option>
-                                <option value="umk">Universiti Malaysia Kelantan (UMK)</option>
-                                <option value="unimap">Universiti Malaysia Perlis (UNIMAP)</option>
-                                <option value="uthm">Universiti Tun Hussein Onn Malaysia (UTHM)</option>
-                                <option value="utem">Universiti Teknikal Malaysia Melaka (UTeM)</option>
+                    <!-- Registration Form -->
+                    <form id="contingentForm">
+                        <input type="hidden" id="contingentId" name="id" value="">
+                        <div class="registration-step" id="step1" data-step="1">
+                            <div class="mb-3">
+                                <label for="institution" class="form-label">INSTITUSI <span class="text-danger">*</span></label>
+                                <select class="form-select" id="institution" name="institution" required>
+                                    <option value="" disabled selected>Sila pilih institusi...</option>
+                                <?php foreach ($universities as $university): ?>
+                                    <option value="<?php echo htmlspecialchars($university['kod_universiti'], ENT_QUOTES, 'UTF-8'); ?>">
+                                        <?php echo htmlspecialchars($university['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                             <div class="invalid-feedback">Sila pilih institusi</div>
                         </div>
 
-                        <div class="alert alert-danger mb-3">
-                            <strong><i class="cil cil-info me-1"></i> Perhatian:</strong><br>
-                            Jika nama pasukan/IPT/pasukan anda tidak tersenarai, sila hubungi:<br>
-                            <strong>Nama:</strong> Mr. Ahmad Fadhil Bin Mohamad Locman<br>
-                            <strong>Tel:</strong> <a href="tel:0388706455">03-88706455</a> / <a href="tel:0133236874">013-3236874</a><br>
-                            <strong>Email:</strong> <a href="mailto:fadhil.locman@mohe.gov.my">fadhil.locman@mohe.gov.my</a>
-                        </div>
-                    </div>
-
-                    <!-- Step 2: Basic Information -->
-                    <div class="registration-step d-none" id="step2" data-step="2">
-                        <h5 class="mb-4">Langkah 2: Maklumat Asas</h5>
-                        
                         <div class="mb-3">
-                            <label for="shortName" class="form-label">SHORT NAME/ NAMA SINGKATAN <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="shortName" name="shortName" 
-                                   placeholder="cth: UPNM, UTM, USM" maxlength="50" autocomplete="organization" required>
-                            <div class="invalid-feedback">Nama singkatan diperlukan (2-50 aksara)</div>
-                            <div class="form-text">Masukkan nama singkatan kontinjen (2-50 aksara)</div>
+                            <label for="contactOfficerName" class="form-label">NAMA PEGAWAI UNTUK DIHUBUNGI <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="contactOfficerName" name="contactOfficerName" 
+                                   placeholder="Masukkan nama pegawai untuk dihubungi" maxlength="100" autocomplete="name" required>
+                            <div class="invalid-feedback">Nama pegawai diperlukan (minimum 3 aksara)</div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="headName" class="form-label">NAME (HEAD OF DELEGATION) / NAMA (KETUA KONTINJEN) <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="headName" name="headName" 
-                                   placeholder="Masukkan nama penuh ketua kontinjen" maxlength="100" autocomplete="name" required>
-                            <div class="invalid-feedback">Nama ketua kontinjen diperlukan (minimum 3 aksara, nama penuh)</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="headPosition" class="form-label">POSITION/ JAWATAN <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="headPosition" name="headPosition" 
-                                   placeholder="cth: Dekan, Pengarah, Ketua Jabatan" maxlength="100" autocomplete="organization-title" required>
-                            <div class="invalid-feedback">Jawatan ketua kontinjen diperlukan (minimum 2 aksara)</div>
-                        </div>
-                    </div>
-
-                    <!-- Step 3: Officer Information -->
-                    <div class="registration-step d-none" id="step3" data-step="3">
-                        <h5 class="mb-4">Langkah 3: Maklumat Pegawai</h5>
-                        <p class="text-muted mb-4">Sila isi maklumat untuk dua (2) pegawai</p>
-
-                        <!-- Officer 1 -->
-                        <div class="card mb-4">
-                            <div class="card-header bg-light">
-                                <strong>Pegawai 1</strong>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="officer1Name" class="form-label">NAME OFFICER 1/ NAMA PEGAWAI 1 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="officer1Name" name="officer1Name" 
-                                           placeholder="Masukkan nama penuh pegawai 1" maxlength="100" autocomplete="name" required>
-                                    <div class="invalid-feedback">Nama pegawai 1 diperlukan (minimum 3 aksara)</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer1Position" class="form-label">POSITION OFFICER 1/ JAWATAN PEGAWAI 1 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="officer1Position" name="officer1Position" 
-                                           placeholder="cth: Penolong Pendaftar, Setiausaha" maxlength="100" autocomplete="organization-title" required>
-                                    <div class="invalid-feedback">Jawatan pegawai 1 diperlukan</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer1Phone" class="form-label">MOBILE PHONE OFFICER 1/ TEL. BIMBIT PEGAWAI 1 <span class="text-danger">*</span></label>
-                                    <input type="tel" class="form-control" id="officer1Phone" name="officer1Phone" 
-                                           placeholder="cth: 012-3456789" pattern="01[0-9]-?[0-9]{7,8}" autocomplete="tel" required>
-                                    <div class="invalid-feedback">Format telefon tidak sah. Contoh: 012-3456789</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer1Email" class="form-label">EMAIL OFFICER 1/ EMEL PEGAWAI 1 <span class="text-danger">*</span></label>
-                                    <input type="email" class="form-control" id="officer1Email" name="officer1Email" 
-                                           placeholder="pegawai1@example.com" autocomplete="email" required>
-                                    <div class="invalid-feedback">Format e-mel tidak sah</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Officer 2 -->
-                        <div class="card">
-                            <div class="card-header bg-light">
-                                <strong>Pegawai 2</strong>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="officer2Name" class="form-label">NAME OFFICER 2/ NAMA PEGAWAI 2 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="officer2Name" name="officer2Name" 
-                                           placeholder="Masukkan nama penuh pegawai 2" maxlength="100" autocomplete="name" required>
-                                    <div class="invalid-feedback">Nama pegawai 2 diperlukan (minimum 3 aksara)</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer2Position" class="form-label">POSITION OFFICER 2/ JAWATAN PEGAWAI 2 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="officer2Position" name="officer2Position" 
-                                           placeholder="cth: Penolong Pendaftar, Setiausaha" maxlength="100" autocomplete="organization-title" required>
-                                    <div class="invalid-feedback">Jawatan pegawai 2 diperlukan</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer2Phone" class="form-label">MOBILE PHONE OFFICER 2/ TEL. BIMBIT PEGAWAI 2 <span class="text-danger">*</span></label>
-                                    <input type="tel" class="form-control" id="officer2Phone" name="officer2Phone" 
-                                           placeholder="cth: 012-3456789" pattern="01[0-9]-?[0-9]{7,8}" autocomplete="tel" required>
-                                    <div class="invalid-feedback">Format telefon tidak sah. Contoh: 012-3456789</div>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="officer2Email" class="form-label">EMAIL OFFICER 2/ EMEL PEGAWAI 2 <span class="text-danger">*</span></label>
-                                    <input type="email" class="form-control" id="officer2Email" name="officer2Email" 
-                                           placeholder="pegawai2@example.com" autocomplete="email" required>
-                                    <div class="invalid-feedback">Format e-mel tidak sah atau sama dengan pegawai 1</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 4: Contact Details -->
-                    <div class="registration-step d-none" id="step4" data-step="4">
-                        <h5 class="mb-4">Langkah 4: Maklumat Hubungan</h5>
-                        
-                        <div class="mb-3">
-                            <label for="officePhone" class="form-label">OFFICE PHONE/ TEL. PEJABAT <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" id="officePhone" name="officePhone" 
-                                   placeholder="cth: 03-12345678" pattern="0[1-9]-?[0-9]{7,9}" autocomplete="tel" required>
-                            <div class="invalid-feedback">Format telefon pejabat tidak sah. Contoh: 03-12345678</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="fax" class="form-label">FAX/ FAKS <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" id="fax" name="fax" 
-                                   placeholder="cth: 03-12345679" pattern="0[1-9]-?[0-9]{7,9}" autocomplete="tel-national" required>
-                            <div class="invalid-feedback">Format faks tidak sah. Contoh: 03-12345679</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="officeAddress" class="form-label">OFFICE ADDRESS/ ALAMAT PEJABAT <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="officeAddress" name="officeAddress" rows="4" 
-                                      placeholder="Masukkan alamat pejabat lengkap" maxlength="500" autocomplete="street-address" required></textarea>
-                            <div class="invalid-feedback">Alamat pejabat diperlukan (minimum 10 aksara)</div>
+                            <label for="address" class="form-label">ALAMAT <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="address" name="address" rows="4" 
+                                      placeholder="Masukkan alamat lengkap" maxlength="500" autocomplete="street-address" required></textarea>
+                            <div class="invalid-feedback">Alamat diperlukan (minimum 10 aksara)</div>
                             <div class="form-text">
                                 <span id="addressCharCount">0</span> / 500 aksara
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Step 5: Review & Confirm -->
-                    <div class="registration-step d-none" id="step5" data-step="5">
-                        <h5 class="mb-4">Langkah 5: Semak & Sahkan</h5>
-                        <p class="text-muted mb-4">Sila semak semua maklumat sebelum menghantar</p>
-
-                        <!-- Review Sections -->
-                        <div class="review-section mb-4">
-                            <div class="card mb-3">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <strong>Maklumat Institusi</strong>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="goToStep(1)">
-                                        <i class="cil cil-pencil me-1"></i> Edit
-                                    </button>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><strong>Institusi:</strong> <span id="reviewInstitution">-</span></p>
-                                    <p class="mb-0"><strong>Nama Singkatan:</strong> <span id="reviewShortName">-</span></p>
-                                </div>
-                            </div>
-
-                            <div class="card mb-3">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <strong>Ketua Kontinjen</strong>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="goToStep(2)">
-                                        <i class="cil cil-pencil me-1"></i> Edit
-                                    </button>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><strong>Nama:</strong> <span id="reviewHeadName">-</span></p>
-                                    <p class="mb-0"><strong>Jawatan:</strong> <span id="reviewHeadPosition">-</span></p>
-                                </div>
-                            </div>
-
-                            <div class="card mb-3">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <strong>Pegawai 1</strong>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="goToStep(3)">
-                                        <i class="cil cil-pencil me-1"></i> Edit
-                                    </button>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><strong>Nama:</strong> <span id="reviewOfficer1Name">-</span></p>
-                                    <p class="mb-1"><strong>Jawatan:</strong> <span id="reviewOfficer1Position">-</span></p>
-                                    <p class="mb-1"><strong>Telefon:</strong> <span id="reviewOfficer1Phone">-</span></p>
-                                    <p class="mb-0"><strong>E-mel:</strong> <span id="reviewOfficer1Email">-</span></p>
-                                </div>
-                            </div>
-
-                            <div class="card mb-3">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <strong>Pegawai 2</strong>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="goToStep(3)">
-                                        <i class="cil cil-pencil me-1"></i> Edit
-                                    </button>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><strong>Nama:</strong> <span id="reviewOfficer2Name">-</span></p>
-                                    <p class="mb-1"><strong>Jawatan:</strong> <span id="reviewOfficer2Position">-</span></p>
-                                    <p class="mb-1"><strong>Telefon:</strong> <span id="reviewOfficer2Phone">-</span></p>
-                                    <p class="mb-0"><strong>E-mel:</strong> <span id="reviewOfficer2Email">-</span></p>
-                                </div>
-                            </div>
-
-                            <div class="card mb-3">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <strong>Maklumat Hubungan</strong>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="goToStep(4)">
-                                        <i class="cil cil-pencil me-1"></i> Edit
-                                    </button>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-1"><strong>Telefon Pejabat:</strong> <span id="reviewOfficePhone">-</span></p>
-                                    <p class="mb-1"><strong>Faks:</strong> <span id="reviewFax">-</span></p>
-                                    <p class="mb-0"><strong>Alamat:</strong> <span id="reviewOfficeAddress">-</span></p>
-                                </div>
-                            </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">EMEL <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   placeholder="cth: contoh@email.com" autocomplete="email" required>
+                            <div class="invalid-feedback">Format e-mel tidak sah</div>
                         </div>
 
-                        <!-- Confirmation Checkbox -->
-                        <div class="mb-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="confirmationCheck" required>
-                                <label class="form-check-label" for="confirmationCheck">
-                                    Saya mengesahkan bahawa semua maklumat yang diberikan adalah benar dan tepat <span class="text-danger">*</span>
-                                </label>
-                                <div class="invalid-feedback">Sila sahkan maklumat sebelum menghantar</div>
-                            </div>
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">NO TELEFON</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" 
+                                   placeholder="cth: 012-3456789 atau 03-12345678" autocomplete="tel">
+                            <div class="invalid-feedback">Format telefon tidak sah</div>
                         </div>
-                    </div>
+
+                        <?php if ($canChangeStatus): ?>
+                        <div class="mb-3">
+                            <label for="status" class="form-label">STATUS <span class="text-danger">*</span></label>
+                            <select class="form-select" id="status" name="status" required>
+                                <option value="1">Aktif</option>
+                                <option value="0" selected>Tidak Aktif</option>
+                            </select>
+                            <div class="invalid-feedback">Sila pilih status</div>
+                        </div>
+                        <?php endif; ?>
+                        </div>
+                    </form>
 
                     <!-- Error Summary -->
                     <div class="alert alert-danger d-none" id="errorSummary">
@@ -334,16 +162,10 @@ ob_start();
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="backButton" onclick="previousStep()" style="display: none;">
-                        <i class="cil cil-arrow-left me-1"></i> Kembali
-                    </button>
                     <button type="button" class="btn btn-secondary" onclick="confirmCancel()">
                         Batal
                     </button>
-                    <button type="button" class="btn btn-primary" id="nextButton" onclick="nextStep()">
-                        Seterusnya <i class="cil cil-arrow-right ms-1"></i>
-                    </button>
-                    <button type="button" class="btn btn-success d-none" id="submitButton" onclick="submitRegistration()">
+                    <button type="button" class="btn btn-success" id="submitButton" onclick="submitRegistration()">
                         <i class="cil cil-check me-1"></i> Hantar Pendaftaran
                     </button>
                 </div>
@@ -373,20 +195,84 @@ ob_start();
                             <thead class="table-light">
                                 <tr>
                                     <th scope="col" style="width:70px;">#</th>
-                                    <th scope="col">Nama Kontinjen</th>
+                                    <th scope="col">Nama Universiti</th>
                                     <th scope="col">Kod</th>
+                                    <th scope="col">Pegawai Untuk Dihubungi</th>
                                     <th scope="col" style="width:140px;">Jumlah Atlet</th>
                                     <th scope="col" style="width:120px;">Status</th>
                                     <th scope="col" style="width:160px;">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody id="contingentTableBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-5">
-                                        <i class="cil cil-info" style="font-size: 2rem;"></i>
-                                        <p class="mt-2">Tiada kontinjen didaftarkan — klik "Daftar Baru" untuk mula mendaftar.</p>
-                                    </td>
-                                </tr>
+                                <?php if (empty($contingents)): ?>
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-5">
+                                            <i class="cil cil-info" style="font-size: 2rem;"></i>
+                                            <p class="mt-2">Tiada kontinjen didaftarkan — klik "Daftar Kontinjen Baru" untuk mula mendaftar.</p>
+                                        </td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($contingents as $i => $c): ?>
+                                        <tr>
+                                            <td><?php echo $i + 1; ?></td>
+                                            <td>
+                                                <div class="fw-semibold"><?php echo htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
+                                            </td>
+                                            <td><?php echo htmlspecialchars($c['kod_universiti'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+                                            <td>
+                                                <div class="small">
+                                                    <div class="fw-semibold"><?php echo htmlspecialchars($c['nama_pegawai_untuk_dihubungi'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
+                                                    <?php if (!empty($c['emel'])): ?>
+                                                        <div class="text-muted">
+                                                            <i class="cil cil-envelope me-1"></i>
+                                                            <a href="mailto:<?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                                <?php echo htmlspecialchars($c['emel'], ENT_QUOTES, 'UTF-8'); ?>
+                                                            </a>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($c['no_telefon'])): ?>
+                                                        <div class="text-muted">
+                                                            <i class="cil cil-phone me-1"></i>
+                                                            <a href="tel:<?php echo htmlspecialchars($c['no_telefon'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                                <?php echo htmlspecialchars($c['no_telefon'], ENT_QUOTES, 'UTF-8'); ?>
+                                                            </a>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">-</td>
+                                            <td>
+                                                <?php
+                                                $status = isset($c['status']) ? (int)$c['status'] : 0;
+                                                if ($status == 1) {
+                                                    $badgeClass = 'bg-success';
+                                                    $statusText = 'Aktif';
+                                                } else {
+                                                    $badgeClass = 'bg-secondary';
+                                                    $statusText = 'Tidak Aktif';
+                                                }
+                                                ?>
+                                                <span class="badge <?php echo $badgeClass; ?>"><?php echo $statusText; ?></span>
+                                            </td>
+                                            <td>
+                                                <a class="btn btn-sm btn-outline-primary edit-contingent" title="Edit" href="#"
+                                                   data-id="<?php echo (int)$c['id']; ?>"
+                                                   data-kod="<?php echo htmlspecialchars($c['kod_universiti'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                   data-nama="<?php echo htmlspecialchars($c['nama_pegawai_untuk_dihubungi'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                   data-alamat="<?php echo htmlspecialchars($c['alamat'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                   data-emel="<?php echo htmlspecialchars($c['emel'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                   data-phone="<?php echo htmlspecialchars($c['no_telefon'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                   data-status="<?php echo (int)$status; ?>"
+                                                >
+                                                    <i class="fa fa-edit"></i>
+                                                </a>
+                                                <a class="btn btn-sm btn-outline-danger delete-contingent" title="Padam" href="#" data-id="<?php echo (int)$c['id']; ?>">
+                                                    <i class="fa fa-trash"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -493,27 +379,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Registration Form State
 let currentStep = 1;
-const totalSteps = 5;
+const totalSteps = 1;
 let formData = {};
-
-// Institution options mapping
-const institutionNames = {
-    'upnm': 'Universiti Pertahanan Nasional Malaysia (UPNM)',
-    'utm': 'Universiti Teknologi Malaysia (UTM)',
-    'usm': 'Universiti Sains Malaysia (USM)',
-    'ukm': 'Universiti Kebangsaan Malaysia (UKM)',
-    'um': 'Universiti Malaya (UM)',
-    'uitm': 'Universiti Teknologi MARA (UiTM)',
-    'upsi': 'Universiti Pendidikan Sultan Idris (UPSI)',
-    'unimas': 'Universiti Malaysia Sarawak (UNIMAS)',
-    'ums': 'Universiti Malaysia Sabah (UMS)',
-    'ump': 'Universiti Malaysia Pahang (UMP)',
-    'umt': 'Universiti Malaysia Terengganu (UMT)',
-    'umk': 'Universiti Malaysia Kelantan (UMK)',
-    'unimap': 'Universiti Malaysia Perlis (UNIMAP)',
-    'uthm': 'Universiti Tun Hussein Onn Malaysia (UTHM)',
-    'utem': 'Universiti Teknikal Malaysia Melaka (UTeM)'
-};
 
 // Global modal instance for registration modal
 let registrationModalInstance = null;
@@ -559,8 +426,34 @@ if (typeof cleanupModalBackdrops !== 'function') {
     }
 }
 
-// Show registration form
-function showRegistrationForm() {
+// Show registration form with optional data for editing
+function showRegistrationForm(data = null) {
+    // Reset form
+    document.getElementById('contingentForm').reset();
+    document.getElementById('contingentId').value = '';
+    document.getElementById('registrationModalLabel').textContent = 'Pendaftaran Kontinjen Baru';
+    
+    // If data provided, populate form for editing
+    if (data && data.id) {
+        document.getElementById('contingentId').value = data.id || '';
+        document.getElementById('institution').value = data.kod || '';
+        document.getElementById('contactOfficerName').value = data.nama || '';
+        document.getElementById('address').value = data.alamat || '';
+        document.getElementById('email').value = data.emel || '';
+        document.getElementById('phone').value = data.phone || '';
+        if (document.getElementById('status')) {
+            document.getElementById('status').value = data.status !== undefined ? data.status : '0';
+        }
+        document.getElementById('registrationModalLabel').textContent = 'Sunting Kontinjen';
+        
+        // Remove disabled/selected from placeholder option
+        const institutionSelect = document.getElementById('institution');
+        const placeholderOption = institutionSelect.querySelector('option[value=""]');
+        if (placeholderOption) {
+            placeholderOption.removeAttribute('disabled');
+            placeholderOption.removeAttribute('selected');
+        }
+    }
     // CRITICAL: Close any existing modals first to prevent stacking
     if (typeof closeAllModals === 'function') {
         closeAllModals();
@@ -739,10 +632,7 @@ function loadFormData() {
 // Save form data to localStorage
 function saveFormData() {
     const fields = [
-        'institution', 'shortName', 'headName', 'headPosition',
-        'officer1Name', 'officer1Position', 'officer1Phone', 'officer1Email',
-        'officer2Name', 'officer2Position', 'officer2Phone', 'officer2Email',
-        'officePhone', 'fax', 'officeAddress'
+        'institution', 'contactOfficerName', 'address', 'email', 'phone'
     ];
     
     fields.forEach(fieldId => {
@@ -768,20 +658,19 @@ function updateStepDisplay() {
         currentStepEl.classList.remove('d-none');
     }
     
-    // Update progress
-    const progress = (currentStep / totalSteps) * 100;
-    document.getElementById('currentStep').textContent = currentStep;
-    document.getElementById('totalSteps').textContent = totalSteps;
-    document.getElementById('progressPercent').textContent = Math.round(progress);
-    document.getElementById('progressBar').style.width = progress + '%';
+    // Update buttons - single step form, so show submit button
+    const backButton = document.getElementById('backButton');
+    const nextButton = document.getElementById('nextButton');
+    const submitButton = document.getElementById('submitButton');
     
-    // Update buttons
-    document.getElementById('backButton').style.display = currentStep > 1 ? 'inline-block' : 'none';
-    document.getElementById('nextButton').style.display = currentStep < 5 ? 'inline-block' : 'none';
-    document.getElementById('submitButton').style.display = currentStep === 5 ? 'inline-block' : 'none';
-    
-    if (currentStep === 5) {
-        populateReview();
+    if (backButton) {
+        backButton.style.display = 'none';
+    }
+    if (nextButton) {
+        nextButton.style.display = 'none';
+    }
+    if (submitButton) {
+        submitButton.style.display = 'inline-block';
     }
 }
 
@@ -800,176 +689,59 @@ function validateStep(step) {
             institution.classList.remove('is-invalid');
             institution.classList.add('is-valid');
         }
-    }
-    
-    if (step === 2) {
-        const shortName = document.getElementById('shortName');
-        const headName = document.getElementById('headName');
-        const headPosition = document.getElementById('headPosition');
         
-        if (!shortName.value || shortName.value.length < 2 || shortName.value.length > 50) {
+        const contactOfficerName = document.getElementById('contactOfficerName');
+        if (!contactOfficerName.value || contactOfficerName.value.length < 3) {
             isValid = false;
-            shortName.classList.add('is-invalid');
-            errors.push('Nama singkatan mesti antara 2-50 aksara');
+            contactOfficerName.classList.add('is-invalid');
+            errors.push('Nama pegawai untuk dihubungi diperlukan (minimum 3 aksara)');
         } else {
-            shortName.classList.remove('is-invalid');
-            shortName.classList.add('is-valid');
+            contactOfficerName.classList.remove('is-invalid');
+            contactOfficerName.classList.add('is-valid');
         }
         
-        if (!headName.value || headName.value.length < 3 || !headName.value.includes(' ')) {
+        const address = document.getElementById('address');
+        if (!address.value || address.value.length < 10 || address.value.length > 500) {
             isValid = false;
-            headName.classList.add('is-invalid');
-            errors.push('Nama ketua kontinjen mesti nama penuh (minimum 3 aksara)');
+            address.classList.add('is-invalid');
+            errors.push('Alamat mesti antara 10-500 aksara');
         } else {
-            headName.classList.remove('is-invalid');
-            headName.classList.add('is-valid');
+            address.classList.remove('is-invalid');
+            address.classList.add('is-valid');
         }
         
-        if (!headPosition.value || headPosition.value.length < 2) {
+        const email = document.getElementById('email');
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email.value || !emailPattern.test(email.value)) {
             isValid = false;
-            headPosition.classList.add('is-invalid');
-            errors.push('Jawatan ketua kontinjen diperlukan (minimum 2 aksara)');
+            email.classList.add('is-invalid');
+            errors.push('Format e-mel tidak sah');
         } else {
-            headPosition.classList.remove('is-invalid');
-            headPosition.classList.add('is-valid');
-        }
-    }
-    
-    if (step === 3) {
-        const officer1Name = document.getElementById('officer1Name');
-        const officer1Position = document.getElementById('officer1Position');
-        const officer1Phone = document.getElementById('officer1Phone');
-        const officer1Email = document.getElementById('officer1Email');
-        const officer2Name = document.getElementById('officer2Name');
-        const officer2Position = document.getElementById('officer2Position');
-        const officer2Phone = document.getElementById('officer2Phone');
-        const officer2Email = document.getElementById('officer2Email');
-        
-        // Officer 1 validation
-        if (!officer1Name.value || officer1Name.value.length < 3) {
-            isValid = false;
-            officer1Name.classList.add('is-invalid');
-            errors.push('Nama pegawai 1 diperlukan (minimum 3 aksara)');
-        } else {
-            officer1Name.classList.remove('is-invalid');
-            officer1Name.classList.add('is-valid');
+            email.classList.remove('is-invalid');
+            email.classList.add('is-valid');
         }
         
-        if (!officer1Position.value || officer1Position.value.length < 2) {
-            isValid = false;
-            officer1Position.classList.add('is-invalid');
-            errors.push('Jawatan pegawai 1 diperlukan');
+        const phone = document.getElementById('phone');
+        // Phone is optional, but if provided, validate format
+        // Mobile: 01X-XXXXXXX (e.g., 010-1234567, 012-3456789)
+        // Landline: 0X-XXXXXXX (e.g., 03-12345678, 04-1234567)
+        if (phone.value) {
+            const cleanedPhone = phone.value.replace(/\s/g, '');
+            // Mobile pattern: 01[0-9] followed by optional dash and 7-8 digits
+            const mobilePattern = /^01[0-9]-?[0-9]{7,8}$/;
+            // Landline pattern: 0[1-9] followed by optional dash and 7-9 digits
+            const landlinePattern = /^0[1-9]-?[0-9]{7,9}$/;
+            
+            if (!mobilePattern.test(cleanedPhone) && !landlinePattern.test(cleanedPhone)) {
+                isValid = false;
+                phone.classList.add('is-invalid');
+                errors.push('Format telefon tidak sah. Contoh: 012-3456789 (bimbit) atau 03-12345678 (talian tetap)');
+            } else {
+                phone.classList.remove('is-invalid');
+                phone.classList.add('is-valid');
+            }
         } else {
-            officer1Position.classList.remove('is-invalid');
-            officer1Position.classList.add('is-valid');
-        }
-        
-        const phone1Pattern = /^01[0-9]-?[0-9]{7,8}$/;
-        if (!officer1Phone.value || !phone1Pattern.test(officer1Phone.value.replace(/\s/g, ''))) {
-            isValid = false;
-            officer1Phone.classList.add('is-invalid');
-            errors.push('Format telefon pegawai 1 tidak sah');
-        } else {
-            officer1Phone.classList.remove('is-invalid');
-            officer1Phone.classList.add('is-valid');
-        }
-        
-        const email1Pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!officer1Email.value || !email1Pattern.test(officer1Email.value)) {
-            isValid = false;
-            officer1Email.classList.add('is-invalid');
-            errors.push('Format e-mel pegawai 1 tidak sah');
-        } else {
-            officer1Email.classList.remove('is-invalid');
-            officer1Email.classList.add('is-valid');
-        }
-        
-        // Officer 2 validation
-        if (!officer2Name.value || officer2Name.value.length < 3) {
-            isValid = false;
-            officer2Name.classList.add('is-invalid');
-            errors.push('Nama pegawai 2 diperlukan (minimum 3 aksara)');
-        } else {
-            officer2Name.classList.remove('is-invalid');
-            officer2Name.classList.add('is-valid');
-        }
-        
-        if (!officer2Position.value || officer2Position.value.length < 2) {
-            isValid = false;
-            officer2Position.classList.add('is-invalid');
-            errors.push('Jawatan pegawai 2 diperlukan');
-        } else {
-            officer2Position.classList.remove('is-invalid');
-            officer2Position.classList.add('is-valid');
-        }
-        
-        const phone2Pattern = /^01[0-9]-?[0-9]{7,8}$/;
-        if (!officer2Phone.value || !phone2Pattern.test(officer2Phone.value.replace(/\s/g, ''))) {
-            isValid = false;
-            officer2Phone.classList.add('is-invalid');
-            errors.push('Format telefon pegawai 2 tidak sah');
-        } else {
-            officer2Phone.classList.remove('is-invalid');
-            officer2Phone.classList.add('is-valid');
-        }
-        
-        const email2Pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!officer2Email.value || !email2Pattern.test(officer2Email.value)) {
-            isValid = false;
-            officer2Email.classList.add('is-invalid');
-            errors.push('Format e-mel pegawai 2 tidak sah');
-        } else if (officer1Email.value && officer2Email.value === officer1Email.value) {
-            isValid = false;
-            officer2Email.classList.add('is-invalid');
-            errors.push('E-mel pegawai 2 mesti berbeza dengan pegawai 1');
-        } else {
-            officer2Email.classList.remove('is-invalid');
-            officer2Email.classList.add('is-valid');
-        }
-    }
-    
-    if (step === 4) {
-        const officePhone = document.getElementById('officePhone');
-        const fax = document.getElementById('fax');
-        const officeAddress = document.getElementById('officeAddress');
-        
-        const phonePattern = /^0[1-9]-?[0-9]{7,9}$/;
-        if (!officePhone.value || !phonePattern.test(officePhone.value.replace(/\s/g, ''))) {
-            isValid = false;
-            officePhone.classList.add('is-invalid');
-            errors.push('Format telefon pejabat tidak sah');
-        } else {
-            officePhone.classList.remove('is-invalid');
-            officePhone.classList.add('is-valid');
-        }
-        
-        if (!fax.value || !phonePattern.test(fax.value.replace(/\s/g, ''))) {
-            isValid = false;
-            fax.classList.add('is-invalid');
-            errors.push('Format faks tidak sah');
-        } else {
-            fax.classList.remove('is-invalid');
-            fax.classList.add('is-valid');
-        }
-        
-        if (!officeAddress.value || officeAddress.value.length < 10 || officeAddress.value.length > 500) {
-            isValid = false;
-            officeAddress.classList.add('is-invalid');
-            errors.push('Alamat pejabat mesti antara 10-500 aksara');
-        } else {
-            officeAddress.classList.remove('is-invalid');
-            officeAddress.classList.add('is-valid');
-        }
-    }
-    
-    if (step === 5) {
-        const confirmation = document.getElementById('confirmationCheck');
-        if (!confirmation.checked) {
-            isValid = false;
-            confirmation.classList.add('is-invalid');
-            errors.push('Sila sahkan maklumat sebelum menghantar');
-        } else {
-            confirmation.classList.remove('is-invalid');
+            phone.classList.remove('is-invalid', 'is-valid');
         }
     }
     
@@ -988,54 +760,28 @@ function validateStep(step) {
     return isValid;
 }
 
-// Next step
+// Next step (not needed for single step form, but kept for compatibility)
 function nextStep() {
     if (validateStep(currentStep)) {
         saveFormData();
-        if (currentStep < totalSteps) {
-            currentStep++;
-            updateStepDisplay();
-        }
+        submitRegistration();
     }
 }
 
-// Previous step
+// Previous step (not needed for single step form)
 function previousStep() {
-    if (currentStep > 1) {
-        currentStep--;
-        updateStepDisplay();
-    }
+    // No previous step in single step form
 }
 
-// Go to specific step
+// Go to specific step (not needed for single step form)
 function goToStep(step) {
     currentStep = step;
     updateStepDisplay();
 }
 
-// Populate review section
-function populateReview() {
-    const institution = document.getElementById('institution');
-    document.getElementById('reviewInstitution').textContent = institutionNames[institution.value] || institution.value;
-    document.getElementById('reviewShortName').textContent = document.getElementById('shortName').value || '-';
-    document.getElementById('reviewHeadName').textContent = document.getElementById('headName').value || '-';
-    document.getElementById('reviewHeadPosition').textContent = document.getElementById('headPosition').value || '-';
-    document.getElementById('reviewOfficer1Name').textContent = document.getElementById('officer1Name').value || '-';
-    document.getElementById('reviewOfficer1Position').textContent = document.getElementById('officer1Position').value || '-';
-    document.getElementById('reviewOfficer1Phone').textContent = document.getElementById('officer1Phone').value || '-';
-    document.getElementById('reviewOfficer1Email').textContent = document.getElementById('officer1Email').value || '-';
-    document.getElementById('reviewOfficer2Name').textContent = document.getElementById('officer2Name').value || '-';
-    document.getElementById('reviewOfficer2Position').textContent = document.getElementById('officer2Position').value || '-';
-    document.getElementById('reviewOfficer2Phone').textContent = document.getElementById('officer2Phone').value || '-';
-    document.getElementById('reviewOfficer2Email').textContent = document.getElementById('officer2Email').value || '-';
-    document.getElementById('reviewOfficePhone').textContent = document.getElementById('officePhone').value || '-';
-    document.getElementById('reviewFax').textContent = document.getElementById('fax').value || '-';
-    document.getElementById('reviewOfficeAddress').textContent = document.getElementById('officeAddress').value || '-';
-}
-
 // Submit registration
 function submitRegistration() {
-    if (validateStep(5)) {
+    if (validateStep(1)) {
         // Show loading state
         const submitBtn = document.getElementById('submitButton');
         const originalText = submitBtn.innerHTML;
@@ -1045,25 +791,84 @@ function submitRegistration() {
         // Collect all form data
         saveFormData();
         
-        // Simulate submission (replace with actual AJAX call)
-        setTimeout(() => {
-            // Clear saved data
-            localStorage.removeItem('contingentRegistrationData');
+        // Prepare form data
+        const formData = new FormData();
+        const contingentId = document.getElementById('contingentId').value;
+        if (contingentId) {
+            formData.append('id', contingentId);
+        }
+        formData.append('kod_universiti', document.getElementById('institution').value);
+        formData.append('nama_pegawai_untuk_dihubungi', document.getElementById('contactOfficerName').value);
+        formData.append('alamat', document.getElementById('address').value);
+        formData.append('emel', document.getElementById('email').value);
+        formData.append('phone', document.getElementById('phone').value);
+        // Status: only ADMIN/ORGANIZER can set it, CONTINGENT always gets 0
+        const statusField = document.getElementById('status');
+        if (statusField) {
+            formData.append('status', statusField.value);
+        } else {
+            formData.append('status', '0'); // CONTINGENT users always get 0
+        }
+        
+        // Show loading with SweetAlert
+        if (window.Swal) {
+            Swal.showLoading();
+        }
+        
+        // Submit via AJAX
+        fetch('<?php echo url("ajax/contingent_save.php"); ?>', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData,
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(json) {
+            if (window.Swal) Swal.close();
             
-            // Show success message
-            alert('Pendaftaran kontinjen berjaya dihantar!');
-            
-            // Close modal
-            closeModal();
-            
-            // Reset form
-            document.getElementById('registrationForm')?.reset();
-            currentStep = 1;
-            updateStepDisplay();
-            
-            // Reload page or update list
-            location.reload();
-        }, 1500);
+            if (json && json.success) {
+                // Clear saved data
+                localStorage.removeItem('contingentRegistrationData');
+                
+                // Show success message
+                if (window.Swal) {
+                    Swal.fire({
+                        text: json.message || 'Kontinjen berjaya disimpan',
+                        icon: 'success'
+                    }).then(function() {
+                        location.reload();
+                    });
+                } else {
+                    alert(json.message || 'Kontinjen berjaya disimpan');
+                    location.reload();
+                }
+            } else {
+                // Show error message
+                if (window.Swal) {
+                    Swal.fire({
+                        text: (json && json.message) || 'Ralat menyimpan kontinjen',
+                        icon: 'error'
+                    });
+                } else {
+                    alert((json && json.message) || 'Ralat menyimpan kontinjen');
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        })
+        .catch(function(err) {
+            if (window.Swal) {
+                Swal.close();
+                Swal.fire({
+                    text: 'Ralat sambungan. Sila cuba lagi.',
+                    icon: 'error'
+                });
+            } else {
+                alert('Ralat sambungan. Sila cuba lagi.');
+            }
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        });
     }
 }
 
@@ -1101,7 +906,15 @@ function confirmCancel() {
     localStorage.removeItem('contingentRegistrationData');
     closeModal();
     // Reset form and step state
-    document.getElementById('registrationForm')?.reset();
+    const form = document.getElementById('contingentForm');
+    if (form) {
+        form.reset();
+        document.getElementById('contingentId').value = '';
+        document.getElementById('registrationModalLabel').textContent = 'Pendaftaran Kontinjen Baru';
+        form.querySelectorAll('input, select, textarea').forEach(field => {
+            field.classList.remove('is-valid', 'is-invalid');
+        });
+    }
     currentStep = 1;
     updateStepDisplay();
 }
@@ -1109,49 +922,52 @@ function confirmCancel() {
 // Real-time validation
 document.addEventListener('DOMContentLoaded', function() {
     // Address character counter
-    const addressField = document.getElementById('officeAddress');
+    const addressField = document.getElementById('address');
     if (addressField) {
         addressField.addEventListener('input', function() {
             const count = this.value.length;
-            document.getElementById('addressCharCount').textContent = count;
+            const charCountEl = document.getElementById('addressCharCount');
+            if (charCountEl) {
+                charCountEl.textContent = count;
+            }
             if (count > 500) {
                 this.value = this.value.substring(0, 500);
-                document.getElementById('addressCharCount').textContent = 500;
+                if (charCountEl) {
+                    charCountEl.textContent = 500;
+                }
             }
         });
     }
     
     // Phone number formatting
-    const phoneFields = ['officer1Phone', 'officer2Phone', 'officePhone', 'fax'];
-    phoneFields.forEach(fieldId => {
-        const field = document.getElementById(fieldId);
-        if (field) {
-            field.addEventListener('input', function() {
-                let value = this.value.replace(/\D/g, '');
-                if (value.length > 0) {
-                    if (fieldId.includes('officer')) {
-                        // Mobile: 01X-XXXXXXX
-                        if (value.length <= 3) {
-                            this.value = value;
-                        } else if (value.length <= 10) {
-                            this.value = value.substring(0, 3) + '-' + value.substring(3);
-                        } else {
-                            this.value = value.substring(0, 3) + '-' + value.substring(3, 10);
-                        }
+    const phoneField = document.getElementById('phone');
+    if (phoneField) {
+        phoneField.addEventListener('input', function() {
+            let value = this.value.replace(/\D/g, '');
+            if (value.length > 0) {
+                // Check if mobile (starts with 01) or landline
+                if (value.startsWith('01')) {
+                    // Mobile: 01X-XXXXXXX
+                    if (value.length <= 3) {
+                        this.value = value;
+                    } else if (value.length <= 10) {
+                        this.value = value.substring(0, 3) + '-' + value.substring(3);
                     } else {
-                        // Landline: 0X-XXXXXXX
-                        if (value.length <= 2) {
-                            this.value = value;
-                        } else if (value.length <= 9) {
-                            this.value = value.substring(0, 2) + '-' + value.substring(2);
-                        } else {
-                            this.value = value.substring(0, 2) + '-' + value.substring(2, 9);
-                        }
+                        this.value = value.substring(0, 3) + '-' + value.substring(3, 10);
+                    }
+                } else {
+                    // Landline: 0X-XXXXXXX (can be 7-9 digits after prefix)
+                    if (value.length <= 2) {
+                        this.value = value;
+                    } else if (value.length <= 10) {
+                        this.value = value.substring(0, 2) + '-' + value.substring(2);
+                    } else {
+                        this.value = value.substring(0, 2) + '-' + value.substring(2, 10);
                     }
                 }
-            });
-        }
-    });
+            }
+        });
+    }
     
     // Real-time validation on blur
     const allFields = document.querySelectorAll('#registrationModal input, #registrationModal select, #registrationModal textarea');
@@ -1316,6 +1132,83 @@ document.addEventListener('DOMContentLoaded', function() {
             loadingOverlay.style.left = '-9999px';
         }
     }, 100); // Check every 100ms
+    
+    // Handle edit and delete buttons
+    document.addEventListener('click', function(e) {
+        // Edit button
+        var editBtn = e.target.closest && e.target.closest('.edit-contingent');
+        if (editBtn) {
+            e.preventDefault();
+            var data = {
+                id: editBtn.getAttribute('data-id'),
+                kod: editBtn.getAttribute('data-kod'),
+                nama: editBtn.getAttribute('data-nama'),
+                alamat: editBtn.getAttribute('data-alamat'),
+                emel: editBtn.getAttribute('data-emel'),
+                phone: editBtn.getAttribute('data-phone'),
+                status: editBtn.getAttribute('data-status')
+            };
+            showRegistrationForm(data);
+        }
+        
+        // Delete button
+        var delBtn = e.target.closest && e.target.closest('.delete-contingent');
+        if (delBtn) {
+            e.preventDefault();
+            var id = delBtn.getAttribute('data-id');
+            if (!id) return;
+            
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'Padam kontinjen?',
+                    text: 'Kontinjen akan dipadam dan tidak boleh dipulihkan',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Padam',
+                    cancelButtonText: 'Batal'
+                }).then(function(r) {
+                    if (r.isConfirmed) {
+                        // Show loading
+                        Swal.showLoading();
+                        
+                        // Call AJAX delete endpoint
+                        fetch('<?php echo url("ajax/contingent_delete.php"); ?>', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json' },
+                            body: new URLSearchParams({ id: id })
+                        })
+                        .then(function(res) { return res.json(); })
+                        .then(function(json) {
+                            if (json && json.success) {
+                                Swal.fire({
+                                    text: json.message || 'Kontinjen dipadam',
+                                    icon: 'success'
+                                }).then(function() {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    text: (json && json.message) || 'Operasi tidak dibenarkan',
+                                    icon: 'error'
+                                });
+                            }
+                        })
+                        .catch(function(err) {
+                            Swal.fire({
+                                text: 'Ralat pelayan. Sila cuba lagi.',
+                                icon: 'error'
+                            });
+                        });
+                    }
+                });
+            } else {
+                if (confirm('Padam kontinjen ini?')) {
+                    alert('Fungsi Padam belum diaktifkan. Sila hubungi pentadbir untuk bantuan.');
+                }
+            }
+        }
+    });
 });
 </script>
 
