@@ -90,6 +90,9 @@ ob_start();
 
                         <div class="btn-group">
                             <button class="btn btn-outline-secondary">Laporan</button>
+                            <button class="btn btn-outline-primary" onclick="showBulkUploadPasukan()">
+                                <i class="cil cil-cloud-upload me-1"></i> Muat Naik Pukal
+                            </button>
                             <button class="btn btn-primary" onclick="showAddPasukan()">
                                 <i class="cil cil-plus me-1"></i> Daftar Pasukan Baru
                             </button>
@@ -353,6 +356,64 @@ require_once __DIR__ . '/../includes/layout.php';
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeAddPasukanModal()">Batal</button>
                 <button type="button" class="btn btn-primary" onclick="submitPasukan()">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Upload Pasukan Modal -->
+<div class="modal fade" id="bulkUploadPasukanModal" tabindex="-1" aria-labelledby="bulkUploadPasukanModalLabel" aria-hidden="true" data-coreui-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkUploadPasukanModalLabel">Muat Naik Pukal Pasukan</h5>
+                <button type="button" class="btn-close" aria-label="Close" onclick="closeBulkUploadPasukanModal()"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">Muat naik fail CSV untuk mendaftarkan berbilang pasukan sekaligus.</p>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="downloadTemplate()">
+                        <i class="cil cil-download me-1"></i> Muat Turun Template
+                    </button>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="csvFileInput" class="form-label">Pilih Fail CSV <span class="text-danger">*</span></label>
+                    <input type="file" id="csvFileInput" class="form-control" accept=".csv" onchange="handleFileSelect(event)">
+                    <div class="form-text">Saiz maksimum: 5MB. Format: CSV sahaja.</div>
+                </div>
+                
+                <div id="filePreview" class="d-none mb-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <strong>Pratonton Fail</strong>
+                        </div>
+                        <div class="card-body">
+                            <div id="previewContent" class="small"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="uploadProgress" class="d-none mb-3">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%">
+                            Memproses fail...
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="uploadResults" class="d-none">
+                    <div class="alert" id="resultsAlert">
+                        <h6 class="alert-heading">Keputusan Muat Naik</h6>
+                        <div id="resultsContent"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeBulkUploadPasukanModal()">Tutup</button>
+                <button type="button" class="btn btn-primary" id="uploadBtn" onclick="uploadBulkPasukan()" disabled>
+                    <i class="cil cil-cloud-upload me-1"></i> Muat Naik
+                </button>
             </div>
         </div>
     </div>
@@ -1317,5 +1378,218 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Bulk Upload Functions
+let bulkUploadModalInstance = null;
+let selectedFile = null;
+
+function showBulkUploadPasukan() {
+    const modalEl = document.getElementById('bulkUploadPasukanModal');
+    if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
+
+    if (typeof coreui !== 'undefined' && coreui.Modal) {
+        bulkUploadModalInstance = new coreui.Modal(modalEl, {backdrop:true,keyboard:true,focus:true});
+        bulkUploadModalInstance.show();
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        bulkUploadModalInstance = new bootstrap.Modal(modalEl, {backdrop:true,keyboard:true,focus:true});
+        bulkUploadModalInstance.show();
+    } else {
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        document.body.classList.add('modal-open');
+    }
+    
+    // Reset form
+    resetBulkUploadForm();
+}
+
+function closeBulkUploadPasukanModal() {
+    const modalEl = document.getElementById('bulkUploadPasukanModal');
+    if (bulkUploadModalInstance && typeof bulkUploadModalInstance.hide === 'function') {
+        bulkUploadModalInstance.hide();
+    } else if (typeof coreui !== 'undefined' && coreui.Modal) {
+        const inst = coreui.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+    
+    resetBulkUploadForm();
+}
+
+function resetBulkUploadForm() {
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('filePreview').classList.add('d-none');
+    document.getElementById('uploadProgress').classList.add('d-none');
+    document.getElementById('uploadResults').classList.add('d-none');
+    document.getElementById('uploadBtn').disabled = true;
+    selectedFile = null;
+}
+
+function downloadTemplate() {
+    window.location.href = '<?php echo url("ajax/pasukan_template.php"); ?>';
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        resetBulkUploadForm();
+        return;
+    }
+    
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Hanya fail CSV dibenarkan.',
+                icon: 'error'
+            });
+        } else {
+            alert('Hanya fail CSV dibenarkan.');
+        }
+        resetBulkUploadForm();
+        return;
+    }
+    
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Saiz fail melebihi 5MB. Sila pilih fail yang lebih kecil.',
+                icon: 'error'
+            });
+        } else {
+            alert('Saiz fail melebihi 5MB. Sila pilih fail yang lebih kecil.');
+        }
+        resetBulkUploadForm();
+        return;
+    }
+    
+    selectedFile = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n').slice(0, 20); // Show first 20 lines
+        const previewContent = document.getElementById('previewContent');
+        previewContent.innerHTML = '<pre class="mb-0">' + escapeHtml(lines.join('\n')) + (text.split('\n').length > 20 ? '\n...' : '') + '</pre>';
+        document.getElementById('filePreview').classList.remove('d-none');
+        document.getElementById('uploadBtn').disabled = false;
+    };
+    reader.readAsText(file);
+}
+
+function uploadBulkPasukan() {
+    if (!selectedFile) {
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Sila pilih fail CSV terlebih dahulu.',
+                icon: 'warning'
+            });
+        } else {
+            alert('Sila pilih fail CSV terlebih dahulu.');
+        }
+        return;
+    }
+    
+    // Show progress
+    document.getElementById('uploadProgress').classList.remove('d-none');
+    document.getElementById('uploadResults').classList.add('d-none');
+    document.getElementById('uploadBtn').disabled = true;
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('csv_file', selectedFile);
+    
+    // Upload file
+    fetch('<?php echo url("ajax/pasukan_bulk_upload.php"); ?>', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('uploadProgress').classList.add('d-none');
+        document.getElementById('uploadBtn').disabled = false;
+        
+        // Show results
+        const resultsDiv = document.getElementById('uploadResults');
+        const resultsAlert = document.getElementById('resultsAlert');
+        const resultsContent = document.getElementById('resultsContent');
+        
+        resultsDiv.classList.remove('d-none');
+        
+        if (data.success) {
+            resultsAlert.className = 'alert alert-success';
+            let html = `<p><strong>Berjaya:</strong> ${data.success_count} daripada ${data.total} pasukan berjaya dimuat naik.</p>`;
+            
+            if (data.failed_count > 0) {
+                html += `<p><strong>Gagal:</strong> ${data.failed_count} pasukan gagal dimuat naik.</p>`;
+                if (data.errors && data.errors.length > 0) {
+                    html += '<ul class="mb-0">';
+                    data.errors.forEach(error => {
+                        html += `<li><strong>Pasukan "${escapeHtml(error.team_name)}"</strong> (Baris ${error.team_index}): ${escapeHtml(error.error)}`;
+                        if (error.team_data && error.team_data.atlet_data && error.team_data.atlet_data.length > 0) {
+                            html += '<br><small class="text-muted">Data atlet yang gagal:</small><ul class="small">';
+                            error.team_data.atlet_data.forEach((atlet, idx) => {
+                                html += `<li>Atlet ${idx + 1}: nama="${escapeHtml(atlet.nama)}", IC="${escapeHtml(atlet.ic)}" (panjang: ${atlet.ic_length}), matrik="${escapeHtml(atlet.matrik)}", kategori_id=${atlet.kategori_id || 'null'}</li>`;
+                            });
+                            html += '</ul>';
+                        }
+                        html += '</li>';
+                    });
+                    html += '</ul>';
+                }
+            }
+            
+            resultsContent.innerHTML = html;
+            
+            // Reload list after short delay
+            setTimeout(() => {
+                loadPasukanList();
+            }, 1000);
+        } else {
+            resultsAlert.className = 'alert alert-danger';
+            let html = `<p><strong>Gagal:</strong> ${data.message || 'Ralat memuat naik fail.'}</p>`;
+            
+            if (data.errors && data.errors.length > 0) {
+                html += '<ul class="mb-0">';
+                data.errors.forEach(error => {
+                    html += `<li>Pasukan "${escapeHtml(error.team_name)}" (Baris ${error.team_index}): ${escapeHtml(error.error)}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            resultsContent.innerHTML = html;
+        }
+    })
+    .catch(err => {
+        document.getElementById('uploadProgress').classList.add('d-none');
+        document.getElementById('uploadBtn').disabled = false;
+        console.error('Error:', err);
+        
+        const resultsDiv = document.getElementById('uploadResults');
+        const resultsAlert = document.getElementById('resultsAlert');
+        const resultsContent = document.getElementById('resultsContent');
+        
+        resultsDiv.classList.remove('d-none');
+        resultsAlert.className = 'alert alert-danger';
+        resultsContent.innerHTML = '<p>Ralat menyambung ke pelayan. Sila cuba lagi.</p>';
+        
+        if (window.Swal) {
+            Swal.fire({
+                text: 'Ralat memuat naik fail. Sila cuba lagi.',
+                icon: 'error'
+            });
+        } else {
+            alert('Ralat memuat naik fail. Sila cuba lagi.');
+        }
+    });
 }
 </script>

@@ -113,15 +113,21 @@ class PasukanModel {
                     )
                 ");
                 
-                foreach ($data['jurulatih'] as $jurulatih) {
+                foreach ($data['jurulatih'] as $index => $jurulatih) {
                     if (!empty($jurulatih['nama'])) {
-                        $jurulatihStmt->execute([
-                            ':pasukan_id' => $pasukanId,
-                            ':nama' => trim($jurulatih['nama']),
-                            ':no_kad_pengenalan' => !empty($jurulatih['no_kad_pengenalan']) ? trim($jurulatih['no_kad_pengenalan']) : null,
-                            ':no_telefon' => !empty($jurulatih['no_telefon']) ? trim($jurulatih['no_telefon']) : null,
-                            ':emel' => !empty($jurulatih['emel']) ? trim($jurulatih['emel']) : null
-                        ]);
+                        error_log("[PasukanModel::create] Inserting jurulatih #" . ($index + 1) . " - nama: '" . $jurulatih['nama'] . "', phone: '" . ($jurulatih['no_telefon'] ?? '') . "', email: '" . ($jurulatih['emel'] ?? '') . "'");
+                        try {
+                            $jurulatihStmt->execute([
+                                ':pasukan_id' => $pasukanId,
+                                ':nama' => trim($jurulatih['nama']),
+                                ':no_kad_pengenalan' => !empty($jurulatih['no_kad_pengenalan']) && $jurulatih['no_kad_pengenalan'] !== '-' ? trim($jurulatih['no_kad_pengenalan']) : null,
+                                ':no_telefon' => !empty($jurulatih['no_telefon']) && $jurulatih['no_telefon'] !== '-' ? trim($jurulatih['no_telefon']) : null,
+                                ':emel' => !empty($jurulatih['emel']) && $jurulatih['emel'] !== '-' ? trim($jurulatih['emel']) : null
+                            ]);
+                        } catch (PDOException $e) {
+                            error_log("[PasukanModel::create] Error inserting jurulatih: " . $e->getMessage());
+                            throw new Exception("Ralat memasukkan jurulatih '" . $jurulatih['nama'] . "': " . $e->getMessage());
+                        }
                     }
                 }
             }
@@ -144,15 +150,42 @@ class PasukanModel {
                     )
                 ");
                 
-                foreach ($data['atlet'] as $atlet) {
+                foreach ($data['atlet'] as $index => $atlet) {
                     if (!empty($atlet['nama'])) {
-                        $atletStmt->execute([
-                            ':pasukan_id' => $pasukanId,
-                            ':nama' => trim($atlet['nama']),
-                            ':no_kad_pengenalan' => !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null,
-                            ':no_matrik' => !empty($atlet['no_matrik']) ? trim($atlet['no_matrik']) : null,
-                            ':kategori_id' => !empty($atlet['kategori_id']) ? (int)$atlet['kategori_id'] : null
-                        ]);
+                        $nama = trim($atlet['nama']);
+                        $ic = !empty($atlet['no_kad_pengenalan']) ? trim($atlet['no_kad_pengenalan']) : null;
+                        $matrik = !empty($atlet['no_matrik']) ? trim($atlet['no_matrik']) : null;
+                        $kategoriId = !empty($atlet['kategori_id']) ? (int)$atlet['kategori_id'] : null;
+                        
+                        // CRITICAL: Ensure IC doesn't exceed 20 characters (database VARCHAR(20) limit)
+                        if ($ic !== null && strlen($ic) > 20) {
+                            error_log("[PasukanModel::create] WARNING: IC too long for athlete '$nama': '$ic' (length: " . strlen($ic) . "), truncating to 20 chars");
+                            $ic = substr($ic, 0, 20);
+                        }
+                        
+                        // Log the data being inserted for debugging
+                        error_log("[PasukanModel::create] Inserting athlete #" . ($index + 1) . " - nama: '$nama', IC length: " . strlen($ic ?? '') . ", IC: '$ic', matrik: '$matrik', kategori_id: $kategoriId");
+                        
+                        try {
+                            $atletStmt->execute([
+                                ':pasukan_id' => $pasukanId,
+                                ':nama' => $nama,
+                                ':no_kad_pengenalan' => $ic,
+                                ':no_matrik' => $matrik,
+                                ':kategori_id' => $kategoriId
+                            ]);
+                        } catch (PDOException $e) {
+                            error_log("[PasukanModel::create] Error inserting athlete: " . $e->getMessage());
+                            error_log("[PasukanModel::create] PDO Error Code: " . $e->getCode());
+                            error_log("[PasukanModel::create] Athlete data: " . json_encode([
+                                'nama' => $nama,
+                                'no_kad_pengenalan' => $ic,
+                                'no_kad_pengenalan_length' => strlen($ic ?? ''),
+                                'no_matrik' => $matrik,
+                                'kategori_id' => $kategoriId
+                            ]));
+                            throw new Exception("Ralat memasukkan atlet '$nama': " . $e->getMessage() . " (IC: '$ic', panjang: " . strlen($ic ?? '') . ")");
+                        }
                     }
                 }
             }
@@ -184,6 +217,140 @@ class PasukanModel {
                 'message' => 'Ralat sistem: ' . $e->getMessage()
             ];
         }
+    }
+    
+    /**
+     * Bulk create multiple teams
+     * 
+     * @param array $teamsData Array of team data arrays
+     * @return array Result with success status, success count, failed count, and detailed errors
+     */
+    public function bulkCreate($teamsData) {
+        $results = [
+            'success' => true,
+            'total' => count($teamsData),
+            'success_count' => 0,
+            'failed_count' => 0,
+            'errors' => []
+        ];
+        
+        foreach ($teamsData as $index => $data) {
+            $teamIndex = $index + 1;
+            try {
+                // Validate required fields
+                if (empty($data['nama_pasukan'])) {
+                    throw new Exception('Nama pasukan diperlukan');
+                }
+                
+                if (empty($data['kontinjen_id'])) {
+                    throw new Exception('Kontinjen diperlukan');
+                }
+                
+                if (empty($data['sukan_id'])) {
+                    throw new Exception('Sukan diperlukan');
+                }
+                
+                // Log team data being processed
+                error_log('[PasukanModel::bulkCreate] Processing team ' . $teamIndex . ': ' . ($data['nama_pasukan'] ?? 'Unknown'));
+                error_log('[PasukanModel::bulkCreate] Team data summary - pengurus: ' . count($data['pengurus'] ?? []) . ', jurulatih: ' . count($data['jurulatih'] ?? []) . ', atlet: ' . count($data['atlet'] ?? []));
+                
+                // Log athlete details for debugging
+                if (!empty($data['atlet']) && is_array($data['atlet'])) {
+                    foreach ($data['atlet'] as $atletIdx => $atlet) {
+                        error_log('[PasukanModel::bulkCreate] Atlet ' . ($atletIdx + 1) . ': nama="' . ($atlet['nama'] ?? '') . '", IC="' . ($atlet['no_kad_pengenalan'] ?? '') . '" (len=' . strlen($atlet['no_kad_pengenalan'] ?? '') . '), matrik="' . ($atlet['no_matrik'] ?? '') . '", kategori_id=' . ($atlet['kategori_id'] ?? 'null'));
+                    }
+                }
+                
+                // Use existing create method for each team
+                $result = $this->create($data);
+                
+                if ($result['success']) {
+                    $results['success_count']++;
+                } else {
+                    $results['failed_count']++;
+                    $errorMsg = $result['message'] ?? 'Ralat tidak diketahui';
+                    $results['errors'][] = [
+                        'team_index' => $teamIndex,
+                        'team_name' => $data['nama_pasukan'] ?? 'Tidak diketahui',
+                        'error' => $errorMsg
+                    ];
+                    error_log('[PasukanModel::bulkCreate] Failed team ' . $teamIndex . ': ' . $errorMsg);
+                }
+            } catch (Exception $e) {
+                $results['failed_count']++;
+                $errorMsg = $e->getMessage();
+                
+                // Collect problematic athlete data for display
+                $problematicAthletes = [];
+                if (!empty($data['atlet']) && is_array($data['atlet'])) {
+                    foreach ($data['atlet'] as $atlet) {
+                        $problematicAthletes[] = [
+                            'nama' => $atlet['nama'] ?? '',
+                            'ic' => $atlet['no_kad_pengenalan'] ?? '',
+                            'ic_length' => strlen($atlet['no_kad_pengenalan'] ?? ''),
+                            'matrik' => $atlet['no_matrik'] ?? '',
+                            'kategori_id' => $atlet['kategori_id'] ?? null
+                        ];
+                    }
+                }
+                
+                $results['errors'][] = [
+                    'team_index' => $teamIndex,
+                    'team_name' => $data['nama_pasukan'] ?? 'Tidak diketahui',
+                    'error' => $errorMsg,
+                    'team_data' => [
+                        'kontinjen_id' => $data['kontinjen_id'] ?? null,
+                        'sukan_id' => $data['sukan_id'] ?? null,
+                        'atlet_count' => count($data['atlet'] ?? []),
+                        'atlet_data' => $problematicAthletes
+                    ]
+                ];
+                error_log('[PasukanModel::bulkCreate] Exception for team ' . $teamIndex . ': ' . $errorMsg);
+                error_log('[PasukanModel::bulkCreate] Team data: ' . json_encode([
+                    'nama_pasukan' => $data['nama_pasukan'] ?? null,
+                    'kontinjen_id' => $data['kontinjen_id'] ?? null,
+                    'sukan_id' => $data['sukan_id'] ?? null,
+                    'atlet_count' => count($data['atlet'] ?? []),
+                    'atlet_data' => $problematicAthletes
+                ]));
+            } catch (PDOException $e) {
+                $results['failed_count']++;
+                $errorMsg = 'Ralat sistem: ' . $e->getMessage();
+                
+                // Collect problematic athlete data for display
+                $problematicAthletes = [];
+                if (!empty($data['atlet']) && is_array($data['atlet'])) {
+                    foreach ($data['atlet'] as $atlet) {
+                        $problematicAthletes[] = [
+                            'nama' => $atlet['nama'] ?? '',
+                            'ic' => $atlet['no_kad_pengenalan'] ?? '',
+                            'ic_length' => strlen($atlet['no_kad_pengenalan'] ?? ''),
+                            'matrik' => $atlet['no_matrik'] ?? '',
+                            'kategori_id' => $atlet['kategori_id'] ?? null
+                        ];
+                    }
+                }
+                
+                $results['errors'][] = [
+                    'team_index' => $teamIndex,
+                    'team_name' => $data['nama_pasukan'] ?? 'Tidak diketahui',
+                    'error' => $errorMsg,
+                    'team_data' => [
+                        'kontinjen_id' => $data['kontinjen_id'] ?? null,
+                        'sukan_id' => $data['sukan_id'] ?? null,
+                        'atlet_count' => count($data['atlet'] ?? []),
+                        'atlet_data' => $problematicAthletes
+                    ]
+                ];
+                error_log('[PasukanModel::bulkCreate] PDO Error for team ' . $teamIndex . ': ' . $e->getMessage());
+                error_log('[PasukanModel::bulkCreate] PDO Error code: ' . $e->getCode());
+            }
+        }
+        
+        // Set overall success based on whether any teams were successfully created
+        $results['success'] = $results['success_count'] > 0;
+        
+        return $results;
     }
     
     /**
