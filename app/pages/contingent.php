@@ -257,7 +257,13 @@ ob_start();
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
-                                            <td class="text-center"><?php echo isset($participantCounts[(int)$c['id']]) ? (int)$participantCounts[(int)$c['id']]['jumlah_keseluruhan'] : 0; ?></td>
+                                            <?php
+                                                $pc = isset($participantCounts[(int)$c['id']]) ? $participantCounts[(int)$c['id']] : ['total_atlet'=>0,'total_pengurus'=>0,'total_jurulatih'=>0,'jumlah_keseluruhan'=>0];
+                                                $tooltip = 'Atlet: ' . ($pc['total_atlet'] ?? 0) . ' • Pengurus: ' . ($pc['total_pengurus'] ?? 0) . ' • Jurulatih: ' . ($pc['total_jurulatih'] ?? 0);
+                                                $countVal = (int)($pc['jumlah_keseluruhan'] ?? 0);
+                                                $badgeClass = ($countVal === 0) ? 'bg-danger' : 'bg-primary';
+                                            ?>
+                                            <td class="text-center"><span class="badge <?php echo $badgeClass; ?>" title="<?php echo htmlspecialchars($tooltip, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $countVal; ?></span></td>
                                             <td>
                                                 <?php
                                                 $status = isset($c['status']) ? (int)$c['status'] : 0;
