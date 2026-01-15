@@ -200,6 +200,7 @@ $userEmail = $currentUser['email'] ?? '';
                                             <div class="body">
                                                 <ul>
                                                     <!-- Removed duplicate 'Tetapan' entry from header (already in sidebar) -->
+                                                    <li><a class="trigger-change-password" href="#"><i class="zmdi zmdi-key"></i> Tukar Kata Laluan</a></li>
                                                     <li><a class="confirm-logout" href="<?php echo url('auth/logout.php'); ?>"><i class="zmdi zmdi-lock-open"></i>Log keluar</a></li>
                                                 </ul>
                                             </div>
@@ -256,6 +257,175 @@ $userEmail = $currentUser['email'] ?? '';
             else bindLogoutConfirm();
         })();
     </script>
+        <!-- Change Password Modal -->
+        <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="changePasswordModalLabel">Tukar Kata Laluan</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <form id="changePasswordForm">
+                        <div class="modal-body">
+                            <div class="mb-2 text-muted small">Anda log masuk sebagai <?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?><?php if($userEmail) echo ' — ' . htmlspecialchars($userEmail, ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div class="mb-3">
+                                <label class="form-label">Kata Laluan Semasa</label>
+                                <input type="password" name="current_password" class="form-control" required minlength="6">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Kata Laluan Baru</label>
+                                <input type="password" id="newPassword" name="new_password" class="form-control" required minlength="8" autocomplete="new-password">
+                            </div>
+                            <div id="passwordPolicy" class="mb-2 small text-muted">
+                                <strong>Polisi Kata Laluan:</strong>
+                                <ul class="mb-0" style="padding-left:1rem;">
+                                    <?php if(defined('PASSWORD_MIN_LENGTH')): ?>
+                                        <li data-policy="minlength">Panjang sekurang-kurangnya <?php echo (int)PASSWORD_MIN_LENGTH; ?> aksara</li>
+                                    <?php endif; ?>
+                                    <?php if(defined('PASSWORD_REQUIRE_UPPERCASE') && PASSWORD_REQUIRE_UPPERCASE): ?>
+                                        <li data-policy="uppercase">Mengandungi sekurang-kurangnya satu huruf besar (A-Z)</li>
+                                    <?php endif; ?>
+                                    <?php if(defined('PASSWORD_REQUIRE_NUMBER') && PASSWORD_REQUIRE_NUMBER): ?>
+                                        <li data-policy="number">Mengandungi sekurang-kurangnya satu nombor (0-9)</li>
+                                    <?php endif; ?>
+                                    <?php if(defined('PASSWORD_REQUIRE_SPECIAL') && PASSWORD_REQUIRE_SPECIAL): ?>
+                                        <li data-policy="special">Mengandungi sekurang-kurangnya satu simbol khas (contoh: !@#$%)</li>
+                                    <?php endif; ?>
+                                </ul>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Sahkan Kata Laluan Baru</label>
+                                <input type="password" id="confirmPassword" name="confirm_password" class="form-control" required minlength="8" autocomplete="new-password">
+                            </div>
+                            <div id="changePasswordMessage" class="text-muted small"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                            <button type="submit" class="btn btn-primary">Simpan</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+                (function(){
+                        function bindChangePassword(){
+                                try{
+                                        document.querySelectorAll('.trigger-change-password').forEach(function(el){
+                                                el.addEventListener('click', function(e){
+                                                        e.preventDefault();
+                                                        var modalEl = document.getElementById('changePasswordModal');
+                                        // adjust modal position to avoid overlapping header
+                                        function adjustModalPosition(){
+                                            try{
+                                                var header = document.querySelector('.header-section');
+                                                var offset = 70; if (header) offset = header.offsetHeight + 12;
+                                                var dialog = modalEl.querySelector('.modal-dialog');
+                                                if (dialog) { dialog.style.transform = 'none'; dialog.style.marginTop = offset + 'px'; }
+                                            }catch(e){ }
+                                        }
+                                        adjustModalPosition();
+                                        if (window.bootstrap && bootstrap.Modal) {
+                                            var m = new bootstrap.Modal(modalEl);
+                                            m.show();
+                                        } else {
+                                            modalEl.style.display = 'block';
+                                        }
+                                        // re-adjust on resize
+                                        window.addEventListener('resize', adjustModalPosition);
+                                                });
+                                        });
+
+                                        var form = document.getElementById('changePasswordForm');
+                                        var newPwd = document.getElementById('newPassword');
+                                        var confPwd = document.getElementById('confirmPassword');
+                                        var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+
+                                        // build policy config from server-side constants
+                                        var pwdPolicy = {
+                                            minLength: <?php echo defined('PASSWORD_MIN_LENGTH') ? (int)PASSWORD_MIN_LENGTH : 0; ?>,
+                                            requireUpper: <?php echo (defined('PASSWORD_REQUIRE_UPPERCASE') && PASSWORD_REQUIRE_UPPERCASE) ? 'true' : 'false'; ?>,
+                                            requireNumber: <?php echo (defined('PASSWORD_REQUIRE_NUMBER') && PASSWORD_REQUIRE_NUMBER) ? 'true' : 'false'; ?>,
+                                            requireSpecial: <?php echo (defined('PASSWORD_REQUIRE_SPECIAL') && PASSWORD_REQUIRE_SPECIAL) ? 'true' : 'false'; ?>
+                                        };
+
+                                        function updatePolicyUI(pwd){
+                                            try{
+                                                var list = document.querySelectorAll('#passwordPolicy [data-policy]');
+                                                list.forEach(function(li){
+                                                    var ok = false;
+                                                    var key = li.getAttribute('data-policy');
+                                                    if (key === 'minlength') ok = pwd && pwd.length >= (pwdPolicy.minLength || 0);
+                                                    if (key === 'uppercase') ok = /[A-Z]/.test(pwd || '');
+                                                    if (key === 'number') ok = /[0-9]/.test(pwd || '');
+                                                    if (key === 'special') ok = /[^a-zA-Z0-9]/.test(pwd || '');
+                                                    li.style.color = ok ? '#198754' : '#6c757d';
+                                                    li.dataset.ok = ok ? '1' : '0';
+                                                });
+                                            }catch(e){ }
+                                        }
+
+                                        function validateFormState(){
+                                            try{
+                                                var pwd = newPwd ? newPwd.value : '';
+                                                var conf = confPwd ? confPwd.value : '';
+                                                updatePolicyUI(pwd);
+                                                var allOk = true;
+                                                document.querySelectorAll('#passwordPolicy [data-policy]').forEach(function(li){ if (li.dataset.ok !== '1') allOk = false; });
+                                                if (!pwd || !conf) allOk = false;
+                                                if (pwd !== conf) allOk = false;
+                                                if (submitBtn) submitBtn.disabled = !allOk;
+                                                return allOk;
+                                            }catch(e){ return false; }
+                                        }
+
+                                        if (newPwd) newPwd.addEventListener('input', validateFormState);
+                                        if (confPwd) confPwd.addEventListener('input', validateFormState);
+
+                                        if (!form) return;
+                                        // disable submit initially
+                                        if (form && form.querySelector('button[type="submit"]')) form.querySelector('button[type="submit"]').disabled = true;
+
+                                        form.addEventListener('submit', function(e){
+                                            e.preventDefault();
+                                            if (!validateFormState()) {
+                                                var msg = document.getElementById('changePasswordMessage'); if (msg) msg.textContent = 'Sila penuhi polisi kata laluan.'; return;
+                                            }
+                                            var fd = new FormData(form);
+                                            var msg = document.getElementById('changePasswordMessage');
+                                            msg.textContent = '';
+                                                fetch('<?php echo url('ajax/change_password.php'); ?>', {
+                                                        method: 'POST',
+                                                        credentials: 'same-origin',
+                                                        body: fd,
+                                                        headers: { 'Accept': 'application/json' }
+                                                }).then(function(r){ return r.json(); }).then(function(res){
+                                                        if (res && res.success){
+                                                                if (window.Swal) Swal.fire({ icon: 'success', title: 'Berjaya', text: res.message || 'Kata laluan telah dikemaskini.' });
+                                                                // hide modal
+                                                                if (window.bootstrap && bootstrap.Modal) {
+                                                                        var modalEl = document.getElementById('changePasswordModal');
+                                                                        var inst = bootstrap.Modal.getInstance(modalEl);
+                                                                        if (inst) inst.hide();
+                                                                }
+                                                                form.reset();
+                                                        } else {
+                                                                var text = (res && res.message) ? res.message : 'Gagal mengemaskini kata laluan.';
+                                                                if (window.Swal) Swal.fire({ icon: 'error', title: 'Ralat', text: text });
+                                                                else if (msg) msg.textContent = text;
+                                                        }
+                                                }).catch(function(err){
+                                                        console.error('change_password error', err);
+                                                        if (window.Swal) Swal.fire({ icon: 'error', title: 'Ralat', text: 'Ralat rangkaian. Sila cuba lagi.' });
+                                                });
+                                        });
+                                } catch(e) { console && console.warn && console.warn(e); }
+                        }
+                        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindChangePassword);
+                        else bindChangePassword();
+                })();
+        </script>
     <script>
         (function(){
             function basename(path){
