@@ -428,7 +428,7 @@ class PasukanModel {
                     updater.full_name AS updated_by_name
                 FROM table_pasukan p
                 LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN table_sukan s ON p.sukan_id = s.id
                 LEFT JOIN table_pasukan_pengurus peng ON p.id = peng.pasukan_id AND peng.deleted_at IS NULL
                 LEFT JOIN table_pasukan_jurulatih jur ON p.id = jur.pasukan_id AND jur.deleted_at IS NULL
@@ -458,7 +458,7 @@ class PasukanModel {
                 SELECT COUNT(DISTINCT p.id) AS total
                 FROM table_pasukan p
                 LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN table_sukan s ON p.sukan_id = s.id
                 LEFT JOIN table_pasukan_pengurus peng ON p.id = peng.pasukan_id AND peng.deleted_at IS NULL
                 LEFT JOIN table_pasukan_jurulatih jur ON p.id = jur.pasukan_id AND jur.deleted_at IS NULL
@@ -537,7 +537,7 @@ class PasukanModel {
                     updater.full_name AS updated_by_name
                 FROM table_pasukan p
                 LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN table_sukan s ON p.sukan_id = s.id
                 LEFT JOIN users creator ON p.created_by = creator.id
                 LEFT JOIN users updater ON p.updated_by = updater.id

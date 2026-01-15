@@ -14,7 +14,7 @@ $universities = [];
 $counts = ['total' => 0, 'active' => 0, 'inactive' => 0];
 try {
 	$pdo = getDB();
-	$stmt = $pdo->query("SELECT * FROM table_ref_universiti ORDER BY nama_universiti ASC");
+	$stmt = $pdo->query("SELECT * FROM table_ref_universiti WHERE deleted_at IS NULL ORDER BY nama_universiti ASC");
 	$universities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 	$counts['total'] = count($universities);
 	foreach ($universities as $u) {
@@ -291,7 +291,20 @@ ob_start();
 					});
 				} else {
 					if (confirm('Padam rekod ini?')) {
-						alert('Fungsi Padam belum diaktifkan. Sila hubungi pentadbir untuk bantuan.');
+						// call AJAX delete endpoint (fallback when SweetAlert not available)
+						fetch('<?php echo url("ajax/university_delete.php"); ?>', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Accept': 'application/json' },
+							body: new URLSearchParams({ id: id })
+						}).then(function(res){ return res.json(); }).then(function(json){
+							if (json && json.success) {
+								alert(json.message || 'Rekod dipadam');
+								location.reload();
+							} else {
+								alert((json && json.message) || 'Operasi tidak dibenarkan');
+							}
+						}).catch(function(){ alert('Ralat pelayan. Sila cuba lagi.'); });
 					}
 				}
 			}

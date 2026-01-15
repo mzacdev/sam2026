@@ -19,7 +19,7 @@ $canChangeStatus = in_array($currentUserRole, ['ADMIN', 'ORGANIZER']);
 $universities = [];
 try {
     $pdo = getDB();
-    $stmt = $pdo->query("SELECT kod_universiti, nama_universiti FROM table_ref_universiti where status = 1 ORDER BY nama_universiti ASC");
+    $stmt = $pdo->query("SELECT kod_universiti, nama_universiti FROM table_ref_universiti WHERE status = 1 AND deleted_at IS NULL ORDER BY nama_universiti ASC");
     $universities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log('[contingent.php] DB error fetching universities: ' . $e->getMessage());
@@ -42,6 +42,32 @@ try {
     }
 } catch (Exception $e) {
     error_log('[contingent.php] DB error fetching contingents: ' . $e->getMessage());
+}
+
+// Participant counts per kontinjen (athletes + managers + coaches)
+$participantCounts = [];
+try {
+    // Use aggregated subqueries per team to avoid row multiplication
+    $sql = "SELECT k.id AS kontinjen_id,
+        COALESCE(SUM(a.cnt),0) AS total_atlet,
+        COALESCE(SUM(m.cnt),0) AS total_pengurus,
+        COALESCE(SUM(co.cnt),0) AS total_jurulatih,
+        (COALESCE(SUM(a.cnt),0) + COALESCE(SUM(m.cnt),0) + COALESCE(SUM(co.cnt),0)) AS jumlah_keseluruhan
+    FROM table_kontinjen k
+    LEFT JOIN table_pasukan p ON p.kontinjen_id = k.id AND p.deleted_at IS NULL AND p.status = 1
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_atlet WHERE deleted_at IS NULL GROUP BY pasukan_id) a ON a.pasukan_id = p.id
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_pengurus WHERE deleted_at IS NULL GROUP BY pasukan_id) m ON m.pasukan_id = p.id
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_jurulatih WHERE deleted_at IS NULL GROUP BY pasukan_id) co ON co.pasukan_id = p.id
+    WHERE k.deleted_at IS NULL
+    GROUP BY k.id";
+
+    $stmt = $pdo->query($sql);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $participantCounts[(int)$r['kontinjen_id']] = $r;
+    }
+} catch (Exception $e) {
+    error_log('[contingent.php] participant counts error: ' . $e->getMessage());
 }
 
 ob_start();
@@ -198,7 +224,7 @@ ob_start();
                                     <th scope="col">Nama Universiti</th>
                                     <th scope="col">Kod</th>
                                     <th scope="col">Pegawai Untuk Dihubungi</th>
-                                    <th scope="col" style="width:140px;">Jumlah Atlet</th>
+                                    <th scope="col" style="width:140px;">Jumlah Peserta</th>
                                     <th scope="col" style="width:120px;">Status</th>
                                     <th scope="col" style="width:160px;">Tindakan</th>
                                 </tr>
@@ -231,7 +257,7 @@ ob_start();
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
-                                            <td class="text-center">-</td>
+                                            <td class="text-center"><?php echo isset($participantCounts[(int)$c['id']]) ? (int)$participantCounts[(int)$c['id']]['jumlah_keseluruhan'] : 0; ?></td>
                                             <td>
                                                 <?php
                                                 $status = isset($c['status']) ? (int)$c['status'] : 0;

@@ -68,6 +68,28 @@ if ($id <= 0) {
 // Log attempt for auditing
 error_log('[ajax/university_delete] user=' . Session::get('user_id') . ' attempted delete id=' . $id);
 
-// Deletion is intentionally disabled. Inform the caller.
-echo json_encode(['success' => false, 'message' => 'Fungsi padam belum diaktifkan. Sila hubungi pentadbir.']);
-exit;
+try {
+    $db = getDB();
+    // Try update including deleted_by; if column doesn't exist, fallback to update without deleted_by
+    try {
+        $stmt = $db->prepare("UPDATE table_ref_universiti SET deleted_at = NOW(), deleted_by = :deleted_by WHERE id = :id");
+        $stmt->execute([':deleted_by' => Session::get('user_id'), ':id' => $id]);
+    } catch (Exception $inner) {
+        // Check SQLSTATE / message for unknown column and try simpler update
+        error_log('[ajax/university_delete][fallback attempt] ' . $inner->getMessage());
+        $stmt = $db->prepare("UPDATE table_ref_universiti SET deleted_at = NOW() WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+    }
+
+    echo json_encode(['success' => true, 'message' => 'Rekod universiti telah dipadam.']);
+    exit;
+} catch (Exception $e) {
+    error_log('[ajax/university_delete] ' . $e->getMessage());
+    http_response_code(500);
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Ralat memadam rekod.']);
+    }
+    exit;
+}

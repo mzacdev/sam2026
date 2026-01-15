@@ -270,7 +270,7 @@ class ContingentModel {
                     creator.full_name AS created_by_name,
                     updater.full_name AS updated_by_name
                 FROM table_kontinjen k
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN users creator ON k.created_by = creator.id
                 LEFT JOIN users updater ON k.updated_by = updater.id
                 WHERE {$whereClause}
@@ -294,7 +294,7 @@ class ContingentModel {
             $countSql = "
                 SELECT COUNT(*) AS total
                 FROM table_kontinjen k
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 WHERE {$whereClause}
             ";
             
@@ -347,7 +347,7 @@ class ContingentModel {
                     creator.full_name AS created_by_name,
                     updater.full_name AS updated_by_name
                 FROM table_kontinjen k
-                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN users creator ON k.created_by = creator.id
                 LEFT JOIN users updater ON k.updated_by = updater.id
                 WHERE k.id = :id 

@@ -379,37 +379,48 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const id = delBtn.getAttribute('data-id');
         if (!id) return;
-
-        const doDelete = function() {
-            fetch('<?php echo url("ajax/venue_delete.php"); ?>', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'id=' + encodeURIComponent(id) })
-            .then(res => res.json())
-            .then(json => {
-                if (json && json.success) {
-                    reloadVenuesTable();
-                } else {
-                    alert((json && json.message) || 'Ralat memadam.');
-                }
-            })
-            .catch(err => { alert('Ralat sambungan.'); });
-        };
-
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                title: 'Padam venue ini?',
-                text: 'Tindakan ini tidak boleh diundur.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Ya, padam',
-                cancelButtonText: 'Batal'
-            }).then(function(result){
-                if (result && result.isConfirmed) doDelete();
-            });
-        } else {
-            if (!confirm('Padam venue ini?')) return;
-            doDelete();
-        }
+        deleteVenue(id, function(success){ if (success) reloadVenuesTable(); });
     }
 });
+
+// Reusable delete function
+function deleteVenue(id, callback) {
+    const doDelete = function() {
+        fetch('<?php echo url("ajax/venue_delete.php"); ?>', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'id=' + encodeURIComponent(id)
+        })
+        .then(res => res.json())
+        .then(json => {
+            if (json && json.success) {
+                if (callback) callback(true);
+            } else {
+                alert((json && json.message) || 'Ralat memadam.');
+                if (callback) callback(false);
+            }
+        })
+        .catch(err => { alert('Ralat sambungan.'); if (callback) callback(false); });
+    };
+
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'Padam venue ini?',
+            text: 'Tindakan ini tidak boleh diundur.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, padam',
+            cancelButtonText: 'Batal'
+        }).then(function(result){
+            if (result && result.isConfirmed) doDelete();
+            else if (callback) callback(false);
+        });
+    } else {
+        if (!confirm('Padam venue ini?')) { if (callback) callback(false); return; }
+        doDelete();
+    }
+}
 
 // Initial load
 document.addEventListener('DOMContentLoaded', function() { loadSportOptions(function(){ reloadVenuesTable(); }); });
