@@ -56,6 +56,20 @@ try {
 
     $stmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, k.kod_universiti, p.created_at FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 6");
     $stmt->execute(); $recent['teams'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // medal tally (compact) - aggregate from table_results linking to pasukan -> kontinjen
+    try {
+        $sql = "SELECT t.kod_universiti, SUM(t.emas) AS emas, SUM(t.perak) AS perak, SUM(t.gangsa) AS gangsa, SUM(t.emas + t.perak + t.gangsa) AS jumlah FROM (\n" .
+               "  SELECT k.id AS kont_id, k.kod_universiti, 1 AS emas, 0 AS perak, 0 AS gangsa FROM table_results r JOIN table_pasukan p ON r.tempat_pertama = p.id JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE r.tempat_pertama IS NOT NULL AND r.tempat_pertama != ''\n" .
+               "  UNION ALL\n" .
+               "  SELECT k.id AS kont_id, k.kod_universiti, 0 AS emas, 1 AS perak, 0 AS gangsa FROM table_results r JOIN table_pasukan p ON r.tempat_kedua = p.id JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE r.tempat_kedua IS NOT NULL AND r.tempat_kedua != ''\n" .
+               "  UNION ALL\n" .
+               "  SELECT k.id AS kont_id, k.kod_universiti, 0 AS emas, 0 AS perak, 1 AS gangsa FROM table_results r JOIN table_pasukan p ON r.tempat_ketiga = p.id JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE r.tempat_ketiga IS NOT NULL AND r.tempat_ketiga != ''\n" .
+               ") t GROUP BY t.kod_universiti ORDER BY emas DESC, perak DESC, gangsa DESC, kod_universiti ASC LIMIT 10";
+        $mStmt = $db->query($sql);
+        $medalRows = $mStmt ? $mStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Exception $e) {
+        $medalRows = [];
+    }
 
 } catch (Exception $e) {
     error_log('[dashboard] summary fetch error: ' . $e->getMessage());
@@ -178,29 +192,40 @@ ob_start();
         <div class="col-lg-4">
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>Akan Datang</strong>
-                    <small class="text-muted">Jadual</small>
+                    <strong>Medal Tally (Ringkas)</strong>
+                    <small class="text-muted">Top Kontinjen</small>
                 </div>
-                <div class="card-body">
-                    <?php if (!empty($recent['teams'])): ?>
-                        <ul class="list-group mb-3">
-                            <?php foreach ($recent['teams'] as $t): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div class="small">
-                                        <div class="fw-semibold"><?php echo htmlspecialchars($t['nama_pasukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
-                                        <div class="text-muted small"><?php echo htmlspecialchars($t['kod_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
-                                    </div>
-                                    <span class="badge bg-secondary small"><?php echo htmlspecialchars($t['created_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?></span>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
+                <div class="card-body p-2">
+                    <?php if (!empty($medalRows)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Kontinjen</th>
+                                        <th class="text-center">E</th>
+                                        <th class="text-center">P</th>
+                                        <th class="text-center">G</th>
+                                        <th class="text-center">J</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php $rank = 1; foreach ($medalRows as $mr): ?>
+                                        <tr>
+                                            <td class="align-middle small"><?php echo $rank++; ?></td>
+                                            <td class="align-middle small"><?php echo htmlspecialchars($mr['kod_universiti'] ?: '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                                            <td class="text-center small"><?php echo (int)($mr['emas'] ?? 0); ?></td>
+                                            <td class="text-center small"><?php echo (int)($mr['perak'] ?? 0); ?></td>
+                                            <td class="text-center small"><?php echo (int)($mr['gangsa'] ?? 0); ?></td>
+                                            <td class="text-center small"><strong><?php echo (int)($mr['jumlah'] ?? 0); ?></strong></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     <?php else: ?>
-                        <p class="mb-2">Tiada acara akan datang.</p>
+                        <div class="text-muted small p-3">Tiada data pingat.</div>
                     <?php endif; ?>
-                    <div class="d-grid gap-2">
-                        <a href="<?php echo url('pages/tournament.php'); ?>" class="btn btn-outline-primary btn-sm">Urus Kejohanan</a>
-                        <a href="<?php echo url('pages/registration.php'); ?>" class="btn btn-outline-secondary btn-sm">Urus Pendaftaran</a>
-                    </div>
                 </div>
             </div>
         </div>
