@@ -75,16 +75,26 @@ ob_start();
                     <div class="d-flex align-items-center gap-3">
                         <div class="d-none d-md-flex">
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0"><?php echo (int)$teamStats['total']; ?></div>
+                                <div class="h5 mb-0" id="statTotalPasukan"><?php echo (int)$teamStats['total']; ?></div>
                                 <div class="small text-muted">Pasukan</div>
                             </div>
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0"><?php echo (int)$teamStats['active']; ?></div>
+                                <div class="h5 mb-0" id="statActivePasukan"><?php echo (int)$teamStats['active']; ?></div>
                                 <div class="small text-muted">Aktif</div>
                             </div>
                             <div class="me-3 text-center">
-                                <div class="h5 mb-0"><?php echo (int)$teamStats['inactive']; ?></div>
+                                <div class="h5 mb-0" id="statInactivePasukan"><?php echo (int)$teamStats['inactive']; ?></div>
                                 <div class="small text-muted">Tidak Aktif</div>
+                            </div>
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0" id="statTotalAtlet"><?php 
+                                    $totalAtlet = 0;
+                                    foreach ($teams as $t) {
+                                        $totalAtlet += (int)($t['atlet_count'] ?? 0);
+                                    }
+                                    echo $totalAtlet;
+                                ?></div>
+                                <div class="small text-muted">Jumlah Atlet</div>
                             </div>
                         </div>
 
@@ -1301,15 +1311,21 @@ function loadPasukanList() {
             const stats = data.stats || {total: 0, active: 0, inactive: 0};
             
             // Update statistics
-            const heroSection = document.querySelector('.card.bg-light .d-none.d-md-flex');
-            if (heroSection) {
-                const statDivs = heroSection.querySelectorAll('.me-3 .h5.mb-0');
-                if (statDivs.length >= 3) {
-                    statDivs[0].textContent = stats.total || 0;
-                    statDivs[1].textContent = stats.active || 0;
-                    statDivs[2].textContent = stats.inactive || 0;
-                }
-            }
+            const statTotalPasukan = document.getElementById('statTotalPasukan');
+            const statActivePasukan = document.getElementById('statActivePasukan');
+            const statInactivePasukan = document.getElementById('statInactivePasukan');
+            const statTotalAtlet = document.getElementById('statTotalAtlet');
+            
+            if (statTotalPasukan) statTotalPasukan.textContent = stats.total || 0;
+            if (statActivePasukan) statActivePasukan.textContent = stats.active || 0;
+            if (statInactivePasukan) statInactivePasukan.textContent = stats.inactive || 0;
+            
+            // Calculate total atlet from visible teams (filtered/search results)
+            let totalAtlet = 0;
+            teams.forEach(t => {
+                totalAtlet += parseInt(t.atlet_count || 0);
+            });
+            if (statTotalAtlet) statTotalAtlet.textContent = totalAtlet;
             
             if (teams.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="cil cil-people" style="font-size: 2rem;"></i><p class="mt-2">Tiada pasukan didaftarkan — klik "Daftar Pasukan Baru" untuk mula menambah.</p></td></tr>';
