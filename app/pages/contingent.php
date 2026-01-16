@@ -70,6 +70,27 @@ try {
     error_log('[contingent.php] participant counts error: ' . $e->getMessage());
 }
 
+// Participant counts aggregated by kod_universiti (used to highlight dropdown options)
+$uniParticipantCounts = [];
+try {
+    $sqlUni = "SELECT k.kod_universiti AS kod_universiti, COALESCE(SUM(a.cnt),0) + COALESCE(SUM(m.cnt),0) + COALESCE(SUM(co.cnt),0) AS jumlah_participants
+        FROM table_kontinjen k
+        LEFT JOIN table_pasukan p ON p.kontinjen_id = k.id AND p.deleted_at IS NULL AND p.status = 1
+        LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_atlet WHERE deleted_at IS NULL GROUP BY pasukan_id) a ON a.pasukan_id = p.id
+        LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_pengurus WHERE deleted_at IS NULL GROUP BY pasukan_id) m ON m.pasukan_id = p.id
+        LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_jurulatih WHERE deleted_at IS NULL GROUP BY pasukan_id) co ON co.pasukan_id = p.id
+        WHERE k.deleted_at IS NULL
+        GROUP BY k.kod_universiti";
+
+    $stmtUni = $pdo->query($sqlUni);
+    $uniRows = $stmtUni->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($uniRows as $ur) {
+        $uniParticipantCounts[$ur['kod_universiti']] = (int)$ur['jumlah_participants'];
+    }
+} catch (Exception $e) {
+    error_log('[contingent.php] uni participant counts error: ' . $e->getMessage());
+}
+
 ob_start();
 ?>
 <div class="w-100 px-3">
@@ -128,12 +149,34 @@ ob_start();
                                 <label for="institution" class="form-label">INSTITUSI <span class="text-danger">*</span></label>
                                 <select class="form-select" id="institution" name="institution" required>
                                     <option value="" disabled selected>Sila pilih institusi...</option>
-                                <?php foreach ($universities as $university): ?>
-                                    <option value="<?php echo htmlspecialchars($university['kod_universiti'], ENT_QUOTES, 'UTF-8'); ?>">
-                                        <?php echo htmlspecialchars($university['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?>
-                                    </option>
+                                <?php foreach ($universities as $university): 
+                                    $kod = $university['kod_universiti'];
+                                    $uCount = isset($uniParticipantCounts[$kod]) ? (int)$uniParticipantCounts[$kod] : 0;
+                                    $optLabel = htmlspecialchars($university['nama_universiti'], ENT_QUOTES, 'UTF-8');
+                                    if ($uCount === 0) {
+                                        $optLabel = $optLabel . ' (Tiada peserta)';
+                                        $dataEmpty = ' data-empty="1"';
+                                    } else {
+                                        $optLabel = $optLabel . ' (' . $uCount . ' peserta)';
+                                        $dataEmpty = '';
+                                    }
+                                ?>
+                                    <option value="<?php echo htmlspecialchars($kod, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $dataEmpty; ?>><?php echo $optLabel; ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <?php
+                                // Visible fallback: list universities that currently have zero participants
+                                $zeroUnis = [];
+                                foreach ($universities as $u) {
+                                    $k = $u['kod_universiti'];
+                                    if (isset($uniParticipantCounts[$k]) && (int)$uniParticipantCounts[$k] === 0) {
+                                        $zeroUnis[] = htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8') . ' (' . htmlspecialchars($k, ENT_QUOTES, 'UTF-8') . ')';
+                                    }
+                                }
+                                if (!empty($zeroUnis)) {
+                                    echo '<div class="form-text text-danger small mt-1">⚠️ Institusi tanpa peserta: ' . implode(', ', $zeroUnis) . '</div>';
+                                }
+                            ?>
                             <div class="invalid-feedback">Sila pilih institusi</div>
                         </div>
 
@@ -1370,6 +1413,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+});
+</script>
+<script>
+// Highlight options with no participants (improve visibility in browsers that support option styling)
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('institution');
+    if (!sel) return;
+    for (var i=0;i<sel.options.length;i++){
+        var opt = sel.options[i];
+        if (opt.getAttribute('data-empty') === '1'){
+            try { opt.style.backgroundColor = '#fff3f3'; opt.style.color = '#b71c1c'; } catch(e){}
+        }
+    }
 });
 </script>
 

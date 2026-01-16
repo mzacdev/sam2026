@@ -22,7 +22,7 @@ $recent = ['contingents' => [], 'teams' => []];
 try {
     $db = getDB();
     // counts
-    $row = $db->query("SELECT COUNT(*) AS c FROM table_kontinjen WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
+    $row = $db->query("SELECT COUNT(*) AS c FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE k.deleted_at IS NULL AND r.status = 1")->fetch(PDO::FETCH_ASSOC);
     $summary['kontinjen'] = (int)($row['c'] ?? 0);
 
     $row = $db->query("SELECT COUNT(*) AS c FROM table_sukan WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
@@ -56,7 +56,7 @@ try {
     $summary['jurulatih'] = (int)($row['c'] ?? 0);
 
     // recent contingents and recent teams
-    $stmt = $db->prepare("SELECT id, kod_universiti, nama_pegawai_untuk_dihubungi, emel, created_at FROM table_kontinjen WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 6");
+    $stmt = $db->prepare("SELECT k.id, k.kod_universiti, k.nama_pegawai_untuk_dihubungi, k.emel, k.created_at FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE k.deleted_at IS NULL AND r.status = 1 ORDER BY k.created_at DESC LIMIT 6");
     $stmt->execute(); $recent['contingents'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, k.kod_universiti, p.created_at FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 6");
@@ -89,6 +89,8 @@ try {
                                 "FROM table_results rr " .
                                 "JOIN table_pasukan p ON (rr.tempat_pertama = p.id OR rr.tempat_kedua = p.id OR rr.tempat_ketiga = p.id) " .
                                 "JOIN table_kontinjen k ON p.kontinjen_id = k.id " .
+                                "JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti " .
+                                "WHERE r.status = 1 " .
                                 "GROUP BY k.kod_universiti";
                     $cntStmt = $db->query($countSql);
                     $counts = $cntStmt ? $cntStmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -114,7 +116,7 @@ try {
                     $medalRows = array_values($medalRows);
                 } else {
                     // fallback: try to use table_kontinjen kod_universiti list
-                    $stmt = $db->query("SELECT COALESCE(nama_pendek, kod_universiti) AS nama_pendek, kod_universiti FROM table_kontinjen GROUP BY kod_universiti ORDER BY kod_universiti ASC");
+                    $stmt = $db->query("SELECT COALESCE(r.nama_pendek, k.kod_universiti) AS nama_pendek, k.kod_universiti FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE r.status = 1 GROUP BY k.kod_universiti ORDER BY k.kod_universiti ASC");
                     $list = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
                     $medalRows = [];
                     foreach ($list as $l) {
@@ -137,10 +139,10 @@ try {
     // If ref table is empty or query returned no rows, fallback to listing kod_universiti from table_kontinjen
     if (empty($medalRows) || empty($summary['universiti'])) {
         try {
-            $sql2 = "SELECT COALESCE(k.nama_pendek, k.kod_universiti) AS nama_pendek, k.kod_universiti AS kod_universiti, " .
+                $sql2 = "SELECT COALESCE(k.nama_pendek, k.kod_universiti) AS nama_pendek, k.kod_universiti AS kod_universiti, " .
                     "COALESCE(m.emas,0) AS emas, COALESCE(m.perak,0) AS perak, COALESCE(m.gangsa,0) AS gangsa, " .
                     "(COALESCE(m.emas,0) + COALESCE(m.perak,0) + COALESCE(m.gangsa,0)) AS jumlah \n" .
-                    "FROM (SELECT DISTINCT kod_universiti, nama_pendek FROM table_kontinjen WHERE deleted_at IS NULL) k \n" .
+                    "FROM (SELECT DISTINCT k.kod_universiti, COALESCE(r.nama_pendek,k.kod_universiti) AS nama_pendek FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE k.deleted_at IS NULL AND r.status = 1) k \n" .
                     "LEFT JOIN (\n" .
                     "  SELECT k2.kod_universiti, \n" .
                     "    SUM(CASE WHEN rr.tempat_pertama IS NOT NULL AND rr.tempat_pertama != '' THEN 1 ELSE 0 END) AS emas,\n" .
@@ -149,6 +151,8 @@ try {
                     "  FROM table_results rr\n" .
                     "  JOIN table_pasukan p2 ON (rr.tempat_pertama = p2.id OR rr.tempat_kedua = p2.id OR rr.tempat_ketiga = p2.id)\n" .
                     "  JOIN table_kontinjen k2 ON p2.kontinjen_id = k2.id\n" .
+                    "  JOIN table_ref_universiti r2 ON k2.kod_universiti = r2.kod_universiti\n" .
+                    "  WHERE r2.status = 1\n" .
                     "  GROUP BY k2.kod_universiti\n" .
                     ") m ON k.kod_universiti = m.kod_universiti\n" .
                     "ORDER BY emas DESC, perak DESC, gangsa DESC, k.kod_universiti ASC";
@@ -202,18 +206,18 @@ ob_start();
                             <div class="text-muted small">Kontinjen</div>
                             <div class="fs-4 fw-bold"><?php echo number_format($summary['kontinjen']); ?></div>
                         </div>
-                        <div class="card-footer"><span class="text-muted small">Jumlah kontinjen: <?php echo number_format($summary['kontinjen']); ?></span></div>
+                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-flag me-1" aria-hidden="true"></i>Jumlah kontinjen</span></div>
                     </div>
                 </div>
 
                 <div class="col-6 col-sm-6 col-lg-3">
                     <div class="card neo-card h-100">
                         <div class="card-body d-flex flex-column align-items-center justify-content-center text-center">
-                            <i class="zmdi zmdi-trophy stat-icon text-success mb-2"></i>
+                            <i class="fa fa-trophy stat-icon text-success mb-2"></i>
                             <div class="text-muted small">Sukan</div>
                             <div class="fs-4 fw-bold"><?php echo number_format($summary['sukan']); ?></div>
                         </div>
-                        <div class="card-footer"><span class="text-muted small">Jumlah sukan: <?php echo number_format($summary['sukan']); ?></span></div>
+                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-futbol-o me-1" aria-hidden="true"></i>Jumlah sukan</span></div>
                     </div>
                 </div>
 
@@ -224,7 +228,7 @@ ob_start();
                             <div class="text-muted small">Pasukan</div>
                             <div class="fs-4 fw-bold"><?php echo number_format($summary['pasukan']); ?></div>
                         </div>
-                        <div class="card-footer"><span class="text-muted small">Jumlah pasukan: <?php echo number_format($summary['pasukan']); ?></span></div>
+                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-users me-1" aria-hidden="true"></i>Jumlah pasukan</span></div>
                     </div>
                 </div>
 
@@ -235,7 +239,7 @@ ob_start();
                             <div class="text-muted small">Acara Selesai</div>
                             <div class="fs-4 fw-bold"><?php echo number_format($summary['acara_selesai']); ?></div>
                         </div>
-                        <div class="card-footer"><span class="text-muted small">Acara selesai: <?php echo number_format($summary['acara_selesai']); ?></span></div>
+                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-calendar-check-o me-1" aria-hidden="true"></i>Acara selesai</span></div>
                     </div>
                 </div>
             </div>

@@ -73,7 +73,7 @@ $page_title = 'Log Masuk';
     <title><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?> - <?php echo SITE_NAME; ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="<?php echo defined('SITE_DESCRIPTION') ? SITE_DESCRIPTION : SITE_NAME; ?>">
-    <link rel="shortcut icon" type="image/x-icon" href="<?php echo asset('light/images/favicon.ico'); ?>">
+    <link rel="shortcut icon" type="image/x-icon" href="<?php echo asset('img/favicon.ico'); ?>">
 
     <link rel="stylesheet" href="<?php echo asset('light/css/vendor/bootstrap.min.css'); ?>">
     <link rel="stylesheet" href="<?php echo asset('light/css/vendor/material-design-iconic-font.min.css'); ?>">

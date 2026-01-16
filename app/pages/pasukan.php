@@ -29,6 +29,32 @@ try {
     error_log('[pasukan.php] DB error fetching contingents: ' . $e->getMessage());
 }
 
+// Compute participant totals per kontinjen (used to highlight contingents with zero participants)
+$participantCounts = [];
+try {
+    $db = getDB();
+    $sql = "SELECT k.id AS kontinjen_id, 
+        COALESCE(SUM(a.cnt),0) AS total_atlet,
+        COALESCE(SUM(m.cnt),0) AS total_pengurus,
+        COALESCE(SUM(co.cnt),0) AS total_jurulatih,
+        (COALESCE(SUM(a.cnt),0) + COALESCE(SUM(m.cnt),0) + COALESCE(SUM(co.cnt),0)) AS jumlah_keseluruhan
+    FROM table_kontinjen k
+    LEFT JOIN table_pasukan p ON p.kontinjen_id = k.id AND p.deleted_at IS NULL AND p.status = 1
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_atlet WHERE deleted_at IS NULL GROUP BY pasukan_id) a ON a.pasukan_id = p.id
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_pengurus WHERE deleted_at IS NULL GROUP BY pasukan_id) m ON m.pasukan_id = p.id
+    LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_jurulatih WHERE deleted_at IS NULL GROUP BY pasukan_id) co ON co.pasukan_id = p.id
+    WHERE k.deleted_at IS NULL
+    GROUP BY k.id";
+
+    $stmt = $db->query($sql);
+    $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    foreach ($rows as $r) {
+        $participantCounts[(int)$r['kontinjen_id']] = (int)$r['jumlah_keseluruhan'];
+    }
+} catch (Exception $e) {
+    error_log('[pasukan.php] participantCounts error: ' . $e->getMessage());
+}
+
 // Fetch sports from database
 $sports = [];
 try {
@@ -116,15 +142,24 @@ ob_start();
     <!-- Filters & Search -->
     <div class="row mb-3">
         <div class="col-lg-4 mb-2 mb-lg-0">
-            <select class="form-select" id="filterContingent">
+            <select class="form-select" id="filterContingent" data-custom="true">
                 <option value="">Semua Kontinjen</option>
-                <?php foreach ($contingents as $c): ?>
-                    <option value="<?php echo (int)$c['id']; ?>"><?php echo htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
+                <?php foreach ($contingents as $c): 
+                    $cid = (int)$c['id'];
+                    $count = isset($participantCounts[$cid]) ? (int)$participantCounts[$cid] : 0;
+                    $label = htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8');
+                    if ($count === 0) {
+                        $attr = ' data-empty="1"';
+                    } else {
+                        $attr = '';
+                    }
+                ?>
+                    <option value="<?php echo $cid; ?>"<?php echo $attr; ?>><?php echo $label; ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
         <div class="col-lg-4 mb-2 mb-lg-0">
-            <select class="form-select" id="filterSport">
+            <select class="form-select" id="filterSport" data-custom="true">
                 <option value="">Semua Sukan</option>
                 <?php foreach ($sports as $s): ?>
                     <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
@@ -151,18 +186,18 @@ ob_start();
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover table-striped align-middle">
+                        <table class="table table-hover table-striped align-middle table-fixed">
                             <thead class="table-light">
                                 <tr>
-                                    <th scope="col" style="width:70px;">#</th>
-                                    <th scope="col">Nama Pasukan</th>
-                                    <th scope="col">Kontinjen</th>
-                                    <th scope="col">Sukan</th>
-                                    <th scope="col">Pengurus</th>
-                                    <th scope="col">Jurulatih</th>
-                                    <th scope="col" style="width:100px;">Bil. Atlet</th>
-                                    <th scope="col" style="width:120px;">Status</th>
-                                    <th scope="col" style="width:160px;">Tindakan</th>
+                                    <th scope="col" style="width:3%;">#</th>
+                                    <th scope="col" style="width:20%;">Nama Pasukan</th>
+                                    <th scope="col" style="width:15%;">Kontinjen</th>
+                                    <th scope="col" style="width:10%;">Sukan</th>
+                                    <th scope="col" style="width:18%;">Pengurus</th>
+                                    <th scope="col" style="width:18%;">Jurulatih</th>
+                                    <th scope="col" style="width:8%;">Bil. Atlet</th>
+                                    <th scope="col" style="width:8%;">Status</th>
+                                    <th scope="col">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody id="pasukanTableBody">
@@ -176,34 +211,26 @@ ob_start();
                                 <?php else: ?>
                                     <?php foreach ($teams as $i => $t): ?>
                                         <tr>
-                                            <td><?php echo $i + 1; ?></td>
-                                            <td>
-                                                <div class="fw-semibold"><?php echo htmlspecialchars($t['nama_pasukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($t['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
-                                            <td><?php echo htmlspecialchars($t['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
-                                            <td>
-                                                <div class="small">
+                                            <td style="width:3%;"><div class="cell-inner"><?php echo $i + 1; ?></div></td>
+                                            <td style="width:20%;"><div class="cell-inner fw-semibold"><?php echo htmlspecialchars($t['nama_pasukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                            <td style="width:15%;"><div class="cell-inner"><?php echo htmlspecialchars($t['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                            <td style="width:10%;"><div class="cell-inner"><?php echo htmlspecialchars($t['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                            <td style="width:18%;"><div class="cell-inner small">
                                                     <?php 
                                                     $pengurusList = !empty($t['pengurus_list']) ? explode(', ', $t['pengurus_list']) : [];
                                                     echo !empty($pengurusList) ? htmlspecialchars(implode(', ', array_slice($pengurusList, 0, 2)), ENT_QUOTES, 'UTF-8') : '-';
                                                     if (count($pengurusList) > 2) echo '...';
                                                     ?>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div class="small">
+                                                </div></td>
+                                            <td style="width:18%;"><div class="cell-inner small">
                                                     <?php 
                                                     $jurulatihList = !empty($t['jurulatih_list']) ? explode(', ', $t['jurulatih_list']) : [];
                                                     echo !empty($jurulatihList) ? htmlspecialchars(implode(', ', array_slice($jurulatihList, 0, 2)), ENT_QUOTES, 'UTF-8') : '-';
                                                     if (count($jurulatihList) > 2) echo '...';
                                                     ?>
-                                                </div>
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge bg-info"><?php echo (int)($t['atlet_count'] ?? 0); ?></span>
-                                            </td>
-                                            <td>
+                                                </div></td>
+                                            <td style="width:8%;" class="text-center"><div class="cell-inner"><span class="badge bg-info"><?php echo (int)($t['atlet_count'] ?? 0); ?></span></div></td>
+                                            <td style="width:8%;"><div class="cell-inner">
                                                 <?php
                                                 $status = isset($t['status']) ? (int)$t['status'] : 0;
                                                 if ($status == 1) {
@@ -215,8 +242,8 @@ ob_start();
                                                 }
                                                 ?>
                                                 <span class="badge <?php echo $badgeClass; ?>"><?php echo $statusText; ?></span>
-                                            </td>
-                                            <td>
+                                            </div></td>
+                                            <td><div class="cell-inner">
                                                 <a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#"
                                                    data-id="<?php echo (int)$t['id']; ?>">
                                                     <i class="fa fa-edit"></i>
@@ -224,8 +251,8 @@ ob_start();
                                                 <a class="btn btn-sm btn-outline-danger delete-pasukan" title="Padam" href="#" data-id="<?php echo (int)$t['id']; ?>">
                                                     <i class="fa fa-trash"></i>
                                                 </a>
-                                    </td>
-                                </tr>
+                                            </div></td>
+                                        </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </tbody>
@@ -240,6 +267,81 @@ ob_start();
 $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
 ?>
+
+<style>
+/* Custom lightweight dropdown to allow option row highlighting */
+.custom-select-wrap{position:relative;display:inline-block;width:100%;}
+.custom-select-toggle{width:100%;text-align:left;padding:.375rem .75rem;border:1px solid #ced4da;border-radius:.375rem;background:#fff;cursor:pointer}
+.custom-select-toggle:after{content:'▾';float:right;margin-left:.5rem;color:#6c757d}
+.custom-select-menu{position:absolute;z-index:1100;width:100%;background:#fff;border:1px solid rgba(0,0,0,0.08);box-shadow:0 6px 18px rgba(16,24,40,0.08);max-height:240px;overflow:auto;border-radius:.375rem;margin-top:.25rem}
+.custom-select-item{padding:.4rem .75rem;cursor:pointer}
+.custom-select-item:hover{background:#f1f5f9}
+.custom-select-item.empty-item{background:#fff3f3;color:#b71c1c}
+.custom-select-item.empty-item:hover{background:#ffe6e6}
+.custom-select-placeholder{color:#6c757d}
+/* Table fixed layout and single-line rows */
+.table-fixed{table-layout:fixed;width:100%}
+.table-fixed th,.table-fixed td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.table-fixed td .cell-inner{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.table-responsive{overflow-x:auto;overflow-y:visible}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    function buildCustom(select){
+        if (!select || select.dataset._customInit) return;
+        select.dataset._customInit = '1';
+        // hide original select but keep it in DOM for forms
+        select.style.display = 'none';
+
+        var wrap = document.createElement('div'); wrap.className = 'custom-select-wrap';
+        var toggle = document.createElement('button'); toggle.type='button'; toggle.className='custom-select-toggle';
+        var placeholder = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : '';
+        toggle.innerHTML = '<span class="custom-select-placeholder">' + (placeholder || select.getAttribute('data-placeholder') || 'Pilih...') + '</span>';
+
+        var menu = document.createElement('div'); menu.className='custom-select-menu'; menu.style.display='none';
+
+        Array.from(select.options).forEach(function(opt, idx){
+            if (!opt.value && opt.value !== '0') {
+                // include even empty value (like default)
+            }
+            var item = document.createElement('div'); item.className='custom-select-item';
+            item.textContent = opt.text;
+            item.dataset.value = opt.value;
+            if (opt.getAttribute('data-empty') === '1') item.classList.add('empty-item');
+            if (opt.disabled) item.classList.add('disabled');
+            item.addEventListener('click', function(e){
+                // set original select
+                select.value = this.dataset.value;
+                // trigger change event on original select
+                var ev = new Event('change', {bubbles:true}); select.dispatchEvent(ev);
+                // update toggle label
+                toggle.querySelector('.custom-select-placeholder').textContent = this.textContent;
+                closeMenu();
+            });
+            menu.appendChild(item);
+        });
+
+        function closeMenu(){ menu.style.display='none'; document.removeEventListener('click', outsideClick); }
+        function openMenu(){ menu.style.display='block'; setTimeout(function(){ document.addEventListener('click', outsideClick);}, 10); }
+        function outsideClick(e){ if (!wrap.contains(e.target)) closeMenu(); }
+
+        toggle.addEventListener('click', function(e){ e.preventDefault(); if (menu.style.display === 'block') closeMenu(); else openMenu(); });
+
+        wrap.appendChild(toggle); wrap.appendChild(menu);
+        select.parentNode.insertBefore(wrap, select.nextSibling);
+
+        // Sync initial selected label
+        select.addEventListener('change', function(){
+            var opt = select.options[select.selectedIndex];
+            if (opt) toggle.querySelector('.custom-select-placeholder').textContent = opt.text;
+        });
+    }
+
+    var targets = document.querySelectorAll('select[data-custom="true"]');
+    targets.forEach(function(s){ buildCustom(s); });
+});
+</script>
 
 <!-- Add/Edit Pasukan Modal -->
 <div class="modal fade" id="addPasukanModal" tabindex="-1" aria-labelledby="addPasukanModalLabel" aria-hidden="true" data-coreui-backdrop="static">
@@ -262,11 +364,20 @@ require_once __DIR__ . '/../includes/layout.php';
                                 <input type="text" id="pasukanNama" name="nama_pasukan" class="form-control" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="pasukanKontinjen" class="form-label">Kontinjen <span class="text-danger">*</span></label>
-                                <select id="pasukanKontinjen" name="kontinjen_id" class="form-select" required>
+                                                    <label for="pasukanKontinjen" class="form-label">Kontinjen <span class="text-danger">*</span></label>
+                                                    <select id="pasukanKontinjen" name="kontinjen_id" class="form-select" required data-custom="true">
                                     <option value="">Sila Pilih</option>
-                                    <?php foreach ($contingents as $c): ?>
-                                        <option value="<?php echo (int)$c['id']; ?>"><?php echo htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
+                                    <?php foreach ($contingents as $c): 
+                                        $cid = (int)$c['id'];
+                                        $count = isset($participantCounts[$cid]) ? (int)$participantCounts[$cid] : 0;
+                                        $label = htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8');
+                                        if ($count === 0) {
+                                            $attr = ' data-empty="1"';
+                                        } else {
+                                            $attr = '';
+                                        }
+                                    ?>
+                                        <option value="<?php echo $cid; ?>"<?php echo $attr; ?>><?php echo $label; ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
