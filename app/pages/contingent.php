@@ -267,7 +267,7 @@ ob_start();
                                     <th scope="col">Nama Universiti</th>
                                     <th scope="col">Kod</th>
                                     <th scope="col">Pegawai Untuk Dihubungi</th>
-                                    <th scope="col" style="width:140px;">Jumlah Peserta</th>
+                                    <th scope="col" style="width:140px;">Jumlah Atlet</th>
                                     <th scope="col" style="width:120px;">Status</th>
                                     <th scope="col" style="width:160px;">Tindakan</th>
                                 </tr>
@@ -303,7 +303,8 @@ ob_start();
                                             <?php
                                                 $pc = isset($participantCounts[(int)$c['id']]) ? $participantCounts[(int)$c['id']] : ['total_atlet'=>0,'total_pengurus'=>0,'total_jurulatih'=>0,'jumlah_keseluruhan'=>0];
                                                 $tooltip = 'Atlet: ' . ($pc['total_atlet'] ?? 0) . ' • Pengurus: ' . ($pc['total_pengurus'] ?? 0) . ' • Jurulatih: ' . ($pc['total_jurulatih'] ?? 0);
-                                                $countVal = (int)($pc['jumlah_keseluruhan'] ?? 0);
+                                                // Display only athlete count (exclude pengurus & jurulatih)
+                                                $countVal = (int)($pc['total_atlet'] ?? 0);
                                                 $badgeClass = ($countVal === 0) ? 'bg-danger' : 'bg-primary';
                                             ?>
                                             <td class="text-center"><span class="badge <?php echo $badgeClass; ?>" title="<?php echo htmlspecialchars($tooltip, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $countVal; ?></span></td>

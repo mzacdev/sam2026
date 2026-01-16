@@ -235,11 +235,11 @@ ob_start();
                 <div class="col-6 col-sm-6 col-lg-3">
                     <div class="card neo-card h-100">
                         <div class="card-body d-flex flex-column align-items-center justify-content-center text-center">
-                            <i class="zmdi zmdi-calendar stat-icon text-warning mb-2"></i>
-                            <div class="text-muted small">Acara Selesai</div>
-                            <div class="fs-4 fw-bold"><?php echo number_format($summary['acara_selesai']); ?></div>
+                            <i class="zmdi zmdi-run stat-icon text-warning mb-2"></i>
+                            <div class="text-muted small">Jumlah Atlet</div>
+                            <div class="fs-4 fw-bold"><?php echo number_format($summary['atlet']); ?></div>
                         </div>
-                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-calendar-check-o me-1" aria-hidden="true"></i>Acara selesai</span></div>
+                        <div class="card-footer text-center"><span class="small text-muted"><i class="fa fa-id-card me-1" aria-hidden="true"></i>Jumlah atlet</span></div>
                     </div>
                 </div>
             </div>
