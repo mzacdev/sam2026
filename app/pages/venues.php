@@ -47,15 +47,7 @@ ob_start();
         </div>
     </div>
 
-    <!-- Search only (removed dropdown filters) -->
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="input-group input-group-sm">
-                <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
-                <input type="text" class="form-control" id="venuesSearch" placeholder="Cari nama atau lokasi...">
-            </div>
-        </div>
-    </div>
+    <!-- Search removed from its own row; now displayed inline in card header -->
 
     <!-- Venues List -->
     <div class="row">
@@ -65,6 +57,18 @@ ob_start();
                     <div>
                         <strong>Senarai Venue</strong>
                         <div class="small text-muted">Urus semua venue berdaftar</div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="input-group input-group-sm" style="min-width:260px;">
+                            <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
+                            <input type="search" class="form-control" id="venuesSearch" placeholder="Cari nama atau lokasi...">
+                        </div>
+                        <select id="venuesPageSizeTopSelect" class="form-select form-select-sm ms-2" style="width: auto;">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
                     </div>
                 </div>
                 <div class="card-body">
@@ -90,6 +94,10 @@ ob_start();
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between mt-2">
+                        <div id="venuesPagingInfo" class="small text-muted"></div>
+                        <div id="venuesPagination" class="ms-auto"></div>
                     </div>
                 </div>
             </div>
@@ -180,6 +188,130 @@ require_once __DIR__ . '/../includes/layout.php';
 
 <script>
 let addVenueModalInstance = null;
+// Pagination state
+let venuesData = [];
+let venuesFiltered = [];
+let venuesCurrentPage = 1;
+let venuesPageSize = 10; // default page size
+
+function setVenuesPageSize(size) {
+    venuesPageSize = parseInt(size) || 10;
+    venuesCurrentPage = 1;
+    // Keep top selector in sync
+    const topSel = document.getElementById('venuesPageSizeTopSelect');
+    if (topSel) topSel.value = String(venuesPageSize);
+    renderVenuesTablePage();
+}
+
+function goToVenuesPage(page) {
+    const totalPages = Math.max(1, Math.ceil(venuesFiltered.length / venuesPageSize));
+    venuesCurrentPage = Math.min(Math.max(1, parseInt(page) || 1), totalPages);
+    renderVenuesTablePage();
+}
+
+function renderVenuesTablePage() {
+    const tbody = document.getElementById('venuesTableBody');
+    if (!tbody) return;
+    const total = venuesFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / venuesPageSize));
+    if (venuesCurrentPage > totalPages) venuesCurrentPage = totalPages;
+    const start = (venuesCurrentPage - 1) * venuesPageSize;
+    const end = Math.min(total, start + venuesPageSize);
+    if (total === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="cil cil-map" style="font-size: 2rem;"></i><p class="mt-2">Tiada venue didaftarkan — klik "Daftar Venue Baru" untuk mula menambah.</p></td></tr>';
+    } else {
+        let html = '';
+        const pageItems = venuesFiltered.slice(start, end);
+        pageItems.forEach((v, i) => {
+            const idx = start + i + 1;
+            const status = (parseInt(v.status) === 1) ? '<span class="badge bg-success">Aktif</span>' : '<span class="badge bg-secondary">Tidak Aktif</span>';
+            html += '<tr>';
+            html += '<td>' + idx + '</td>';
+            html += '<td>' + escapeHtml(v.nama_venue || '-') + '</td>';
+            html += '<td>' + escapeHtml(v.lokasi || '-') + '</td>';
+            html += '<td class="text-center">' + (v.kapasiti !== null ? escapeHtml(String(v.kapasiti)) : '-') + '</td>';
+            html += '<td>' + escapeHtml(v.sukan_name || '-') + '</td>';
+            html += '<td>' + status + '</td>';
+            html += '<td>';
+            html += '<a href="#" class="btn btn-sm btn-outline-primary edit-venue me-1" data-id="' + (v.id||0) + '"> <i class="fa fa-edit"></i></a>';
+            html += '<a href="#" class="btn btn-sm btn-outline-danger delete-venue" data-id="' + (v.id||0) + '"> <i class="fa fa-trash"></i></a>';
+            html += '</td>';
+            html += '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+
+    // Update paging info and controls
+    const infoEl = document.getElementById('venuesPagingInfo');
+    if (infoEl) {
+        if (total === 0) infoEl.textContent = '';
+        else infoEl.textContent = 'Showing ' + (start + 1) + '–' + end + ' of ' + total;
+    }
+
+    renderVenuesPaginationControls(total, venuesCurrentPage, venuesPageSize);
+}
+
+function renderVenuesPaginationControls(totalItems, currentPage, pageSize) {
+    const container = document.getElementById('venuesPagination');
+    if (!container) return;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    let html = '';
+    // Pagination buttons (previous, pages, next)
+    html += '<nav aria-label="venues-pagination"><ul class="pagination pagination-sm mb-0">';
+    const prevDisabled = (currentPage <= 1) ? ' disabled' : '';
+    html += '<li class="page-item' + prevDisabled + '"><a class="page-link" href="#" data-page="' + (currentPage - 1) + '">‹</a></li>';
+
+    // show window of pages
+    const maxButtons = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxButtons/2));
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    if (endPage - startPage < maxButtons - 1) startPage = Math.max(1, endPage - maxButtons + 1);
+    for (let p = startPage; p <= endPage; p++) {
+        const active = (p === currentPage) ? ' active' : '';
+        html += '<li class="page-item' + active + '"><a class="page-link" href="#" data-page="' + p + '">' + p + '</a></li>';
+    }
+
+    const nextDisabled = (currentPage >= totalPages) ? ' disabled' : '';
+    html += '<li class="page-item' + nextDisabled + '"><a class="page-link" href="#" data-page="' + (currentPage + 1) + '">›</a></li>';
+    html += '</ul></nav>';
+    
+    container.innerHTML = html;
+    // Wire up events for pagination links
+    const links = container.querySelectorAll('.page-link');
+    links.forEach(a => {
+        a.addEventListener('click', function(e) {
+            e.preventDefault();
+            const page = parseInt(this.getAttribute('data-page')) || 1;
+            goToVenuesPage(page);
+        });
+    });
+}
+
+// Debounce helper
+function debounce(fn, delay) {
+    let t = null;
+    return function(...args) {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+// Filter venuesData using search query and reset pagination
+function filterVenues(query) {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+        venuesFiltered = venuesData.slice();
+    } else {
+        venuesFiltered = venuesData.filter(v => {
+            const name = (v.nama_venue || '').toString().toLowerCase();
+            const lokasi = (v.lokasi || '').toString().toLowerCase();
+            const sukan = (v.sukan_name || '').toString().toLowerCase();
+            return name.includes(q) || lokasi.includes(q) || sukan.includes(q);
+        });
+    }
+    venuesCurrentPage = 1;
+    renderVenuesTablePage();
+}
 
 function showAddVenue(data = null) {
     const modalEl = document.getElementById('addVenueModal');
@@ -387,27 +519,11 @@ function reloadVenuesTable(callback) {
     .then(json => {
         if (json && json.success) {
             const data = json.data || [];
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="cil cil-map" style="font-size: 2rem;"></i><p class="mt-2">Tiada venue didaftarkan — klik "Daftar Venue Baru" untuk mula menambah.</p></td></tr>';
-            } else {
-                let html = '';
-                data.forEach((v, i) => {
-                    const status = (parseInt(v.status) === 1) ? '<span class="badge bg-success">Aktif</span>' : '<span class="badge bg-secondary">Tidak Aktif</span>';
-                    html += '<tr>';
-                    html += '<td>' + (i+1) + '</td>';
-                    html += '<td>' + escapeHtml(v.nama_venue || '-') + '</td>';
-                    html += '<td>' + escapeHtml(v.lokasi || '-') + '</td>';
-                    html += '<td class="text-center">' + (v.kapasiti !== null ? escapeHtml(String(v.kapasiti)) : '-') + '</td>';
-                    html += '<td>' + escapeHtml(v.sukan_name || '-') + '</td>';
-                    html += '<td>' + status + '</td>';
-                    html += '<td>';
-                    html += '<a href="#" class="btn btn-sm btn-outline-primary edit-venue me-1" data-id="' + (v.id||0) + '"> <i class="fa fa-edit"></i></a>';
-                    html += '<a href="#" class="btn btn-sm btn-outline-danger delete-venue" data-id="' + (v.id||0) + '"> <i class="fa fa-trash"></i></a>';
-                    html += '</td>';
-                    html += '</tr>';
-                });
-                tbody.innerHTML = html;
-            }
+            // store fetched data and render paginated view
+            venuesData = data;
+            venuesFiltered = venuesData.slice();
+            venuesCurrentPage = 1;
+            renderVenuesTablePage();
             // update hero stats if provided
             if (json.stats) {
                 const hero = document.querySelector('.card.bg-light .d-none.d-md-flex');
@@ -505,7 +621,32 @@ function deleteVenue(id, callback) {
 }
 
 // Initial load
-document.addEventListener('DOMContentLoaded', function() { loadSportOptions(function(){ reloadVenuesTable(); }); });
+document.addEventListener('DOMContentLoaded', function() {
+    loadSportOptions(function(){ reloadVenuesTable(); });
+
+    // Wire search input with debounce to filter results client-side
+    const searchEl = document.getElementById('venuesSearch');
+    if (searchEl) {
+        const handler = debounce(function(e) {
+            filterVenues(e.target.value || '');
+        }, 250);
+        searchEl.addEventListener('input', handler);
+        // support Enter key immediate search
+        searchEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                filterVenues(searchEl.value || '');
+            }
+        });
+    }
+
+    // Wire top page-size selector
+    const topSizeSel = document.getElementById('venuesPageSizeTopSelect');
+    if (topSizeSel) {
+        topSizeSel.value = String(venuesPageSize);
+        topSizeSel.addEventListener('change', function() { setVenuesPageSize(this.value); });
+    }
+});
 </script>
 
 
