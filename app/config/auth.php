@@ -122,8 +122,8 @@ class Auth {
         try {
             // Get user by email only
             $stmt = $this->db->prepare("
-                SELECT id, username, email, password_hash, full_name, role, status, 
-                       login_attempts, locked_until
+                  SELECT id, username, email, password_hash, full_name, role, status, 
+                      login_attempts, locked_until, kontinjen_id
                 FROM users 
                 WHERE email = :email 
                 AND deleted_at IS NULL
@@ -146,6 +146,13 @@ class Auth {
             // Check if account is active
             if ($user['status'] !== 'active') {
                 return ['success' => false, 'message' => 'Akaun tidak aktif. Sila hubungi pentadbir.'];
+            }
+
+            // If user role is CONTINGENT, ensure kontinjen_id is set
+            if (isset($user['role']) && $user['role'] === 'CONTINGENT') {
+                if (empty($user['kontinjen_id'])) {
+                    return ['success' => false, 'message' => 'Akaun kontinjen tidak dikonfigurasi. Sila hubungi pentadbir.'];
+                }
             }
             
             // Verify password
@@ -376,6 +383,12 @@ class Auth {
         Session::set('user_email', $user['email']);
         Session::set('user_name', $user['full_name']);
         Session::set('user_role', $user['role']);
+        // Save contingent id for CONTINGENT users (may be NULL for other roles)
+        if (isset($user['kontinjen_id'])) {
+            Session::set('kontinjen_id', $user['kontinjen_id']);
+        } else {
+            Session::remove('kontinjen_id');
+        }
         Session::set('logged_in_at', date('Y-m-d H:i:s'));
     }
     

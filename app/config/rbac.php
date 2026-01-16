@@ -40,20 +40,30 @@ class RBAC {
         'index.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
         
         // Main pages - role-based defaults
-        'pages/contingent.php' => ['ADMIN', 'ORGANIZER', 'CONTINGENT'],
-        'pages/sports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/pasukan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT'],
+        // ADMIN: all pages
+        // ORGANIZER: all pages except settings-group pages (settings/university/users)
+        // CONTINGENT: only allowed to access 'contingent-user' page (handled below)
+        'pages/contingent.php' => ['ADMIN', 'ORGANIZER'],
+        'pages/sports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
+        'pages/pasukan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
         'pages/venues.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
-        'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
-        'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'CONTINGENT', 'VIEWER'],
+        'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
+        'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         
         // Settings - ADMIN only
         'pages/settings.php' => ['ADMIN'],
+        'pages/university.php' => ['ADMIN'],
         
         // Users management - ADMIN only
         'pages/users.php' => ['ADMIN'],
+        
+        // New Contingent User page - accessible to ADMIN, ORGANIZER and CONTINGENT role
+        'pages/contingent-user.php' => ['ADMIN', 'ORGANIZER', 'CONTINGENT'],
     ];
+    
+    // If present, menu_access.json will be loaded to override static rules
+    private $ensureAdmin = true;
     
     private $useDatabase = false;
     
@@ -61,6 +71,9 @@ class RBAC {
         $this->auth = getAuth();
         $this->db = getDB();
         
+        // Load JSON-based menu access if available
+        $this->loadMenuAccessJson();
+
         // Check if dynamic RBAC tables exist
         $this->useDatabase = $this->checkDatabaseTables();
     }
@@ -74,6 +87,42 @@ class RBAC {
             return $stmt->rowCount() > 0;
         } catch (PDOException $e) {
             return false;
+        }
+    }
+
+    /**
+     * Load menu access configuration from JSON file if present.
+     * This allows maintaining RBAC in `app/config/menu_access.json`.
+     */
+    private function loadMenuAccessJson() {
+        $path = __DIR__ . '/menu_access.json';
+        if (!file_exists($path)) {
+            return;
+        }
+
+        $json = @file_get_contents($path);
+        if ($json === false) {
+            return;
+        }
+
+        $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            return;
+        }
+
+        // Replace page access rules if provided
+        if (!empty($data['pages']) && is_array($data['pages'])) {
+            $this->pageAccessRules = $data['pages'];
+        }
+
+        // Replace public pages if provided
+        if (isset($data['public_pages']) && is_array($data['public_pages'])) {
+            $this->publicPages = $data['public_pages'];
+        }
+
+        // ensure_admin flag (optional)
+        if (isset($data['ensure_admin'])) {
+            $this->ensureAdmin = (bool)$data['ensure_admin'];
         }
     }
     

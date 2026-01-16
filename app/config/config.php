@@ -59,7 +59,7 @@ define('SITE_TITLE', 'Papan Pemuka');
 /* ============================================================
  * DEBUG MODE
  * ============================================================ */
-define('DEBUG_MODE', true);
+define('DEBUG_MODE', false);
 
 /* ============================================================
  * SESSION & AUTH INITIALIZATION
@@ -179,6 +179,7 @@ $nav_sections = [
             ['title' => 'Sukan', 'icon' => 'cil-gamepad', 'url' => 'pages/sports.php'],
             ['title' => 'Pasukan', 'icon' => 'cil-people', 'url' => 'pages/pasukan.php'],
             ['title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php'],
+            ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'],
         ],
     ],
     [

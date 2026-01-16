@@ -28,20 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $returnUrl = $_GET['return'] ?? null;
 
             if (!$returnUrl) {
-                switch ($result['user']['role']) {
-                        case 'ADMIN':
-                    case 'ORGANIZER':
-                        $returnUrl = url('pages/dashboard.php');
-                        break;
-                    case 'JUDGE':
-                        $returnUrl = url('pages/results.php');
-                        break;
-                    case 'CONTINGENT':
-                        $returnUrl = url('pages/contingent.php');
-                        break;
-                    default:
-                        $returnUrl = url('index.php');
-                }
+                // Default landing for all roles is dashboard
+                $returnUrl = url('pages/dashboard.php');
             }
 
             if ($returnUrl && !preg_match('#^https?://#i', $returnUrl)) {

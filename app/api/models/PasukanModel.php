@@ -11,6 +11,40 @@ class PasukanModel {
     
     public function __construct() {
         $this->db = getDB();
+            // If CONTINGENT user, limit stats to their kontinjen
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT' && $sessionKontinjen) {
+                $stmt = $this->db->prepare("\n                    SELECT \n                        COUNT(*) AS total,\n                        SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active,\n                        SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS inactive\n                    FROM table_pasukan\n                    WHERE deleted_at IS NULL AND kontinjen_id = :kontinjen_id\n                ");
+                $stmt->execute([':kontinjen_id' => (int)$sessionKontinjen]);
+            } else {
+                $stmt = $this->db->query("\n                    SELECT \n                        COUNT(*) AS total,\n                        SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active,\n                        SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS inactive\n                    FROM table_pasukan\n                    WHERE deleted_at IS NULL\n                ");
+            }
+
+    /**
+     * Helper: get session kontingen_id (if available)
+     */
+    private function getSessionKontinjenId() {
+        if (class_exists('Session')) {
+            if (session_status() === PHP_SESSION_NONE) {
+                Session::start();
+            }
+            return Session::get('kontinjen_id') ?? null;
+        }
+        return null;
+    }
+
+    /**
+     * Helper: get session user role (if available)
+     */
+    private function getSessionUserRole() {
+        if (class_exists('Session')) {
+            if (session_status() === PHP_SESSION_NONE) {
+                Session::start();
+            }
+            return Session::get('user_role') ?? null;
+        }
+        return null;
     }
     
     /**
@@ -29,6 +63,16 @@ class PasukanModel {
                 throw new Exception('Nama pasukan diperlukan');
             }
             
+            // Enforce CONTINGENT session value: CONTINGENT users cannot set an arbitrary kontinjen_id
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT') {
+                if (empty($sessionKontinjen)) {
+                    throw new Exception('Kontinjen tidak ditetapkan untuk pengguna.');
+                }
+                $data['kontinjen_id'] = (int)$sessionKontinjen;
+            }
+
             if (empty($data['kontinjen_id'])) {
                 throw new Exception('Kontinjen diperlukan');
             }
@@ -375,6 +419,13 @@ class PasukanModel {
             $offset = $params['offset'] ?? 0;
             $search = $params['search'] ?? '';
             $kontinjenId = $params['kontinjen_id'] ?? null;
+            // Enforce session-based kontinjen scope for CONTINGENT users
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT') {
+                // override any provided kontingen filter with the session value
+                $kontinjenId = $sessionKontinjen;
+            }
             $sukanId = $params['sukan_id'] ?? null;
             $status = $params['status'] ?? null;
             
@@ -554,6 +605,19 @@ class PasukanModel {
             
             $stmt->execute([':id' => $id]);
             $team = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Enforce CONTINGENT scope: if logged-in user is CONTINGENT, ensure the team belongs to their kontinjen
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT') {
+                if (empty($team) || (int)$team['kontinjen_id'] !== (int)$sessionKontinjen) {
+                    return [
+                        'success' => false,
+                        'message' => 'Pasukan tidak dijumpai',
+                        'data' => null
+                    ];
+                }
+            }
             
             if ($team) {
                 // Get pengurus
@@ -659,6 +723,22 @@ class PasukanModel {
                 ];
             }
             
+            // Enforce CONTINGENT scope: ensure user can only update teams in their contingent
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT') {
+                // Check team belongs to user's contingent
+                $check = $this->db->prepare("SELECT kontinjen_id FROM table_pasukan WHERE id = :id AND deleted_at IS NULL");
+                $check->execute([':id' => $id]);
+                $row = $check->fetch(PDO::FETCH_ASSOC);
+                if (!$row || (int)$row['kontinjen_id'] !== (int)$sessionKontinjen) {
+                    $this->db->rollBack();
+                    return ['success' => false, 'message' => 'Anda tiada kebenaran untuk mengemaskini pasukan ini'];
+                }
+                // Force kontinjen_id to session value
+                $data['kontinjen_id'] = (int)$sessionKontinjen;
+            }
+
             // 1. Update team
             $stmt = $this->db->prepare("
                 UPDATE table_pasukan
@@ -855,6 +935,19 @@ class PasukanModel {
         $this->db->beginTransaction();
         
         try {
+            // Enforce CONTINGENT scope: ensure user can only delete teams in their contingent
+            $sessionRole = $this->getSessionUserRole();
+            $sessionKontinjen = $this->getSessionKontinjenId();
+            if ($sessionRole === 'CONTINGENT') {
+                $check = $this->db->prepare("SELECT kontinjen_id FROM table_pasukan WHERE id = :id AND deleted_at IS NULL");
+                $check->execute([':id' => $id]);
+                $row = $check->fetch(PDO::FETCH_ASSOC);
+                if (!$row || (int)$row['kontinjen_id'] !== (int)$sessionKontinjen) {
+                    $this->db->rollBack();
+                    return ['success' => false, 'message' => 'Anda tiada kebenaran untuk memadam pasukan ini'];
+                }
+            }
+
             // Soft delete team
             $stmt = $this->db->prepare("
                 UPDATE table_pasukan

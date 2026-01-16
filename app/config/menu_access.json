@@ -3,14 +3,21 @@
   "public_pages": [],
   "pages": {
     "index.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
-    "pages/contingent.php": ["ADMIN", "ORGANIZER", "CONTINGENT"],
-    "pages/sports.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
-    "pages/athletes.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT"],
+    "auth/logout.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+
+    "pages/contingent.php": ["ADMIN", "ORGANIZER"],
+    "pages/contingent-user.php": ["ADMIN", "ORGANIZER", "CONTINGENT"],
+
+    "pages/sports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+    "pages/pasukan.php": ["ADMIN", "ORGANIZER", "JUDGE"],
+    "pages/athletes.php": ["ADMIN", "ORGANIZER", "JUDGE"],
     "pages/venues.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
-    "pages/medal-tally.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
+    "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+    "pages/medal-tally.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
     "pages/reports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+
     "pages/settings.php": ["ADMIN"],
-    "pages/users.php": ["ADMIN"]
+    "pages/users.php": ["ADMIN"],
+    "pages/university.php": ["ADMIN"]
   }
 }

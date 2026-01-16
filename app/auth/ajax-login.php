@@ -44,24 +44,9 @@ if ($result['success']) {
     // Determine redirect URL based on role
     $returnUrl = $_POST['return_url'] ?? null;
     
-    // If no return URL, redirect based on role
+    // If no return URL, default landing for all roles is dashboard
         if (!$returnUrl) {
-            switch ($result['user']['role']) {
-                case 'ADMIN':
-                    $returnUrl = url('pages/dashboard.php');
-                    break;
-                case 'ORGANIZER':
-                    $returnUrl = url('pages/dashboard.php');
-                    break;
-                case 'JUDGE':
-                    $returnUrl = url('pages/results.php');
-                    break;
-                case 'CONTINGENT':
-                    $returnUrl = url('pages/contingent.php');
-                    break;
-                default:
-                    $returnUrl = url('index.php');
-            }
+            $returnUrl = url('pages/dashboard.php');
         }
     
     // Normalize return URL (handle relative paths like "index.php")

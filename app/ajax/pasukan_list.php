@@ -67,6 +67,12 @@ try {
         'sukan_id' => isset($_GET['sukan_id']) && $_GET['sukan_id'] !== '' ? (int)$_GET['sukan_id'] : null,
         'status' => isset($_GET['status']) && $_GET['status'] !== '' ? (int)$_GET['status'] : null
     ];
+    // If user is CONTINGENT, override any requested kontinjen_id with session value
+    $sessionRole = Session::get('user_role') ?? null;
+    $sessionKontinjen = Session::get('kontinjen_id') ?? null;
+    if ($sessionRole === 'CONTINGENT') {
+        $params['kontinjen_id'] = $sessionKontinjen ? (int)$sessionKontinjen : null;
+    }
     
     // Get teams
     $result = $pasukanModel->getAll($params);

@@ -12,8 +12,16 @@ $page_title = 'Kontinjen';
 // Get current user role for status control
 Session::start();
 $auth = getAuth();
+$auth->requireAuth();
 $currentUserRole = Session::get('user_role') ?? '';
 $canChangeStatus = in_array($currentUserRole, ['ADMIN', 'ORGANIZER']);
+// Enforce contingent-only view for CONTINGENT users
+$restrictToOwnContingent = ($currentUserRole === 'CONTINGENT');
+$currentKontinjenId = Session::get('kontinjen_id') ?? null;
+if ($restrictToOwnContingent && empty($currentKontinjenId)) {
+    header('Location: ' . url('pages/access-denied.php'));
+    exit;
+}
 
 // Fetch universities from database
 $universities = [];
@@ -81,7 +89,14 @@ GROUP BY
 ORDER BY k.created_at DESC
 LIMIT 1000;";
 
-        $stmt = $pdo->query($sql);
+        if ($restrictToOwnContingent && $currentKontinjenId) {
+            // Inject kontingen filter into WHERE clause safely
+            $filtered = preg_replace('/WHERE\s+k\.deleted_at\s+IS\s+NULL\s+AND\s+k\.status\s*=\s*1/i', "WHERE k.deleted_at IS NULL AND k.status = 1 AND k.id = :kontinjen_id", $sql);
+            $stmt = $pdo->prepare($filtered);
+            $stmt->execute([':kontinjen_id' => (int)$currentKontinjenId]);
+        } else {
+            $stmt = $pdo->query($sql);
+        }
         $contingents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Update simple stats based on results
@@ -110,8 +125,15 @@ try {
     WHERE k.deleted_at IS NULL AND k.status = 1
     GROUP BY k.id";
 
-    $stmt = $pdo->query($sql);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($restrictToOwnContingent && $currentKontinjenId) {
+        $filtered = preg_replace('/WHERE\s+k\.deleted_at\s+IS\s+NULL\s+AND\s+k\.status\s*=\s*1/i', "WHERE k.deleted_at IS NULL AND k.status = 1 AND k.id = :kontinjen_id", $sql);
+        $stmt = $pdo->prepare($filtered);
+        $stmt->execute([':kontinjen_id' => (int)$currentKontinjenId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $pdo->query($sql);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
     foreach ($rows as $r) {
         $participantCounts[(int)$r['kontinjen_id']] = $r;
     }
@@ -131,8 +153,15 @@ try {
         WHERE k.deleted_at IS NULL AND k.status = 1
         GROUP BY k.kod_universiti";
 
-    $stmtUni = $pdo->query($sqlUni);
-    $uniRows = $stmtUni->fetchAll(PDO::FETCH_ASSOC);
+    if ($restrictToOwnContingent && $currentKontinjenId) {
+        $filteredUni = preg_replace('/WHERE\s+k\.deleted_at\s+IS\s+NULL\s+AND\s+k\.status\s*=\s*1/i', "WHERE k.deleted_at IS NULL AND k.status = 1 AND k.id = :kontinjen_id", $sqlUni);
+        $stmtUni = $pdo->prepare($filteredUni);
+        $stmtUni->execute([':kontinjen_id' => (int)$currentKontinjenId]);
+        $uniRows = $stmtUni->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmtUni = $pdo->query($sqlUni);
+        $uniRows = $stmtUni->fetchAll(PDO::FETCH_ASSOC);
+    }
     foreach ($uniRows as $ur) {
         $uniParticipantCounts[$ur['kod_universiti']] = (int)$ur['jumlah_participants'];
     }

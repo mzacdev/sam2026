@@ -37,6 +37,8 @@ if (!$auth->isLoggedIn()) {
 try {
         // Use aggregated SQL to include jumlah_atlet
         $pdo = getDB();
+        $currentRole = Session::get('user_role') ?? null;
+        $currentKontinjenId = Session::get('kontinjen_id') ?? null;
         $sql = "SELECT
     k.id,
     u.nama_universiti,
@@ -88,8 +90,14 @@ GROUP BY
 ORDER BY k.created_at DESC
 LIMIT 1000;";
 
-        $stmt = $pdo->query($sql);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+          // If the logged in user is CONTINGENT, only return their own contingent
+          if ($currentRole === 'CONTINGENT' && $currentKontinjenId) {
+                $stmt = $pdo->prepare($sql . " AND k.id = :kontinjen_id");
+                $stmt->execute([':kontinjen_id' => (int)$currentKontinjenId]);
+          } else {
+                $stmt = $pdo->query($sql);
+          }
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $stats = ['total' => count($rows), 'active' => count($rows), 'inactive' => 0];
 

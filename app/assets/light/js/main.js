@@ -87,7 +87,10 @@ var $sideHeaderNav = $('.side-header-menu'),
 $sideHeaderSubMenu.siblings('a').append('<span class="menu-expand"><i class="zmdi zmdi-chevron-down"></i></span>');
 
 /*Close Off Canvas Sub Menu*/
-$sideHeaderSubMenu.slideUp();
+// Defer collapsing sub-menus until after we determine the active item to avoid
+// a close-then-open flicker on page navigation. We'll hide non-active submenus
+// without animation after active detection runs.
+// $sideHeaderSubMenu.slideUp();
 
 /*Category Sub Menu Toggle*/
 $sideHeaderNav.on('click', 'li a, li .menu-expand', function(e) {
@@ -116,21 +119,23 @@ $('.side-header-menu a').each(function() {
         var linkPath = (link.pathname || '').replace(/\/$/, '');
         var linkFile = linkPath.substr(linkPath.lastIndexOf('/') + 1);
 
-        // Debug output to help investigate why parents collapse
-        if (window.console && window.console.debug) {
-            console.debug('[nav-debug] currentPath=', currentPath, ' pageUrl=', pageUrl, ' href=', href, ' linkPath=', linkPath, ' linkFile=', linkFile);
-        }
-
         if (linkPath === currentPath || linkFile === pageUrl || href === '') {
             $(this).closest('li').addClass("active").parents('li').addClass('active').children('ul').slideDown().siblings('a').find('.menu-expand i').removeClass('zmdi-chevron-down').addClass('zmdi-chevron-up');
-            if (window.console && window.console.info) console.info('[nav-debug] matched and opened ->', href);
         }
     } catch (e) {
-        if (window.console && window.console.error) console.error('[nav-debug] error matching nav link', e);
+        // swallow errors silently in production
     }
     // fallback for home
     if (currentPath === '' || currentPath === '/' || currentPath === '/index.html') {
         $('.side-header-menu a[href="index.html"]').closest('li').addClass("active").parents('li').addClass('active').children('ul').slideDown().siblings('a').find('.menu-expand i').removeClass('zmdi-chevron-down').addClass('zmdi-chevron-up');
+    }
+});
+
+// Hide non-active submenus immediately (no slide animation) to prevent flicker
+$sideHeaderSubMenu.each(function() {
+    var $ul = $(this);
+    if (!$ul.closest('li').hasClass('active')) {
+        $ul.hide();
     }
 });
 

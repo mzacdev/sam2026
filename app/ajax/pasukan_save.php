@@ -79,6 +79,13 @@ $jurulatih = isset($jsonData['jurulatih']) && is_array($jsonData['jurulatih']) ?
 $atlet = isset($jsonData['atlet']) && is_array($jsonData['atlet']) ? $jsonData['atlet'] : [];
 
 // Validation
+// If user is CONTINGENT, force kontinjen_id from session and do not trust input
+$sessionRole = Session::get('user_role');
+$sessionKontinjen = Session::get('kontinjen_id');
+if ($sessionRole === 'CONTINGENT') {
+    $kontinjen_id = $sessionKontinjen ? (int)$sessionKontinjen : 0;
+}
+
 if (empty($kontinjen_id) || $kontinjen_id <= 0) {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Sila pilih kontinjen.']);

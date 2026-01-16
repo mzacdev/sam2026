@@ -191,6 +191,13 @@ try {
                 'created_by' => Session::get('user_id'),
                 'updated_by' => Session::get('user_id')
             ];
+
+            // If user is CONTINGENT, override kontinjen_id with session value
+            $sessionRole = Session::get('user_role');
+            if ($sessionRole === 'CONTINGENT') {
+                $sessionKontinjen = Session::get('kontinjen_id');
+                $currentTeam['kontinjen_id'] = $sessionKontinjen ? (int)$sessionKontinjen : 0;
+            }
             
             // Validate team header
             if (empty($currentTeam['nama_pasukan'])) {
