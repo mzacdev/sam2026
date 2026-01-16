@@ -26,22 +26,71 @@ try {
     // Continue with empty array if database query fails
 }
 
-// Fetch contingents from database
+// Fetch contingents from database using aggregated query (include jumlah_atlet)
 $contingents = [];
 $contingentStats = ['total' => 0, 'active' => 0, 'inactive' => 0];
 try {
-    $contingentModel = new ContingentModel();
-    $result = $contingentModel->getAll(['limit' => 1000]);
-    if ($result['success']) {
-        $contingents = $result['data'];
-    }
-    
-    $statsResult = $contingentModel->getStatistics();
-    if ($statsResult['success']) {
-        $contingentStats = $statsResult['data'];
-    }
+        $sql = "SELECT
+    k.id,
+    u.nama_universiti,
+    k.kod_universiti,
+    k.nama_pegawai_untuk_dihubungi,
+    k.alamat,
+        k.emel,
+        k.no_telefon,
+        COALESCE(SUM(a.cnt),0) AS jumlah_atlet,
+
+        CASE 
+            WHEN u.status = 1 THEN 'Aktif'
+            ELSE 'Tidak Aktif'
+        END AS status_universiti,
+
+        k.created_at
+FROM table_kontinjen k
+
+INNER JOIN table_ref_universiti u
+    ON k.kod_universiti = u.kod_universiti
+    AND u.status = 1
+
+LEFT JOIN table_pasukan p
+    ON p.kontinjen_id = k.id
+    AND p.deleted_at IS NULL
+    AND p.status = 1
+
+LEFT JOIN (
+    SELECT pasukan_id, COUNT(*) AS cnt
+    FROM table_pasukan_atlet
+    WHERE deleted_at IS NULL
+    GROUP BY pasukan_id
+) a ON a.pasukan_id = p.id
+
+WHERE k.deleted_at IS NULL
+    AND k.status = 1
+
+GROUP BY
+    k.id,
+    u.nama_universiti,
+    k.kod_universiti,
+    k.nama_pegawai_untuk_dihubungi,
+    k.alamat,
+    k.emel,
+    k.no_telefon,
+    u.status,
+    k.created_at
+
+ORDER BY k.created_at DESC
+LIMIT 1000;";
+
+        $stmt = $pdo->query($sql);
+        $contingents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Update simple stats based on results
+        $contingentStats['total'] = count($contingents);
+        $contingentStats['active'] = count($contingents); // query returns active only
+        $contingentStats['inactive'] = 0;
+
 } catch (Exception $e) {
-    error_log('[contingent.php] DB error fetching contingents: ' . $e->getMessage());
+        error_log('[contingent.php] DB error fetching contingents (custom SQL): ' . $e->getMessage());
 }
 
 // Participant counts per kontinjen (athletes + managers + coaches)
@@ -58,7 +107,7 @@ try {
     LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_atlet WHERE deleted_at IS NULL GROUP BY pasukan_id) a ON a.pasukan_id = p.id
     LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_pengurus WHERE deleted_at IS NULL GROUP BY pasukan_id) m ON m.pasukan_id = p.id
     LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_jurulatih WHERE deleted_at IS NULL GROUP BY pasukan_id) co ON co.pasukan_id = p.id
-    WHERE k.deleted_at IS NULL
+    WHERE k.deleted_at IS NULL AND k.status = 1
     GROUP BY k.id";
 
     $stmt = $pdo->query($sql);
@@ -79,7 +128,7 @@ try {
         LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_atlet WHERE deleted_at IS NULL GROUP BY pasukan_id) a ON a.pasukan_id = p.id
         LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_pengurus WHERE deleted_at IS NULL GROUP BY pasukan_id) m ON m.pasukan_id = p.id
         LEFT JOIN (SELECT pasukan_id, COUNT(*) AS cnt FROM table_pasukan_jurulatih WHERE deleted_at IS NULL GROUP BY pasukan_id) co ON co.pasukan_id = p.id
-        WHERE k.deleted_at IS NULL
+        WHERE k.deleted_at IS NULL AND k.status = 1
         GROUP BY k.kod_universiti";
 
     $stmtUni = $pdo->query($sqlUni);
@@ -301,25 +350,19 @@ ob_start();
                                                 </div>
                                             </td>
                                             <?php
-                                                $pc = isset($participantCounts[(int)$c['id']]) ? $participantCounts[(int)$c['id']] : ['total_atlet'=>0,'total_pengurus'=>0,'total_jurulatih'=>0,'jumlah_keseluruhan'=>0];
-                                                $tooltip = 'Atlet: ' . ($pc['total_atlet'] ?? 0) . ' • Pengurus: ' . ($pc['total_pengurus'] ?? 0) . ' • Jurulatih: ' . ($pc['total_jurulatih'] ?? 0);
-                                                // Display only athlete count (exclude pengurus & jurulatih)
-                                                $countVal = (int)($pc['total_atlet'] ?? 0);
+                                                // Use jumlah_atlet returned by custom SQL
+                                                $countVal = (int)($c['jumlah_atlet'] ?? 0);
+                                                $tooltip = 'Jumlah Atlet: ' . $countVal;
                                                 $badgeClass = ($countVal === 0) ? 'bg-danger' : 'bg-primary';
                                             ?>
                                             <td class="text-center"><span class="badge <?php echo $badgeClass; ?>" title="<?php echo htmlspecialchars($tooltip, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $countVal; ?></span></td>
                                             <td>
                                                 <?php
-                                                $status = isset($c['status']) ? (int)$c['status'] : 0;
-                                                if ($status == 1) {
-                                                    $badgeClass = 'bg-success';
-                                                    $statusText = 'Aktif';
-                                                } else {
-                                                    $badgeClass = 'bg-secondary';
-                                                    $statusText = 'Tidak Aktif';
-                                                }
+                                                // Prefer university status returned by query
+                                                $statusText = isset($c['status_universiti']) ? $c['status_universiti'] : ((isset($c['status']) && (int)$c['status'] === 1) ? 'Aktif' : 'Tidak Aktif');
+                                                $badgeClass = ($statusText === 'Aktif') ? 'bg-success' : 'bg-secondary';
                                                 ?>
-                                                <span class="badge <?php echo $badgeClass; ?>"><?php echo $statusText; ?></span>
+                                                <span class="badge <?php echo $badgeClass; ?>"><?php echo htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8'); ?></span>
                                             </td>
                                             <td>
                                                 <a class="btn btn-sm btn-outline-primary edit-contingent" title="Edit" href="#"
@@ -488,10 +531,12 @@ function reloadContingentTable(callback) {
             } else {
                 let html = '';
                 contingents.forEach(function(c, i) {
-                    const status = c.status !== undefined ? parseInt(c.status) : 0;
-                    const badgeClass = status == 1 ? 'bg-success' : 'bg-secondary';
-                    const statusText = status == 1 ? 'Aktif' : 'Tidak Aktif';
-                    
+                    // Determine status text from server-provided status_universiti, fallback to numeric status
+                    const statusText = (c.status_universiti !== undefined) ? String(c.status_universiti) : ((c.status !== undefined && parseInt(c.status) === 1) ? 'Aktif' : 'Tidak Aktif');
+                    const badgeClass = (statusText === 'Aktif') ? 'bg-success' : 'bg-secondary';
+                    const jumlahAtlet = (c.jumlah_atlet !== undefined) ? parseInt(c.jumlah_atlet) : 0;
+                    const athleteBadge = (jumlahAtlet === 0) ? 'bg-danger' : 'bg-primary';
+
                     html += '<tr>';
                     html += '<td>' + (i + 1) + '</td>';
                     html += '<td><div class="fw-semibold">' + escapeHtml(c.nama_universiti || '-') + '</div></td>';
@@ -502,8 +547,8 @@ function reloadContingentTable(callback) {
                         html += '<div class="text-muted small"><a href="mailto:' + escapeHtml(c.emel) + '">' + escapeHtml(c.emel) + '</a></div>';
                     }
                     html += '</div></td>';
-                    html += '<td class="text-center">-</td>';
-                    html += '<td><span class="badge ' + badgeClass + '">' + statusText + '</span></td>';
+                    html += '<td class="text-center"><span class="badge ' + athleteBadge + '">' + jumlahAtlet + '</span></td>';
+                    html += '<td><span class="badge ' + badgeClass + '">' + escapeHtml(statusText) + '</span></td>';
                     html += '<td>';
                     html += '<a class="btn btn-sm btn-outline-primary edit-contingent" title="Edit" href="#" ';
                     html += 'data-id="' + (c.id || 0) + '" ';

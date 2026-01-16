@@ -270,7 +270,7 @@ class ContingentModel {
                     creator.full_name AS created_by_name,
                     updater.full_name AS updated_by_name
                 FROM table_kontinjen k
-                JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL AND u.status = 1
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 LEFT JOIN users creator ON k.created_by = creator.id
                 LEFT JOIN users updater ON k.updated_by = updater.id
                 WHERE {$whereClause}
@@ -294,7 +294,7 @@ class ContingentModel {
             $countSql = "
                 SELECT COUNT(*) AS total
                 FROM table_kontinjen k
-                JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL AND u.status = 1
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
                 WHERE {$whereClause}
             ";
             
@@ -607,13 +607,15 @@ class ContingentModel {
      */
     public function getStatistics() {
         try {
-            $stmt = $this->db->query("
-                SELECT 
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active,
-                    SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS inactive
-                FROM table_kontinjen
-                WHERE deleted_at IS NULL
+            // Count contingents (link to reference when present, but do not filter by ref.status)
+            $stmt = $this->db->query("\
+                SELECT \
+                    COUNT(*) AS total,\
+                    SUM(CASE WHEN k.status = 1 THEN 1 ELSE 0 END) AS active,\
+                    SUM(CASE WHEN k.status = 0 THEN 1 ELSE 0 END) AS inactive\
+                FROM table_kontinjen k\
+                LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL\
+                WHERE k.deleted_at IS NULL\
             ");
             
             $stats = $stmt->fetch(PDO::FETCH_ASSOC);

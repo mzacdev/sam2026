@@ -35,29 +35,69 @@ if (!$auth->isLoggedIn()) {
 }
 
 try {
-    $contingentModel = new ContingentModel();
-    
-    // Get contingents
-    $result = $contingentModel->getAll(['limit' => 1000]);
-    
-    // Get statistics
-    $statsResult = $contingentModel->getStatistics();
-    
-    if ($result['success'] && $statsResult['success']) {
+        // Use aggregated SQL to include jumlah_atlet
+        $pdo = getDB();
+        $sql = "SELECT
+    k.id,
+    u.nama_universiti,
+    k.kod_universiti,
+    k.nama_pegawai_untuk_dihubungi,
+    k.alamat,
+    k.emel,
+    k.no_telefon,
+    COALESCE(SUM(a.cnt),0) AS jumlah_atlet,
+
+    CASE 
+        WHEN u.status = 1 THEN 'Aktif'
+        ELSE 'Tidak Aktif'
+    END AS status_universiti,
+
+    k.created_at
+FROM table_kontinjen k
+
+INNER JOIN table_ref_universiti u
+    ON k.kod_universiti = u.kod_universiti
+    AND u.status = 1
+
+LEFT JOIN table_pasukan p
+    ON p.kontinjen_id = k.id
+    AND p.deleted_at IS NULL
+    AND p.status = 1
+
+LEFT JOIN (
+    SELECT pasukan_id, COUNT(*) AS cnt
+    FROM table_pasukan_atlet
+    WHERE deleted_at IS NULL
+    GROUP BY pasukan_id
+) a ON a.pasukan_id = p.id
+
+WHERE k.deleted_at IS NULL
+    AND k.status = 1
+
+GROUP BY
+    k.id,
+    u.nama_universiti,
+    k.kod_universiti,
+    k.nama_pegawai_untuk_dihubungi,
+    k.alamat,
+    k.emel,
+    k.no_telefon,
+    u.status,
+    k.created_at
+
+ORDER BY k.created_at DESC
+LIMIT 1000;";
+
+        $stmt = $pdo->query($sql);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $stats = ['total' => count($rows), 'active' => count($rows), 'inactive' => 0];
+
         echo json_encode([
-            'success' => true,
-            'data' => $result['data'],
-            'stats' => $statsResult['data']
+                'success' => true,
+                'data' => $rows,
+                'stats' => $stats
         ]);
-    } else {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Gagal memuatkan data kontinjen',
-            'data' => [],
-            'stats' => ['total' => 0, 'active' => 0, 'inactive' => 0]
-        ]);
-    }
 } catch (Exception $e) {
     error_log('[ajax/contingent_list] ' . $e->getMessage() . " in " . $e->getFile() . ':' . $e->getLine());
     http_response_code(500);

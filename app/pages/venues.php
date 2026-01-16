@@ -102,8 +102,40 @@ require_once __DIR__ . '/../includes/layout.php';
 ?>
 
 <!-- Add Venue Modal -->
+<!-- Scoped styles: professional centered modal that avoids header overlap -->
+<style>
+/* Base z-index layering */
+#addVenueModal { z-index: 1060 !important; }
+.modal-backdrop { z-index: 1050 !important; }
+
+/* Center modal both horizontally and vertically by default.
+   JS will nudge it down if it would overlap the header. */
+#addVenueModal .modal-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) !important;
+    margin: 0;
+    max-width: 1000px; /* generous professional width */
+    width: min(100%, 900px);
+}
+
+#addVenueModal .modal-content {
+    max-height: calc(100vh - 120px);
+    overflow: auto;
+}
+
+@media (max-width: 992px) {
+    #addVenueModal .modal-dialog { width: calc(100% - 3rem); max-width: 760px; }
+}
+@media (max-width: 576px) {
+    #addVenueModal .modal-dialog { width: calc(100% - 1rem); max-width: 95%; left: 50%; top: 14%; transform: translateX(-50%) !important; }
+    #addVenueModal .modal-content { max-height: calc(100vh - 96px); }
+}
+</style>
+
 <div class="modal fade" id="addVenueModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Daftar Venue Baru</h5>
@@ -152,6 +184,56 @@ let addVenueModalInstance = null;
 function showAddVenue(data = null) {
     const modalEl = document.getElementById('addVenueModal');
     if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
+    // Prepare modal dialog for centered display; JS will ensure it does not overlap header
+    try {
+        const dialog = modalEl.querySelector('.modal-dialog');
+        const content = modalEl.querySelector('.modal-content');
+        const headerEl = document.querySelector('.header, .header-sticky, .navbar');
+        const headerHeight = headerEl ? headerEl.offsetHeight : 72;
+        if (dialog) {
+            dialog.style.position = 'fixed';
+            dialog.style.left = '50%';
+            // default center
+            dialog.style.top = '50%';
+            dialog.style.transform = 'translate(-50%, -50%)';
+            dialog.style.margin = '0';
+            // ensure modal content won't extend under header
+            if (content) {
+                content.style.maxHeight = (window.innerHeight - headerHeight - 48) + 'px';
+                content.style.overflow = 'auto';
+            }
+
+            // If the calculated top would place modal under the header, nudge it down
+            // Use requestAnimationFrame to ensure layout is ready
+            requestAnimationFrame(() => {
+                // Compute desired top so modal is vertically centered
+                const dialogHeight = dialog.offsetHeight || (dialog.getBoundingClientRect().height || 0);
+                let desiredTop = Math.round((window.innerHeight - dialogHeight) / 2);
+                const minTop = headerHeight + 12; // keep modal below header
+                const marginBottom = 12;
+                // Ensure modal doesn't overlap header
+                if (desiredTop < minTop) desiredTop = minTop;
+                // Ensure modal bottom fits within viewport
+                const maxTop = Math.max(minTop, window.innerHeight - dialogHeight - marginBottom);
+                if (desiredTop > maxTop) desiredTop = maxTop;
+
+                // Apply top and horizontal centering only (avoid vertical translate to prevent overlap)
+                dialog.style.top = desiredTop + 'px';
+                dialog.style.left = '50%';
+                dialog.style.transform = 'translateX(-50%)';
+
+                // If content still overflows, reduce its max-height
+                const rect = dialog.getBoundingClientRect();
+                if (content) {
+                    const available = Math.max(100, window.innerHeight - headerHeight - 36);
+                    content.style.maxHeight = available + 'px';
+                    content.style.overflow = 'auto';
+                }
+            });
+        }
+    } catch (e) {
+        // ignore layout calculation errors
+    }
     // If no data provided, reset form for new entry. If data is provided (edit), populate after showing.
     const form = document.getElementById('venueForm');
     if (form && data === null) {
