@@ -106,14 +106,33 @@ $sideHeaderNav.on('click', 'li a, li .menu-expand', function(e) {
 
 // Adding active class to nav menu depending on page
 var pageUrl = window.location.href.substr(window.location.href.lastIndexOf("/") + 1);
+var currentPath = window.location.pathname.replace(/\/$/, '');
 $('.side-header-menu a').each(function() {
-    if ($(this).attr("href") === pageUrl || $(this).attr("href") === '') {
-        $(this).closest('li').addClass("active").parents('li').addClass('active').children('ul').slideDown().siblings('a').find('.menu-expand i').removeClass('zmdi-chevron-down').addClass('zmdi-chevron-up');
+    try {
+        var href = $(this).attr('href') || '';
+        // Resolve a full path from the href so we can compare reliably
+        var link = document.createElement('a');
+        link.href = href;
+        var linkPath = (link.pathname || '').replace(/\/$/, '');
+        var linkFile = linkPath.substr(linkPath.lastIndexOf('/') + 1);
+
+        // Debug output to help investigate why parents collapse
+        if (window.console && window.console.debug) {
+            console.debug('[nav-debug] currentPath=', currentPath, ' pageUrl=', pageUrl, ' href=', href, ' linkPath=', linkPath, ' linkFile=', linkFile);
+        }
+
+        if (linkPath === currentPath || linkFile === pageUrl || href === '') {
+            $(this).closest('li').addClass("active").parents('li').addClass('active').children('ul').slideDown().siblings('a').find('.menu-expand i').removeClass('zmdi-chevron-down').addClass('zmdi-chevron-up');
+            if (window.console && window.console.info) console.info('[nav-debug] matched and opened ->', href);
+        }
+    } catch (e) {
+        if (window.console && window.console.error) console.error('[nav-debug] error matching nav link', e);
     }
-    else if (window.location.pathname === '/' || window.location.pathname === '/index.html') {
+    // fallback for home
+    if (currentPath === '' || currentPath === '/' || currentPath === '/index.html') {
         $('.side-header-menu a[href="index.html"]').closest('li').addClass("active").parents('li').addClass('active').children('ul').slideDown().siblings('a').find('.menu-expand i').removeClass('zmdi-chevron-down').addClass('zmdi-chevron-up');
     }
-})
+});
 
 /*--
     Tooltip, Popover & Tippy Tooltip

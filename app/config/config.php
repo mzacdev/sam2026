@@ -20,6 +20,31 @@ if ($docRoot && $appRoot && strpos($appRoot, $docRoot) === 0) {
     $baseUrl = str_replace('\\', '/', substr($appRoot, strlen($docRoot)));
 }
 
+// Debug logging: emit which nav items/sections were marked active when DEBUG_MODE is enabled
+if (defined('DEBUG_MODE') && DEBUG_MODE) {
+    try {
+        foreach ($nav_items as $ni) {
+            if (!empty($ni['active'])) {
+                error_log('[nav_active] nav_item active -> ' . ($ni['title'] ?? $ni['url'] ?? json_encode($ni)));
+            }
+        }
+        if (isset($nav_sections) && is_array($nav_sections)) {
+            foreach ($nav_sections as $sec) {
+                $secTitle = $sec['title'] ?? '(section)';
+                if (isset($sec['children']) && is_array($sec['children'])) {
+                    foreach ($sec['children'] as $ch) {
+                        if (!empty($ch['active'])) {
+                            error_log('[nav_active] nav_section child active -> ' . $secTitle . ' :: ' . ($ch['title'] ?? $ch['url'] ?? json_encode($ch)));
+                        }
+                    }
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log('[nav_active] debug logging failed: ' . $e->getMessage());
+    }
+}
+
 $baseUrl = rtrim($baseUrl, '/');
 define('BASE_URL', $baseUrl);
 
@@ -178,15 +203,52 @@ $current_page = basename($_SERVER['PHP_SELF']);
 $script_path  = str_replace('\\', '/', $_SERVER['SCRIPT_NAME']);
 $relative_path = ltrim(str_replace(BASE_URL, '', $script_path), '/');
 
-foreach ($nav_items as &$item) {
-    $item_path = ltrim($item['url'], '/');
-    $item_base = basename($item_path);
+// normalize helpers
+function _nav_normalize($p) {
+    $p = trim((string)$p);
+    $p = preg_replace('#^/+#', '/', $p);
+    $p = rtrim($p, '/');
+    return strtolower($p === '' ? '/' : $p);
+}
 
+$current_page_base = strtolower(basename($_SERVER['PHP_SELF']));
+$script_base = strtolower(basename($script_path));
+$rel_norm = _nav_normalize('/' . ltrim($relative_path, '/'));
+
+foreach ($nav_items as &$item) {
+    $item_path = '/' . ltrim($item['url'], '/');
+    $item_norm = _nav_normalize($item_path);
+    $item_base = strtolower(basename($item_path));
+
+    // Mark active if any reasonable match: basename, exact normalized path, or containment
     if (
-        $item_base === $current_page ||
-        $item_path === $relative_path
+        $item_base === $current_page_base ||
+        $item_base === $script_base ||
+        $item_norm === $rel_norm ||
+        stripos($rel_norm, $item_norm) !== false
     ) {
         $item['active'] = true;
     }
 }
 unset($item);
+
+// Also mark children in nav_sections active so markup that uses "active" flag works
+if (isset($nav_sections) && is_array($nav_sections)) {
+    foreach ($nav_sections as $sidx => $section) {
+        if (empty($section['children']) || !is_array($section['children'])) continue;
+        foreach ($section['children'] as $cidx => $child) {
+            $child_path = '/' . ltrim($child['url'], '/');
+            $child_norm = _nav_normalize($child_path);
+            $child_base = strtolower(basename($child_path));
+
+            if (
+                $child_base === $current_page_base ||
+                $child_base === $script_base ||
+                $child_norm === $rel_norm ||
+                stripos($rel_norm, $child_norm) !== false
+            ) {
+                $nav_sections[$sidx]['children'][$cidx]['active'] = true;
+            }
+        }
+    }
+}

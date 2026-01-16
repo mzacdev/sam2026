@@ -74,10 +74,42 @@ $isLoggedIn = ($auth && $auth->isLoggedIn());
                             $visibleChildren = $section['children'];
                             if (empty($visibleChildren)) continue;
 
+                            // determine current request path to robustly match submenu URLs
+                            $requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+                            $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+                            $queryString = $_SERVER['QUERY_STRING'] ?? '';
                             $sectionActive = false;
                             foreach ($visibleChildren as $childCheck) {
-                                $childPathCheck = ltrim($childCheck['url'], '/');
-                                if (basename($_SERVER['PHP_SELF']) === basename($childPathCheck)) {
+                                // resolve the child href the same way the link is rendered
+                                $childHref = url($childCheck['url']);
+                                $childPathCheck = parse_url($childHref, PHP_URL_PATH) ?: '/' . ltrim($childCheck['url'], '/');
+
+                                // strip BASE_URL prefix if present so comparisons work when app is in subfolder
+                                if (defined('BASE_URL') && BASE_URL) {
+                                    $prefix = rtrim(BASE_URL, '/');
+                                    if ($prefix !== '' && stripos($childPathCheck, $prefix) === 0) {
+                                        $childPathCheck = substr($childPathCheck, strlen($prefix));
+                                    }
+                                    if ($prefix !== '' && stripos($requestPath ?? '', $prefix) === 0) {
+                                        $requestPath = substr($requestPath, strlen($prefix));
+                                    }
+                                }
+
+                                // normalize for safe comparisons
+                                $reqNorm = rtrim(strtolower($requestPath ?? ''), '/');
+                                $childNorm = rtrim(strtolower($childPathCheck), '/');
+                                $phpSelfBase = strtolower(basename($_SERVER['PHP_SELF']));
+                                $scriptBase = strtolower(basename($scriptName));
+                                $childBase = strtolower(basename($childPathCheck));
+
+                                // checks: basename match, exact path match, containment, or query-string reference
+                                if (
+                                    $phpSelfBase === $childBase
+                                    || $scriptBase === $childBase
+                                    || $reqNorm === $childNorm
+                                    || stripos($requestPath, $childPathCheck) !== false
+                                    || stripos($queryString, ltrim($childPathCheck, '/')) !== false
+                                ) {
                                     $sectionActive = true; break;
                                 }
                             }
@@ -89,8 +121,30 @@ $isLoggedIn = ($auth && $auth->isLoggedIn());
                                 <?php foreach ($visibleChildren as $child): ?>
                                     <?php
                                     $icon = $iconMap[$child['icon']] ?? 'ti-angle-right';
-                                    $childPath = ltrim($child['url'], '/');
-                                    $active = (basename($_SERVER['PHP_SELF']) === basename($childPath)) ? 'active' : '';
+                                    $childHref = url($child['url']);
+                                    $childPath = parse_url($childHref, PHP_URL_PATH) ?: '/' . ltrim($child['url'], '/');
+
+                                    // remove BASE_URL prefix if present
+                                    if (defined('BASE_URL') && BASE_URL) {
+                                        $prefix = rtrim(BASE_URL, '/');
+                                        if ($prefix !== '' && stripos($childPath, $prefix) === 0) {
+                                            $childPath = substr($childPath, strlen($prefix));
+                                        }
+                                    }
+
+                                    $reqNorm = rtrim(strtolower($requestPath ?? ''), '/');
+                                    $childNorm = rtrim(strtolower($childPath), '/');
+                                    $phpSelfBase = strtolower(basename($_SERVER['PHP_SELF']));
+                                    $scriptBase = strtolower(basename($scriptName));
+                                    $childBase = strtolower(basename($childPath));
+
+                                    $active = (
+                                        $phpSelfBase === $childBase
+                                        || $scriptBase === $childBase
+                                        || $reqNorm === $childNorm
+                                        || stripos($requestPath, $childPath) !== false
+                                        || stripos($_SERVER['QUERY_STRING'] ?? '', ltrim($childPath, '/')) !== false
+                                    ) ? 'active' : '';
                                     ?>
                                     <li class="<?php echo $active; ?>">
                                         <a href="<?php echo url($child['url']); ?>"><i class="<?php echo $icon; ?>"></i> <span><?php echo htmlspecialchars($child['title'], ENT_QUOTES, 'UTF-8'); ?></span></a>
