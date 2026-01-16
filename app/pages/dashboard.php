@@ -182,6 +182,36 @@ ob_start();
         .neo-card .rounded-circle{ box-shadow: inset 2px 2px 6px rgba(0,0,0,0.06); }
         .neo-card .card-footer .text-muted.small{ font-size:0.85rem; }
         .stat-icon{ font-size:1.6rem; line-height:1; }
+        /* Compact ranking table styles (reduced padding to avoid scrolling) */
+        .medal-table-card { border-radius:8px; overflow:hidden; }
+        .medal-table-card .card-header { 
+            background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+            border-bottom:1px solid rgba(14, 21, 47, 0.06);
+            padding:.36rem .6rem;
+            box-shadow: 0 6px 18px rgba(14,21,47,0.04);
+            border-top-left-radius:8px;
+            border-top-right-radius:8px;
+        }
+        /* Make the whole ranking box follow the neo-card appearance */
+        .medal-table-card.neo-card { background: #f4f7fb; box-shadow: 6px 6px 14px rgba(16,24,40,0.06), -6px -6px 14px rgba(255,255,255,0.8); border: none; }
+        .medal-table { width:100%; border-collapse:separate; border-spacing:0; }
+        .medal-table thead th { background: #fbfdff; border-bottom: 1px solid #eef2f7; color:#172554; font-weight:600; font-size:0.82rem; padding:.35rem .45rem; }
+        .medal-table tbody tr { transition: background .08s ease; }
+        .medal-table tbody tr:hover { background: #fbfdff; }
+        /* Subtle zebra and highlighted backgrounds for ranking rows */
+        .medal-table tbody tr:nth-child(odd) { background: rgba(15,23,42,0.02); }
+        .medal-table tbody tr.top-1 { background: linear-gradient(90deg, #fff7e6 0%, #fff3d1 100%); }
+        .medal-table tbody tr.top-2 { background: linear-gradient(90deg, #f6f9ff 0%, #eef6ff 100%); }
+        .medal-table tbody tr.top-3 { background: linear-gradient(90deg, #fff7f0 0%, #fff2ea 100%); }
+        .medal-table tbody tr.top-1 .medal-name, .medal-table tbody tr.top-1 .medal-count { color:#7a4300; }
+        .medal-table tbody tr.top-2 .medal-name, .medal-table tbody tr.top-2 .medal-count { color:#0b5ed7; }
+        .medal-table tbody tr.top-3 .medal-name, .medal-table tbody tr.top-3 .medal-count { color:#8b5a2b; }
+        .medal-table td, .medal-table th { padding: .28rem .4rem; vertical-align: middle; font-size: .82rem; }
+        .medal-rank { font-weight:700; color:#0b5ed7; font-size:.9rem; }
+        .medal-name { font-weight:600; color:#0f1724; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:11rem; }
+        .medal-count { font-weight:700; color:#0b5ed7; }
+        .medal-badge { display:inline-block; min-width:1.6rem; padding:.15rem .35rem; border-radius:.25rem; text-align:center; background:#f1f5f9; color:#0b5ed7; font-weight:700; font-size:.82rem; }
+        .medal-table-small { font-size:.78rem; color:#6b7280; }
     </style>
     <div class="row align-items-center mb-4">
         <div class="col">
@@ -271,15 +301,15 @@ ob_start();
         </div>
 
         <div class="col-lg-4 d-flex">
-            <div class="card shadow-sm w-100 h-100">
+                <div class="card w-100 h-100 medal-table-card neo-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>Kedudukan pasukan</strong>
+                    <strong>Kedudukan Kontinjen</strong>
                     <small class="text-muted">Ringkasan</small>
                 </div>
-                <div class="card-body p-2" style="overflow:auto;">
+                    <div class="card-body p-1">
                     <?php if (!empty($medalRows)): ?>
                         <div class="table-responsive">
-                            <table class="table table-sm mb-0">
+                            <table class="table table-sm mb-0 medal-table">
                                 <thead>
                                     <tr>
                                         <th>#</th>
@@ -291,16 +321,17 @@ ob_start();
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php $rank = 1; foreach ($medalRows as $mr): ?>
-                                        <tr>
-                                            <td class="align-middle small"><?php echo $rank++; ?></td>
-                                            <td class="align-middle small"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></td>
-                                            <td class="text-center small"><?php echo (int)($mr['emas'] ?? 0); ?></td>
-                                            <td class="text-center small"><?php echo (int)($mr['perak'] ?? 0); ?></td>
-                                            <td class="text-center small"><?php echo (int)($mr['gangsa'] ?? 0); ?></td>
-                                            <td class="text-center small"><strong><?php echo (int)($mr['jumlah'] ?? 0); ?></strong></td>
-                                        </tr>
-                                    <?php endforeach; ?>
+                                     <?php $rank = 1; foreach ($medalRows as $mr): ?>
+                                         <?php $r = $rank++; $rowClass = ($r==1? 'top-1' : ($r==2? 'top-2' : ($r==3? 'top-3' : ''))); ?>
+                                         <tr class="<?php echo $rowClass; ?>">
+                                            <td class="align-middle"><span class="medal-rank"><?php echo $r; ?></span></td>
+                                            <td class="align-middle"><div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['emas'] ?? 0); ?></span></td>
+                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['perak'] ?? 0); ?></span></td>
+                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['gangsa'] ?? 0); ?></span></td>
+                                            <td class="text-center"><span class="medal-count"><?php echo (int)($mr['jumlah'] ?? 0); ?></span></td>
+                                         </tr>
+                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
