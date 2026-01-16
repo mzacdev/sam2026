@@ -130,7 +130,7 @@ $userEmail = $currentUser['email'] ?? '';
                                     <li class="col-auto d-flex align-items-center header-sukan-logos" style="gap:.5rem;">
                                         <?php foreach ($sukanLogos as $logo): ?>
                                             <?php $label = htmlspecialchars(ucwords(str_replace(array('-', '_'), ' ', pathinfo($logo, PATHINFO_FILENAME))), ENT_QUOTES, 'UTF-8'); ?>
-                                            <img src="<?php echo asset('img/sukan/' . $logo); ?>" alt="<?php echo $label; ?>" title="<?php echo $label; ?>" aria-label="<?php echo $label; ?>" width="48" height="48" onerror="this.style.display='none'" />
+                                            <img src="<?php echo asset('img/sukan/' . $logo); ?>" alt="<?php echo $label; ?>" title="<?php echo $label; ?>" aria-label="<?php echo $label; ?>" width="48" height="48" onerror="this.onerror=null;this.src='<?php echo asset('img/logos/logo-main.png'); ?>'" />
                                         <?php endforeach; ?>
                                     </li>
                                 <?php endif; ?>
