@@ -382,13 +382,20 @@ class PasukanModel {
             $bindings = [];
             
             if (!empty($search)) {
-                $where[] = "(p.nama_pasukan LIKE :search 
-                            OR u.nama_universiti LIKE :search
-                            OR s.nama_sukan LIKE :search
-                            OR peng.nama LIKE :search
-                            OR jur.nama LIKE :search
-                            OR atl.nama LIKE :search)";
-                $bindings[':search'] = '%' . $search . '%';
+                // Use unique named placeholders for each occurrence to avoid PDO "Invalid parameter number"
+                $where[] = "(p.nama_pasukan LIKE :search_p 
+                            OR u.nama_universiti LIKE :search_u
+                            OR s.nama_sukan LIKE :search_s
+                            OR peng.nama LIKE :search_peng
+                            OR jur.nama LIKE :search_jur
+                            OR atl.nama LIKE :search_atl)";
+                $like = '%' . $search . '%';
+                $bindings[':search_p'] = $like;
+                $bindings[':search_u'] = $like;
+                $bindings[':search_s'] = $like;
+                $bindings[':search_peng'] = $like;
+                $bindings[':search_jur'] = $like;
+                $bindings[':search_atl'] = $like;
             }
             
             if ($kontinjenId !== null) {

@@ -125,7 +125,7 @@ ob_start();
                         </div>
 
                         <div class="btn-group">
-                            <button class="btn btn-outline-secondary">Laporan</button>
+                            <button class="btn btn-outline-secondary" id="btnCetak">Cetak</button>
                             <button class="btn btn-outline-primary" onclick="showBulkUploadPasukan()">
                                 <i class="cil cil-cloud-upload me-1"></i> Muat Naik Pukal
                             </button>
@@ -139,38 +139,10 @@ ob_start();
         </div>
     </div>
 
-    <!-- Filters & Search -->
+    <!-- Filters (moved to header) -->
     <div class="row mb-3">
-        <div class="col-lg-4 mb-2 mb-lg-0">
-            <select class="form-select" id="filterContingent" data-custom="true">
-                <option value="">Semua Kontinjen</option>
-                <?php foreach ($contingents as $c): 
-                    $cid = (int)$c['id'];
-                    $count = isset($participantCounts[$cid]) ? (int)$participantCounts[$cid] : 0;
-                    $label = htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8');
-                    if ($count === 0) {
-                        $attr = ' data-empty="1"';
-                    } else {
-                        $attr = '';
-                    }
-                ?>
-                    <option value="<?php echo $cid; ?>"<?php echo $attr; ?>><?php echo $label; ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="col-lg-4 mb-2 mb-lg-0">
-            <select class="form-select" id="filterSport" data-custom="true">
-                <option value="">Semua Sukan</option>
-                <?php foreach ($sports as $s): ?>
-                    <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="col-lg-4">
-            <div class="input-group input-group-sm">
-                <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
-                <input type="text" class="form-control" id="pasukanSearch" placeholder="Cari nama pasukan, pengurus, jurulatih atau atlet...">
-            </div>
+        <div class="col-12">
+            <!-- Left empty: filters are shown in the card header for compact layout -->
         </div>
     </div>
 
@@ -179,13 +151,46 @@ ob_start();
         <div class="col-12">
             <div class="card mb-4 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>Senarai Pasukan</strong>
-                        <div class="small text-muted">Urus semua pasukan berdaftar</div>
+                    <div class="d-flex align-items-center">
+                        <div class="me-2" style="min-width:200px;">
+                            <select class="form-select form-select-sm" id="filterContingent" data-custom="true">
+                                <option value="">Semua Kontinjen</option>
+                                <?php foreach ($contingents as $c): 
+                                    $cid = (int)$c['id'];
+                                    $count = isset($participantCounts[$cid]) ? (int)$participantCounts[$cid] : 0;
+                                    $label = htmlspecialchars($c['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8');
+                                    if ($count === 0) {
+                                        $attr = ' data-empty="1"';
+                                    } else {
+                                        $attr = '';
+                                    }
+                                ?>
+                                    <option value="<?php echo $cid; ?>"<?php echo $attr; ?>><?php echo $label; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="me-2" style="min-width:160px;">
+                            <select class="form-select form-select-sm" id="filterSport" data-custom="true">
+                                <option value="">Semua Sukan</option>
+                                <?php foreach ($sports as $s): ?>
+                                    <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <label class="small text-muted me-2 mb-0">Tunjuk</label>
+                        <select id="pasukanPageSize" class="form-select form-select-sm pasukan-header-control custom-like" style="width:110px">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <input type="search" id="pasukanSearchTop" class="form-control form-control-sm ms-2 pasukan-header-control custom-like" placeholder="Cari pasukan..." style="width:220px">
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="table-responsive">
+                    <div class="card-body">
+                    <div class="table-responsive" id="pasukanTableWrap">
                         <table class="table table-hover table-striped align-middle table-fixed">
                             <thead class="table-light">
                                 <tr>
@@ -257,6 +262,11 @@ ob_start();
                                 <?php endif; ?>
                             </tbody>
                         </table>
+                        <div class="d-flex justify-content-end align-items-center mt-2" id="pasukanPaginationWrap">
+                            <nav aria-label="Pasukan pagination">
+                                <ul class="pagination pagination-sm mb-0" id="pasukanPagination"></ul>
+                            </nav>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -279,15 +289,256 @@ require_once __DIR__ . '/../includes/layout.php';
 .custom-select-item.empty-item{background:#fff3f3;color:#b71c1c}
 .custom-select-item.empty-item:hover{background:#ffe6e6}
 .custom-select-placeholder{color:#6c757d}
+/* Make header controls visually match the custom select toggle */
+.pasukan-header-control, .form-select.form-select-sm {
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    box-shadow: none;
+    padding: .375rem .75rem;
+    height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    font-size: .95rem !important;
+}
+.pasukan-header-control { min-width: 110px; }
+
+/* Make pagination links and header search visually match the custom select toggle */
+#pasukanPaginationWrap .pagination .page-link,
+#pasukanPaginationWrap .pagination .page-item > .page-link,
+#pasukanSearchTop,
+#pasukanPageSize {
+    /* match custom-select-toggle exactly */
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    box-shadow: none;
+    padding: .375rem .75rem;
+    height: 40px !important;
+    line-height: normal !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    font-size: .95rem !important;
+    color: #495057;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image: linear-gradient(45deg, transparent 50%, #495057 50%), linear-gradient(135deg, #495057 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+    background-size: 6px 6px,6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 2.8rem !important;
+}
+#pasukanSearchTop {
+    /* match toggle visual (no arrow) */
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    box-shadow: none;
+    padding: .375rem .75rem;
+    height: 40px !important;
+    line-height: normal !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    font-size: .95rem !important;
+    color: #495057;
+}
+#pasukanPageSize.custom-like, #pasukanSearchTop.custom-like {
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+    font-weight: 400 !important;
+    text-align: left !important;
+    padding: .375rem .75rem !important;
+    height: 40px !important;
+    line-height: 1.2 !important;
+    border: 1px solid #ced4da !important;
+    border-radius: .375rem !important;
+    background: #fff !important;
+    color: #495057 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+/* Add toggle-like arrow for page-size to match select */
+#pasukanPageSize.custom-like {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image: linear-gradient(45deg, transparent 50%, #495057 50%), linear-gradient(135deg, #495057 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+    background-size: 6px 6px,6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 2.8rem !important;
+}
+
+/* Force pagination buttons to use same box-sizing and border so they visually match */
+#pasukanPaginationWrap .pagination .page-link,
+#pasukanPaginationWrap .pagination .page-item > .page-link {
+    box-sizing: border-box !important;
+    border: 1px solid #ced4da !important;
+    border-radius: .375rem !important;
+    background: #fff !important;
+    height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0 .75rem !important;
+}
+#pasukanPaginationWrap .pagination .page-link,
+#pasukanPaginationWrap .pagination .page-item > .page-link {
+    padding: 0 .75rem;
+    height: 40px !important;
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    background: #fff;
+}
+#pasukanPaginationWrap .pagination .page-link { margin-left: .25rem; }
+#pasukanPaginationWrap .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
 /* Table fixed layout and single-line rows */
 .table-fixed{table-layout:fixed;width:100%}
 .table-fixed th,.table-fixed td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .table-fixed td .cell-inner{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .table-responsive{overflow-x:auto;overflow-y:visible}
+
+/* Print only the table content when user clicks Cetak */
+@media print {
+    /* hide everything by default */
+    body * { visibility: hidden !important; }
+    /* show only the table wrapper and its contents */
+    #pasukanTableWrap, #pasukanTableWrap * { visibility: visible !important; }
+    /* position table at the top-left for printing */
+    #pasukanTableWrap { position: absolute !important; left: 0; top: 0; width: 100% !important; }
+}
+
+/* Make page-size select and pagination styling */
+#pasukanPaginationWrap {
+    gap: .5rem;
+    --pasukan-control-height: 40px; /* unified control height */
+    --pasukan-pager-height: var(--pasukan-control-height);
+}
+#pasukanPaginationWrap .form-select-sm {
+    box-sizing: border-box;
+    padding: 0 .6rem;
+    font-size: .95rem;
+    height: var(--pasukan-control-height);
+    line-height: normal;
+    border-radius: .375rem;
+    border: 1px solid #dee2e6;
+    background-color: #fff;
+    display: inline-flex;
+    align-items: center;
+    min-width: 110px;
+}
+#pasukanPaginationWrap .pagination .page-link {
+    padding: 0 .6rem;
+    font-size: .95rem;
+    height: var(--pasukan-pager-height);
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* header controls (select + search) */
+#pasukanPageSize, .pasukan-header-control, #pasukanSearchTop {
+    /* Force select to use select-height */
+    height: var(--pasukan-control-height) !important;
+    line-height: var(--pasukan-control-height) !important;
+    padding: 0 .75rem !important;
+    font-size: .95rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    border-radius: .375rem !important;
+    /* Remove native appearance and add custom arrow so sizing is consistent */
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image: linear-gradient(45deg, transparent 50%, #495057 50%), linear-gradient(135deg, #495057 50%, transparent 50%);
+    background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+    background-size: 6px 6px,6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 2.5rem !important;
+}
+#pasukanSearchTop {
+    /* Match the header page-size select */
+    height: var(--pasukan-select-height) !important;
+    line-height: var(--pasukan-select-height) !important;
+    padding: 0 .75rem !important;
+    font-size: .95rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    border-radius: .375rem !important;
+    border: 1px solid #dee2e6 !important;
+    background-color: #fff !important;
+    width: 220px !important;
+}
+#pasukanPaginationWrap .pagination .page-link {
+    padding: 0 .75rem;
+    font-size: .95rem;
+    height: var(--pasukan-pager-height);
+    line-height: var(--pasukan-pager-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+#pasukanPaginationWrap .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+#pasukanPaginationWrap .page-link {
+    color: #495057;
+}
+
+/* Force explicit matching box sizing/padding for Chrome */
+@supports (-webkit-appearance:none) {
+    #pasukanPaginationWrap .form-select-sm,
+    #pasukanPaginationWrap .pagination .page-link,
+    #pasukanPageSize,
+    .pasukan-header-control,
+    #pasukanSearchTop {
+        height: var(--pasukan-control-height) !important;
+        min-height: var(--pasukan-control-height) !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: .95rem !important;
+    }
+    /* adjust select arrow position for Chrome */
+    #pasukanPageSize {
+        background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50% !important;
+        padding-right: 2.8rem !important;
+    }
+}
+
+/* Ensure page-link box sizing aligns with select */
+#pasukanPaginationWrap .pagination .page-link,
+#pasukanPaginationWrap .pagination .page-item > .page-link {
+    box-sizing: border-box;
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function(){
+    // Remove duplicate selects with same ID (if any) to avoid double-hidden originals
+    ['filterContingent','filterSport'].forEach(function(id){
+        var nodes = Array.from(document.querySelectorAll('select#' + id));
+        if (nodes.length > 1) {
+            // keep the first, remove the rest
+            nodes.slice(1).forEach(function(n){ n.parentNode && n.parentNode.removeChild(n); });
+        }
+    });
     function buildCustom(select){
         if (!select || select.dataset._customInit) return;
         select.dataset._customInit = '1';
@@ -311,10 +562,15 @@ document.addEventListener('DOMContentLoaded', function(){
             if (opt.getAttribute('data-empty') === '1') item.classList.add('empty-item');
             if (opt.disabled) item.classList.add('disabled');
             item.addEventListener('click', function(e){
-                // set original select
-                select.value = this.dataset.value;
-                // trigger change event on original select
-                var ev = new Event('change', {bubbles:true}); select.dispatchEvent(ev);
+                // set underlying hidden input/select value
+                try {
+                    select.value = this.dataset.value;
+                } catch (err) {
+                    console.warn('set value error', err);
+                }
+                // trigger change event on the input/select
+                var ev = new Event('change', {bubbles:true});
+                try { select.dispatchEvent(ev); } catch (err) { console.warn('dispatch change error', err); }
                 // update toggle label
                 toggle.querySelector('.custom-select-placeholder').textContent = this.textContent;
                 closeMenu();
@@ -331,15 +587,81 @@ document.addEventListener('DOMContentLoaded', function(){
         wrap.appendChild(toggle); wrap.appendChild(menu);
         select.parentNode.insertBefore(wrap, select.nextSibling);
 
+
+        // Auto-size the custom select wrapper to fit the longest option text
+        try {
+            var measurer = document.createElement('span');
+            measurer.style.position = 'absolute';
+            measurer.style.visibility = 'hidden';
+            measurer.style.whiteSpace = 'nowrap';
+            measurer.style.fontSize = window.getComputedStyle(toggle).fontSize || '14px';
+            measurer.style.fontFamily = window.getComputedStyle(toggle).fontFamily || 'inherit';
+            document.body.appendChild(measurer);
+            var maxW = 0;
+            Array.from(select.options).forEach(function(o){
+                measurer.textContent = o.text || '';
+                var w = measurer.offsetWidth;
+                if (w > maxW) maxW = w;
+            });
+            document.body.removeChild(measurer);
+            // add padding for arrow and internal padding — increase to better fit long names
+            var extra = 140; // more generous padding to accommodate fonts and arrows
+            var desired = Math.max(140, maxW + extra);
+            wrap.style.minWidth = desired + 'px';
+            // ensure the toggle and menu also expand to match
+            try { toggle.style.minWidth = '100%'; menu.style.minWidth = desired + 'px'; } catch(e){}
+        } catch (e) {
+            // ignore measurement errors
+            console.warn('custom select autosize error', e);
+        }
+
         // Sync initial selected label
         select.addEventListener('change', function(){
             var opt = select.options[select.selectedIndex];
             if (opt) toggle.querySelector('.custom-select-placeholder').textContent = opt.text;
         });
+
+        // Now replace original <select> with a hidden input (single DOM element) to avoid seeing duplicates
+        try {
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.id = select.id || '';
+            if (select.name) hidden.name = select.name;
+            hidden.value = select.value || '';
+            select.parentNode.insertBefore(hidden, select);
+            select.parentNode.removeChild(select);
+            // point `select` variable to the hidden input for later handlers
+            select = hidden;
+        } catch (e) {
+            console.warn('custom select replace error', e);
+        }
     }
 
     var targets = document.querySelectorAll('select[data-custom="true"]');
     targets.forEach(function(s){ buildCustom(s); });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    // Sync header search with main search input and trigger load
+    var top = document.getElementById('pasukanSearchTop');
+    var main = document.getElementById('pasukanSearch');
+    if (top) {
+        top.addEventListener('input', function(){
+            if (main) main.value = this.value;
+            if (window.pasukanDebounced) {
+                window.pasukanDebounced();
+            } else {
+                loadPasukanList();
+            }
+        });
+    }
+    if (main && top) {
+        main.addEventListener('input', function(){
+            top.value = this.value;
+        });
+    }
 });
 </script>
 
@@ -383,7 +705,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="pasukanSukan" class="form-label">Sukan <span class="text-danger">*</span></label>
-                                <select id="pasukanSukan" name="sukan_id" class="form-select" required>
+                                <select id="pasukanSukan" name="sukan_id" class="form-select" required data-custom="true">
                                     <option value="">Sila Pilih</option>
                                     <?php foreach ($sports as $s): ?>
                                         <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
@@ -551,7 +873,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Setup filter handlers
     document.getElementById('filterContingent')?.addEventListener('change', loadPasukanList);
     document.getElementById('filterSport')?.addEventListener('change', loadPasukanList);
-    document.getElementById('pasukanSearch')?.addEventListener('input', debounce(loadPasukanList, 300));
+    // create a shared debounced loader so top and main search share the same timer
+    window.pasukanDebounced = debounce(loadPasukanList, 300);
+    document.getElementById('pasukanSearch')?.addEventListener('input', window.pasukanDebounced);
     
     // Load categories when sport is selected in modal
     document.getElementById('pasukanSukan')?.addEventListener('change', function() {
@@ -572,6 +896,17 @@ document.addEventListener('DOMContentLoaded', function() {
             deletePasukan(id);
         }
     });
+    
+        // Print handler: print only the table when Cetak button clicked
+        document.addEventListener('DOMContentLoaded', function(){
+            var btn = document.getElementById('btnCetak');
+            if (btn) {
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    window.print();
+                });
+            }
+        });
 });
 
 function showAddPasukan() {
@@ -1440,32 +1775,15 @@ function loadPasukanList() {
             
             if (teams.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="cil cil-people" style="font-size: 2rem;"></i><p class="mt-2">Tiada pasukan didaftarkan — klik "Daftar Pasukan Baru" untuk mula menambah.</p></td></tr>';
+                // Clear any pagination
+                window.pasukanTeams = [];
+                buildPasukanPagination(1);
             } else {
-                let html = '';
-                teams.forEach((t, i) => {
-                    const status = parseInt(t.status || 0);
-                    const badgeClass = status == 1 ? 'bg-success' : 'bg-secondary';
-                    const statusText = status == 1 ? 'Aktif' : 'Tidak Aktif';
-                    
-                    const pengurusList = (t.pengurus_list || '').split(', ').filter(x => x);
-                    const jurulatihList = (t.jurulatih_list || '').split(', ').filter(x => x);
-                    
-                    html += '<tr>';
-                    html += '<td>' + (i + 1) + '</td>';
-                    html += '<td><div class="fw-semibold">' + escapeHtml(t.nama_pasukan || '-') + '</div></td>';
-                    html += '<td>' + escapeHtml(t.nama_universiti || '-') + '</td>';
-                    html += '<td>' + escapeHtml(t.nama_sukan || '-') + '</td>';
-                    html += '<td><div class="small">' + escapeHtml(pengurusList.slice(0, 2).join(', ')) + (pengurusList.length > 2 ? '...' : '') + '</div></td>';
-                    html += '<td><div class="small">' + escapeHtml(jurulatihList.slice(0, 2).join(', ')) + (jurulatihList.length > 2 ? '...' : '') + '</div></td>';
-                    html += '<td class="text-center"><span class="badge bg-info">' + (parseInt(t.atlet_count || 0)) + '</span></td>';
-                    html += '<td><span class="badge ' + badgeClass + '">' + statusText + '</span></td>';
-                    html += '<td>';
-                    html += '<a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-edit"></i></a> ';
-                    html += '<a class="btn btn-sm btn-outline-danger delete-pasukan" title="Padam" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-trash"></i></a>';
-                    html += '</td>';
-                    html += '</tr>';
-                });
-                tbody.innerHTML = html;
+                // Store teams and render first page with pagination
+                window.pasukanTeams = teams;
+                window.pasukanCurrentPage = 1;
+                window.pasukanPageSize = parseInt(document.getElementById('pasukanPageSize')?.value) || 10;
+                renderPasukanPage(1);
             }
         } else {
             tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">Ralat memuatkan data. Sila muat semula halaman.</td></tr>';
@@ -1529,6 +1847,108 @@ function showBulkUploadPasukan() {
     
     // Reset form
     resetBulkUploadForm();
+}
+
+// --- Client-side pagination for Pasukan list ---
+window.pasukanTeams = window.pasukanTeams || [];
+window.pasukanCurrentPage = window.pasukanCurrentPage || 1;
+window.pasukanPageSize = window.pasukanPageSize || 10;
+
+function renderPasukanPage(page) {
+    const tbody = document.getElementById('pasukanTableBody');
+    if (!tbody) return;
+    const teams = window.pasukanTeams || [];
+    const pageSize = parseInt(window.pasukanPageSize) || 10;
+    const total = teams.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    page = Math.min(Math.max(1, page), totalPages);
+    window.pasukanCurrentPage = page;
+
+    const start = (page - 1) * pageSize;
+    const slice = teams.slice(start, start + pageSize);
+
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="cil cil-people" style="font-size: 2rem;"></i><p class="mt-2">Tiada pasukan didaftarkan — klik "Daftar Pasukan Baru" untuk mula menambah.</p></td></tr>';
+    } else {
+        let html = '';
+        slice.forEach((t, i) => {
+            const idx = start + i + 1;
+            const status = parseInt(t.status || 0);
+            const badgeClass = status == 1 ? 'bg-success' : 'bg-secondary';
+            const statusText = status == 1 ? 'Aktif' : 'Tidak Aktif';
+            const pengurusList = (t.pengurus_list || '').split(', ').filter(x => x);
+            const jurulatihList = (t.jurulatih_list || '').split(', ').filter(x => x);
+
+            html += '<tr>';
+            html += '<td>' + idx + '</td>';
+            html += '<td><div class="fw-semibold">' + escapeHtml(t.nama_pasukan || '-') + '</div></td>';
+            html += '<td>' + escapeHtml(t.nama_universiti || '-') + '</td>';
+            html += '<td>' + escapeHtml(t.nama_sukan || '-') + '</td>';
+            html += '<td><div class="small">' + escapeHtml(pengurusList.slice(0, 2).join(', ')) + (pengurusList.length > 2 ? '...' : '') + '</div></td>';
+            html += '<td><div class="small">' + escapeHtml(jurulatihList.slice(0, 2).join(', ')) + (jurulatihList.length > 2 ? '...' : '') + '</div></td>';
+            html += '<td class="text-center"><span class="badge bg-info">' + (parseInt(t.atlet_count || 0)) + '</span></td>';
+            html += '<td><span class="badge ' + badgeClass + '">' + statusText + '</span></td>';
+            html += '<td>';
+            html += '<a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-edit"></i></a> ';
+            html += '<a class="btn btn-sm btn-outline-danger delete-pasukan" title="Padam" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-trash"></i></a>';
+            html += '</td>';
+            html += '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+
+    buildPasukanPagination(totalPages);
+}
+
+function buildPasukanPagination(totalPages) {
+    const ul = document.getElementById('pasukanPagination');
+    if (!ul) return;
+    const current = window.pasukanCurrentPage || 1;
+    ul.innerHTML = '';
+
+    function createLi(label, page, disabled, active) {
+        const li = document.createElement('li');
+        li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+        const a = document.createElement('a');
+        a.className = 'page-link';
+        a.href = '#';
+        a.dataset.page = page;
+        a.innerHTML = label;
+        a.addEventListener('click', function(e){
+            e.preventDefault();
+            if (disabled) return;
+            renderPasukanPage(parseInt(this.dataset.page));
+        });
+        li.appendChild(a);
+        return li;
+    }
+
+    // Prev
+    ul.appendChild(createLi('&laquo;', Math.max(1, current - 1), current <= 1, false));
+
+    // page window
+    let start = Math.max(1, current - 3);
+    let end = Math.min(totalPages, current + 3);
+    if (current <= 4) start = 1;
+    if (current + 3 >= totalPages) end = totalPages;
+
+    for (let p = start; p <= end; p++) {
+        ul.appendChild(createLi(p, p, false, p === current));
+    }
+
+    // Next
+    ul.appendChild(createLi('&raquo;', Math.min(totalPages, current + 1), current >= totalPages, false));
+
+    // page size change handler
+    const sizeSelect = document.getElementById('pasukanPageSize');
+    if (sizeSelect && !sizeSelect.dataset._init) {
+        sizeSelect.dataset._init = '1';
+        sizeSelect.value = String(window.pasukanPageSize || 10);
+        sizeSelect.addEventListener('change', function(){
+            window.pasukanPageSize = parseInt(this.value) || 10;
+            renderPasukanPage(1);
+        });
+    }
 }
 
 function closeBulkUploadPasukanModal() {
