@@ -110,60 +110,16 @@ define('LOGO_ANDROID', 'android-icon-192x192.png');
  * NAVIGATION MENU
  * ============================================================ */
 $nav_items = [
-    [
-        'title' => 'Papan Pemuka',
-        'icon'  => 'cil-speedometer',
-        'url'   => 'index.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Kontinjen',
-        'icon'  => 'cil-people',
-        'url'   => 'pages/contingent.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Sukan',
-        'icon'  => 'cil-gamepad',
-        'url'   => 'pages/sports.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Pasukan',
-        'icon'  => 'cil-people',
-        'url'   => 'pages/pasukan.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Venue',
-        'icon'  => 'cil-map',
-        'url'   => 'pages/venues.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Keputusan',
-        'icon'  => 'cil-award',
-        'url'   => 'pages/results.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Medal Tally',
-        'icon'  => 'cil-star',
-        'url'   => 'pages/medal-tally.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Laporan',
-        'icon'  => 'cil-chart',
-        'url'   => 'pages/reports.php',
-        'active'=> false
-    ],
-    [
-        'title' => 'Tetapan',
-        'icon'  => 'cil-settings',
-        'url'   => 'pages/settings.php',
-        'active'=> false
-    ]
+    [ 'title' => 'Papan Pemuka', 'icon' => 'cil-speedometer', 'url' => 'index.php', 'active' => false ],
+    [ 'title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent.php', 'active' => false ],
+    // removed top-level Pengurusan Pengguna; moved under Tetapan as 'Pengguna'
+    [ 'title' => 'Sukan', 'icon' => 'cil-gamepad', 'url' => 'pages/sports.php', 'active' => false ],
+    [ 'title' => 'Pasukan', 'icon' => 'cil-people', 'url' => 'pages/pasukan.php', 'active' => false ],
+    [ 'title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php', 'active' => false ],
+    [ 'title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php', 'active' => false ],
+    [ 'title' => 'Medal Tally', 'icon' => 'cil-star', 'url' => 'pages/medal-tally.php', 'active' => false ],
+    [ 'title' => 'Laporan', 'icon' => 'cil-chart', 'url' => 'pages/reports.php', 'active' => false ],
+    [ 'title' => 'Tetapan', 'icon' => 'cil-settings', 'url' => 'pages/settings.php', 'active' => false ],
 ];
 
 /* ============================================================
@@ -193,6 +149,7 @@ $nav_sections = [
         'children' => [
             ['title' => 'General', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
             ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/university.php'],
+            ['title' => 'Pengguna', 'icon' => 'cil-user', 'url' => 'pages/pengurusan-pengguna.php'],
         ],
     ],
 ];

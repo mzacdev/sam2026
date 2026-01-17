@@ -58,8 +58,9 @@ class RBAC {
         // Users management - ADMIN only
         'pages/users.php' => ['ADMIN'],
         
-        // New Contingent User page - accessible to ADMIN, ORGANIZER and CONTINGENT role
-        'pages/contingent-user.php' => ['ADMIN', 'ORGANIZER', 'CONTINGENT'],
+        // New Contingent User page - accessible to CONTINGENT only
+        'pages/contingent-user.php' => ['CONTINGENT'],
+        'pages/pengurusan-pengguna.php' => ['ADMIN'],
     ];
     
     // If present, menu_access.json will be loaded to override static rules

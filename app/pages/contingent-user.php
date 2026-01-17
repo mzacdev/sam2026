@@ -15,6 +15,12 @@ $auth = getAuth();
 $auth->requireAuth();
 $currentUserRole = Session::get('user_role') ?? '';
 $restrictToOwnContingent = ($currentUserRole === 'CONTINGENT');
+
+// Restrict this page to CONTINGENT role only
+if ($currentUserRole !== 'CONTINGENT') {
+    header('Location: ' . url('pages/access-denied.php'));
+    exit;
+}
 $currentKontinjenId = Session::get('kontinjen_id') ?? null;
 
 if ($restrictToOwnContingent && empty($currentKontinjenId)) {
@@ -80,6 +86,11 @@ try {
 } catch (Exception $e) {
     error_log('[contingent-user.php] DB error: ' . $e->getMessage());
 }
+// Determine current contingent name (if page is restricted to own contingent)
+$contingentName = '';
+if (!empty($contingents) && isset($contingents[0]['nama_universiti'])) {
+    $contingentName = $contingents[0]['nama_universiti'];
+}
 
 ob_start();
 ?>
@@ -103,7 +114,9 @@ ob_start();
             <div class="card mb-4 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <strong>Senarai Kontinjen</strong>
+                        <strong>Senarai Kontinjen<?php if(!empty(
+                            $contingentName
+                        )): ?>, <?php echo htmlspecialchars($contingentName, ENT_QUOTES, 'UTF-8'); ?><?php endif; ?></strong>
                     </div>
                 </div>
                 <div class="card-body">
@@ -149,11 +162,21 @@ ob_start();
 </div>
 
 <style>
-.details-top-controls{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:6px}
-.details-top-controls .details-search{width:220px}
-.details-top-controls .details-select{width:160px;max-width:40%}
-.details-top-controls .details-pagesize{width:90px}
-@media (max-width:768px){.details-top-controls{flex-wrap:wrap}.details-top-controls .details-search{width:140px}.details-top-controls .details-select{width:120px}}
+.details-top-controls{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.details-top-controls .left-controls{display:flex;align-items:center;gap:8px}
+.details-top-controls .right-controls{display:flex;align-items:center;gap:8px}
+.details-top-controls .right-controls .details-search{width:220px}
+.details-top-controls .left-controls .details-select{max-width:60%}
+.details-top-controls .left-controls .details-select.select-sukan{min-width:220px;width:220px}
+.details-top-controls .left-controls .details-select.select-acara{min-width:280px;width:320px}
+.details-top-controls .right-controls .details-pagesize{width:90px}
+@media (max-width:768px){
+    .details-top-controls{flex-wrap:wrap}
+    .details-top-controls .right-controls .details-search{width:140px}
+    .details-top-controls .left-controls .details-select{width:120px}
+    .details-top-controls .left-controls .details-select.select-sukan{min-width:160px;width:160px}
+    .details-top-controls .left-controls .details-select.select-acara{min-width:180px;width:180px}
+}
 
 /* Highlight rows for Pengurus and Jurulatih */
 .details-row tr.role-pengurus td, .details-row tr.role-jurulatih td {
@@ -187,13 +210,18 @@ ob_start();
             var $detail = $('<tr class="details-row" data-kid="'+kid+'"><td colspan="'+colspan+'"></td></tr>');
             var $container = $('<div class="p-3 bg-light border rounded">');
 
-            // Top bar: right-aligned controls (sport select, search, page-size)
+            // Top bar: left-aligned selects (sport + acara) and right-aligned search + pager controls
             var $topBar = $('<div class="details-top-controls mb-2"></div>');
-            var $select = $('<select class="form-select form-select-sm details-select me-2"><option value="">Semua Sukan</option></select>');
+            var $select = $('<select class="form-select form-select-sm details-select select-sukan"><option value="">Semua Sukan</option></select>');
+            var $selectAcara = $('<select class="form-select form-select-sm details-select select-acara"><option value="">Semua Acara</option></select>');
+            // disable acara until categories are loaded and populated for chosen sport
+            $selectAcara.prop('disabled', true);
             var $search = $('<input type="search" class="form-control form-control-sm details-search" placeholder="Cari peserta...">');
-            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize ms-2"><option value="5" selected>5</option><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
-            var $controls = $('<div class="d-flex align-items-center"></div>').append($search).append($pageSizeSel);
-            $topBar.append($controls).append($select);
+            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5" selected>5</option><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
+            // left and right control groups
+            var $leftControls = $('<div class="left-controls"></div>').append($select).append($selectAcara);
+            var $rightControls = $('<div class="right-controls"></div>').append($search).append($pageSizeSel);
+            $topBar.append($leftControls).append($rightControls);
 
             var $table = $('<table class="table table-sm table-striped mb-0"><colgroup>' +
                 '<col style="width:3%"></col>' +
@@ -214,9 +242,12 @@ ob_start();
                 '<th>Pasukan</th>' +
                 '<th>Acara</th>' +
                 '</tr></thead><tbody></tbody></table>');
-            var $pagerWrap = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>');
-            var $summary = $('<div class="text-muted small details-summary"></div>');
+            var $summary = $('<div class="text-muted small details-summary me-2"></div>');
             var $pager = $('<nav aria-label="Page navigation"><ul class="pagination pagination-sm mb-0"></ul></nav>');
+            // keep search + pagesize in top-right; summary + pager sit below the table
+            $rightControls.append($search).append($pageSizeSel);
+
+            var $pagerWrap = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>');
             $pagerWrap.append($summary).append($pager);
 
             $container.append($topBar).append($table).append($pagerWrap);
@@ -229,10 +260,77 @@ ob_start();
             (res.jurulatih||[]).forEach(function(r){ r._role='Jurulatih'; rows.push(r); });
             (res.atlet||[]).forEach(function(r){ r._role='Atlet'; rows.push(r); });
 
-            // Populate sport select
+            // Populate sport select and acara select
             var map = {};
-            ['atlet','pengurus','jurulatih'].forEach(function(k){ (res[k]||[]).forEach(function(r){ var id = r.sukan_id || ''; var name = r.nama_sukan || ('Sukan ' + id); if (id && !map[id]) map[id]=name; }); });
+            var mapAcara = {};
+            // sport -> acara mapping for dependent dropdown
+            var mapBySport = {};
+            ['atlet','pengurus','jurulatih'].forEach(function(k){
+                (res[k]||[]).forEach(function(r){
+                    var id = r.sukan_id || '';
+                    var name = r.nama_sukan || ('Sukan ' + id);
+                    if (id && !map[id]) map[id]=name;
+
+                    var aid = r.kategori_id || r.id_kategori || r.kategori || r.event_id || r.acara_id || '';
+                    var aname = r.nama_kategori || r.nama_acara || r.acara || r.event_name || r.kategori || (aid?('Acara '+aid):'');
+                    if (aid){ if(!mapAcara[aid]) mapAcara[aid]=aname; }
+                    else { if(aname && !mapAcara[aname]) mapAcara[aname]=aname; }
+
+                    // populate mapBySport
+                    if (id){
+                        if (!mapBySport[id]) mapBySport[id] = {};
+                        var key = aid || aname || '';
+                        if (key && !mapBySport[id][key]) mapBySport[id][key] = aname || key;
+                    }
+                });
+            });
             Object.keys(map).forEach(function(id){ $select.append($('<option>').val(id).text(map[id])); });
+
+            // function to populate acara options filtered by sport id (or all when empty)
+            function populateAcaraOptionsForSport(sportId){
+                $selectAcara.empty();
+                $selectAcara.append($('<option>').val('').text('Semua Acara'));
+                var added = 0;
+                if(!sportId){
+                    // no sport selected: keep disabled and do not list all acara
+                    $selectAcara.prop('disabled', true);
+                    return;
+                }
+                var m = mapBySport[sportId] || {};
+                Object.keys(m).forEach(function(aid){ $selectAcara.append($('<option>').val(aid).text(m[aid])); added++; });
+                if(added === 0){
+                    // no acara for this sport
+                    $selectAcara.prop('disabled', true);
+                } else {
+                    $selectAcara.prop('disabled', false);
+                }
+            }
+
+            // Load canonical acara list from server (table_kategori) and build mapBySport
+            $.ajax({ url: '<?php echo url('ajax/kategori_list.php'); ?>', dataType: 'json' }).done(function(kres){
+                if (kres && kres.success && Array.isArray(kres.data)){
+                    mapAcara = {};
+                    mapBySport = {};
+                    kres.data.forEach(function(row){
+                        var aid = row.id;
+                        var sid = row.sukan_id;
+                        var aname = row.nama_kategori || row.nama_acara || row.kod_kategori || ('Acara '+aid);
+                        if (aid) mapAcara[aid] = aname;
+                        if (sid){ mapBySport[sid] = mapBySport[sid] || {}; mapBySport[sid][aid] = aname; }
+                    });
+                } else {
+                    // if server returns no categories, try to build mapBySport from participant-derived mapBySport
+                    // mapBySport may already be populated from participants above
+                }
+                // initialize acara options filtered by currently selected sport (if any)
+                populateAcaraOptionsForSport($select.val() || '');
+                // now render page
+                renderPage();
+            }).fail(function(){
+                // fallback: use participant-derived mapBySport
+                populateAcaraOptionsForSport($select.val() || '');
+                renderPage();
+            });
 
             var $tbody = $table.find('tbody');
             var pageSize = parseInt($pageSizeSel.val(),10) || 5;
@@ -240,14 +338,56 @@ ob_start();
 
             function applyFilters(){
                 var sportFilter = $select.val() || '';
+                var acaraFilter = $selectAcara.val() || '';
                 var q = ($search.val()||'').trim().toLowerCase();
-                var filtered = rows.filter(function(r){
-                    if (sportFilter && String(r.sukan_id) !== String(sportFilter)) return false;
+
+                // Helper to match name/search
+                function matchesSearch(r){
                     var name = (r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '').toString().toLowerCase();
                     if (q && name.indexOf(q) === -1) return false;
                     return true;
+                }
+
+                // Managers and coaches (always appear first when acara is selected)
+                var managers = rows.filter(function(r){
+                    var role = (r._role||'').toString();
+                    if (role !== 'Pengurus' && role !== 'Jurulatih') return false;
+                    // Apply sport filter if present
+                    if (sportFilter && String(r.sukan_id) !== String(sportFilter)) return false;
+                    // Always include managers/jurulatih even when acaraFilter is set (but respect search)
+                    return matchesSearch(r);
                 });
-                return filtered;
+
+                // Athletes: apply sport + acara + search filters
+                var athletes = rows.filter(function(r){
+                    var role = (r._role||'').toString();
+                    if (role !== 'Atlet') return false;
+                    if (sportFilter && String(r.sukan_id) !== String(sportFilter)) return false;
+                    if (acaraFilter){
+                        var rid = r.kategori_id || r.id_kategori || r.kategori || r.event_id || r.acara_id || '';
+                        var rname = r.nama_kategori || r.nama_acara || r.acara || r.event_name || r.kategori || '';
+                        if (String(rid) !== String(acaraFilter) && String(rname) !== String(acaraFilter)) return false;
+                    }
+                    return matchesSearch(r);
+                });
+
+                // If no acara selected, keep original intended order: Pengurus, Jurulatih, Atlet
+                if (!acaraFilter){
+                    var ordered = [];
+                    // push Pengurus then Jurulatih from managers (managers contains both)
+                    managers.filter(function(m){ return (m._role||'') === 'Pengurus'; }).forEach(function(m){ ordered.push(m); });
+                    managers.filter(function(m){ return (m._role||'') === 'Jurulatih'; }).forEach(function(m){ ordered.push(m); });
+                    // then athletes (already filtered)
+                    athletes.forEach(function(a){ ordered.push(a); });
+                    return ordered;
+                }
+
+                // When acara is selected, ensure Pengurus & Jurulatih (matching search/sport) display first, then athletes for that acara
+                var orderedWhenAcara = [];
+                managers.filter(function(m){ return (m._role||'') === 'Pengurus'; }).forEach(function(m){ orderedWhenAcara.push(m); });
+                managers.filter(function(m){ return (m._role||'') === 'Jurulatih'; }).forEach(function(m){ orderedWhenAcara.push(m); });
+                athletes.forEach(function(a){ orderedWhenAcara.push(a); });
+                return orderedWhenAcara;
             }
 
             function renderPage(){
@@ -266,7 +406,11 @@ ob_start();
                     var matrik = r.no_matrik || r.matrik || r.no_matrik || '';
                     var role = r._role || '';
                     var sport = r.nama_sukan || ('Sukan ' + (r.sukan_id || ''));
+                    // For Pengurus and Jurulatih, always show 'Tiada' for Acara (use empty value so badge is rendered)
                     var acara = r.nama_acara || r.nama_kategori || r.kategori || r.acara || r.event_name || r.nama_event || '';
+                    if ((role||'').toString().toLowerCase() === 'pengurus' || (role||'').toString().toLowerCase() === 'jurulatih') {
+                        acara = '';
+                    }
                     var team = r.nama_pasukan || '';
                     var $r = $('<tr>');
                     var roleClass = 'role-' + (role||'').toString().toLowerCase();
@@ -311,7 +455,14 @@ ob_start();
             }
 
             // Handlers
-            $select.on('change', function(){ currentPage = 1; renderPage(); });
+            $select.on('change', function(){
+                // repopulate acara options for the selected sport and reset acara selection
+                var sv = $(this).val() || '';
+                populateAcaraOptionsForSport(sv);
+                $selectAcara.val('');
+                currentPage = 1; renderPage();
+            });
+            $selectAcara.on('change', function(){ currentPage = 1; renderPage(); });
             $search.on('input', function(){ currentPage = 1; renderPage(); });
             $pageSizeSel.on('change', function(){ pageSize = parseInt($(this).val(),10) || 5; currentPage = 1; renderPage(); });
             $pager.on('click', 'a.page-link', function(e){ e.preventDefault(); var p = $(this).data('page'); if (!p) return; currentPage = parseInt(p,10)||1; renderPage(); });

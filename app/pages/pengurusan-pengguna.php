@@ -1,0 +1,394 @@
+<?php
+/**
+ * Pengurusan Pengguna (admin-only)
+ * Copied from venues.php initially
+ */
+require_once __DIR__ . '/../config.php';
+
+$page_title = 'Pengurusan Pengguna';
+
+ob_start();
+?>
+<div class="w-100 px-3">
+    <!-- Hero -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-light border-0 shadow-sm overflow-hidden">
+                <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+                    <div>
+                        <h2 class="mb-1">Pengurusan Pengguna</h2>
+                        <p class="text-muted mb-0">Urus akaun pengguna sistem</p>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-none d-md-flex">
+                            <div class="me-3 text-center">
+                                <div class="h5 mb-0">0</div>
+                                <div class="small text-muted">Pengguna</div>
+                            </div>
+                        </div>
+
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary">Laporan</button>
+                            <button class="btn btn-primary" onclick="showAddUser()">
+                                <i class="cil cil-plus me-1"></i> Tambah Pengguna Baru
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Senarai Pengguna</strong>
+                        <div class="small text-muted">Urus semua akaun pengguna</div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="input-group input-group-sm" style="min-width:260px;">
+                            <span class="input-group-text"><i class="cil cil-magnifying-glass"></i></span>
+                            <input type="search" class="form-control" id="usersSearch" placeholder="Cari nama atau emel...">
+                        </div>
+                        <select id="usersPageSizeTopSelect" class="form-select form-select-sm ms-2" style="width: auto;">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col" style="width:70px;">#</th>
+                                    <th scope="col">Nama</th>
+                                    <th scope="col">E-mel</th>
+                                    <th scope="col">Peranan</th>
+                                    <th scope="col">Kontinjen</th>
+                                    <th scope="col" style="width:120px;">Status</th>
+                                    <th scope="col" style="width:160px;">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-5">
+                                        <i class="cil cil-user" style="font-size: 2rem;"></i>
+                                        <p class="mt-2">Tiada pengguna didaftarkan.</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between mt-2">
+                        <div id="usersPagingInfo" class="small text-muted"></div>
+                        <div id="usersPagination" class="ms-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php
+$content = ob_get_clean();
+require_once __DIR__ . '/../includes/layout.php';
+?>
+
+<!-- Add User Modal (placeholder) -->
+<style>
+/* Scoped styles similar to venues modal */
+#addUserModal { z-index: 1060 !important; }
+.modal-backdrop { z-index: 1050 !important; }
+#addUserModal .modal-dialog { max-width: 900px; }
+</style>
+
+<div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalTitle">Tambah Pengguna Baru</h5>
+                <button type="button" class="btn-close" aria-label="Close" onclick="closeAddUserModal()"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="userId" name="id" value="">
+                    <!-- username removed; login uses email now -->
+                    <div class="mb-3">
+                        <label for="userName" class="form-label">Nama Penuh</label>
+                        <input type="text" id="userName" name="full_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userEmail" class="form-label">E-mel</label>
+                        <input type="email" id="userEmail" name="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userPassword" class="form-label">Kata Laluan (tinggalkan kosong jika tidak mahu tukar)</label>
+                        <input type="password" id="userPassword" name="password" class="form-control">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="userRole" class="form-label">Peranan</label>
+                            <select id="userRole" name="role" class="form-select">
+                                <option value="ADMIN">ADMIN</option>
+                                <option value="ORGANIZER">ORGANIZER</option>
+                                <option value="CONTINGENT">CONTINGENT</option>
+                                <option value="JUDGE">JUDGE</option>
+                                <option value="VIEWER">VIEWER</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="userStatus" class="form-label">Status</label>
+                            <select id="userStatus" name="status" class="form-select">
+                                <option value="active">active</option>
+                                <option value="inactive">inactive</option>
+                                <option value="suspended">suspended</option>
+                                <option value="pending">pending</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userPhone" class="form-label">Telefon</label>
+                        <input type="text" id="userPhone" name="phone" class="form-control">
+                    </div>
+                    <div class="mb-3" id="kontinjenFieldWrapper">
+                        <label for="userKontinjen" class="form-label">Kontinjen</label>
+                        <select id="userKontinjen" name="kontinjen_id" class="form-select">
+                            <option value="">-- Tiada --</option>
+                        </select>
+                        <div class="form-text">Jika peranan dipilih <strong>CONTINGENT</strong>, pilihan ini wajib diisi.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeAddUserModal()">Batal</button>
+                <button type="button" class="btn btn-primary" id="saveUserBtn">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Users list JS: fetch from server and render with search/pagination
+let usersData = [];
+let usersFiltered = [];
+let usersCurrentPage = 1;
+let usersPageSize = 10;
+
+function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+
+function setUsersPageSize(s){ usersPageSize = parseInt(s)||10; usersCurrentPage=1; renderUsersPage(); }
+
+function goToUsersPage(page){ const totalPages = Math.max(1, Math.ceil(usersFiltered.length / usersPageSize)); usersCurrentPage = Math.min(Math.max(1, parseInt(page)||1), totalPages); renderUsersPage(); }
+
+function applyUsersFilter(q){ const ql = (q||'').toString().trim().toLowerCase(); if(!ql) usersFiltered = usersData.slice(); else usersFiltered = usersData.filter(u => { const name = (u.full_name||'').toString().toLowerCase(); const email = (u.email||'').toString().toLowerCase(); const role = (u.role||'').toString().toLowerCase(); return name.includes(ql) || email.includes(ql) || role.includes(ql); }); usersCurrentPage=1; }
+
+function renderUsersPage(){
+    const tbody = document.getElementById('usersTableBody'); if(!tbody) return;
+    const total = usersFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / usersPageSize));
+    if(usersCurrentPage>totalPages) usersCurrentPage = totalPages;
+    const start = (usersCurrentPage - 1) * usersPageSize;
+    const end = Math.min(total, start + usersPageSize);
+    if(total === 0){
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="cil cil-user" style="font-size: 2rem;"></i><p class="mt-2">Tiada pengguna ditemui.</p></td></tr>';
+    } else {
+        let html='';
+        const pageItems = usersFiltered.slice(start,end);
+        pageItems.forEach((u,i)=>{
+            const idx = start + i + 1;
+            const statusBadge = (u.status==='active')? '<span class="badge bg-success">Aktif</span>': '<span class="badge bg-secondary">'+escapeHtml(u.status||'')+'</span>';
+            const kontShort = (u.kontinjen_short && u.kontinjen_short.trim()!=='') ? u.kontinjen_short : (u.kontinjen_id ? ('#'+u.kontinjen_id) : '-');
+            html += '<tr>';
+            html += '<td>'+idx+'</td>';
+            html += '<td>'+escapeHtml(u.full_name||u.username||'-')+'</td>';
+            html += '<td>'+escapeHtml(u.email||'-')+'</td>';
+            html += '<td>'+escapeHtml(u.role||'-')+'</td>';
+            html += '<td>'+escapeHtml(kontShort)+'</td>';
+            html += '<td>'+statusBadge+'</td>';
+            html += '<td>';
+            html += '<a href="#" class="btn btn-sm btn-outline-primary edit-user me-1" data-id="'+(u.id||0)+'"> <i class="fa fa-edit"></i></a>';
+            html += '<a href="#" class="btn btn-sm btn-outline-danger delete-user" data-id="'+(u.id||0)+'"> <i class="fa fa-trash"></i></a>';
+            html += '</td>';
+            html += '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+    // Update paging info and controls
+    const infoEl = document.getElementById('usersPagingInfo'); if(infoEl){ if(total===0) infoEl.textContent = ''; else infoEl.textContent = 'Memaparkan ' + (start+1) + '–' + end + ' daripada ' + total; }
+    renderUsersPaginationControls(total, usersCurrentPage, usersPageSize);
+}
+
+function renderUsersPaginationControls(totalItems, currentPage, pageSize){ const container = document.getElementById('usersPagination'); if(!container) return; const totalPages = Math.max(1, Math.ceil(totalItems / pageSize)); let html = '<nav aria-label="users-pagination"><ul class="pagination pagination-sm mb-0">'; const prevDisabled = (currentPage<=1)?' disabled':''; html += '<li class="page-item'+prevDisabled+'"><a class="page-link" href="#" data-page="'+(currentPage-1)+'">‹</a></li>'; const maxButtons = 5; let startPage = Math.max(1, currentPage - Math.floor(maxButtons/2)); let endPage = Math.min(totalPages, startPage + maxButtons -1); if(endPage - startPage < maxButtons -1) startPage = Math.max(1, endPage - maxButtons +1); for(let p=startPage;p<=endPage;p++){ const active = (p===currentPage)?' active':''; html += '<li class="page-item'+active+'"><a class="page-link" href="#" data-page="'+p+'">'+p+'</a></li>'; } const nextDisabled = (currentPage>=totalPages)?' disabled':''; html += '<li class="page-item'+nextDisabled+'"><a class="page-link" href="#" data-page="'+(currentPage+1)+'">›</a></li>'; html += '</ul></nav>'; container.innerHTML = html; // wire links
+    container.querySelectorAll('.page-link').forEach(a=>{ a.addEventListener('click', function(e){ e.preventDefault(); const p = parseInt(this.getAttribute('data-page'))||1; goToUsersPage(p); }); });
+}
+
+function loadUsers(){ const tbody = document.getElementById('usersTableBody'); if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Memuatkan...</td></tr>'; fetch('<?php echo url('ajax/users_list.php'); ?>', { credentials: 'same-origin', headers: { 'Accept':'application/json'} }).then(r=>r.json()).then(json=>{ if(json && json.success){ usersData = json.data || []; usersFiltered = usersData.slice(); usersCurrentPage = 1; renderUsersPage(); } else { if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Ralat memuatkan data.</td></tr>'; } }).catch(err=>{ if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Ralat sambungan.</td></tr>'; }); }
+
+document.addEventListener('DOMContentLoaded', function(){ // wire search & page size
+    const search = document.getElementById('usersSearch'); if(search){ search.addEventListener('input', function(){ applyUsersFilter(this.value); renderUsersPage(); }); }
+    const ps = document.getElementById('usersPageSizeTopSelect'); if(ps){ ps.addEventListener('change', function(){ setUsersPageSize(this.value); }); }
+
+    // delegate edit/delete
+    document.addEventListener('click', function(e){
+        const editBtn = e.target.closest && e.target.closest('.edit-user');
+        if(editBtn){
+            e.preventDefault();
+            const id = editBtn.getAttribute('data-id');
+            if(!id) return;
+            // fetch user and populate form with robust error handling
+            fetch('<?php echo url('ajax/users_get.php'); ?>?id='+encodeURIComponent(id), { credentials: 'same-origin', headers: { 'Accept':'application/json' } })
+                .then(async (r) => {
+                    if (!r.ok) {
+                        const txt = await r.text().catch(()=>'(no body)');
+                        console.error('users_get error', r.status, txt);
+                        alert('Ralat memuatkan pengguna: ' + r.status);
+                        return null;
+                    }
+                    try {
+                        return await r.json();
+                    } catch (ex) {
+                        const txt = await r.text().catch(()=>'(no body)');
+                        console.error('users_get invalid json', ex, txt);
+                        alert('Ralat memproses jawapan dari server');
+                        return null;
+                    }
+                })
+                .then(j => {
+                    if (!j) return;
+                    if (j && j.success && j.data) {
+                        const u = j.data;
+                        document.getElementById('userId').value = u.id || '';
+                        document.getElementById('userName').value = u.full_name || '';
+                        document.getElementById('userEmail').value = u.email || '';
+                        document.getElementById('userPassword').value = '';
+                        document.getElementById('userRole').value = u.role || 'VIEWER';
+                        document.getElementById('userStatus').value = u.status || 'pending';
+                        document.getElementById('userPhone').value = u.phone || '';
+                        // ensure kontinjen options loaded then set, then show modal for edit (don't reset form)
+                        loadKontinjenOptions().then(()=>{
+                            const sel = document.getElementById('userKontinjen'); if(sel){ sel.value = u.kontinjen_id || ''; }
+                            applyRoleRequirement();
+                            // set modal title for edit then open modal for editing without resetting
+                            const titleEl = document.getElementById('userModalTitle'); if(titleEl) titleEl.textContent = 'Kemaskin Pengguna Baru';
+                            showAddUser(false);
+                        });
+                    } else {
+                        alert((j && j.message) || 'Ralat memuatkan pengguna');
+                    }
+                })
+                .catch(err => { console.error('users_get fetch failed', err); alert('Ralat sambungan.'); });
+        }
+
+        const delBtn = e.target.closest && e.target.closest('.delete-user');
+        if(delBtn){
+            e.preventDefault();
+            const id = delBtn.getAttribute('data-id'); if(!id) return; if(!confirm('Padam pengguna ini?')) return;
+            fetch('<?php echo url('ajax/users_delete.php'); ?>', { method:'POST', credentials:'same-origin', headers:{ 'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded' }, body: 'id='+encodeURIComponent(id) }).then(r=>r.json()).then(j=>{ if(j && j.success){ loadUsers(); } else { alert((j && j.message) || 'Ralat memadam.'); } }).catch(()=>{ alert('Ralat sambungan.'); });
+        }
+    });
+
+    loadUsers();
+
+    // Save handler with client-side required enforcement for CONTINGENT
+    const saveBtn = document.getElementById('saveUserBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function(e){
+            e.preventDefault();
+            const form = document.getElementById('userForm');
+            if (!form) return;
+            // client-side enforcement: if role == CONTINGENT, kontinjen must be set
+            const roleVal = document.getElementById('userRole').value;
+            const kontinjenSel = document.getElementById('userKontinjen');
+            if(roleVal === 'CONTINGENT'){
+                if(!kontinjenSel || !kontinjenSel.value){ alert('Sila pilih Kontinjen untuk peranan CONTINGENT'); return; }
+            }
+            const fd = new FormData(form);
+            // POST as urlencoded
+            const body = new URLSearchParams();
+            for (const pair of fd.entries()) { body.append(pair[0], pair[1]); }
+            fetch('<?php echo url('ajax/users_save.php'); ?>', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            }).then(r=>r.json()).then(j=>{
+                if (j && j.success) {
+                    closeAddUserModal();
+                    loadUsers();
+                } else {
+                    alert((j && j.message) || 'Ralat menyimpan pengguna');
+                }
+            }).catch(()=>{ alert('Ralat sambungan.'); });
+        });
+    }
+
+    // role change: toggle kontinuen requirement (applies to global function defined below)
+    const roleSel = document.getElementById('userRole');
+    if(roleSel){ roleSel.addEventListener('change', applyRoleRequirement); }
+
+    // ensure options loaded on page load and hide wrapper by default (will call global loader)
+    if (typeof loadKontinjenOptions === 'function') {
+        loadKontinjenOptions().then(()=>{ if (typeof applyRoleRequirement === 'function') applyRoleRequirement(); });
+    }
+});
+
+// stub functions for modal
+function showAddUser(reset){
+    // reset form for new user only when reset is true or undefined
+    const shouldReset = (typeof reset === 'undefined') ? true : !!reset;
+    const form = document.getElementById('userForm');
+    if(shouldReset && form){ form.reset(); document.getElementById('userId').value = ''; const titleEl = document.getElementById('userModalTitle'); if(titleEl) titleEl.textContent = 'Tambah Pengguna Baru'; }
+    if (typeof loadKontinjenOptions === 'function') loadKontinjenOptions().then(()=>{ if (typeof applyRoleRequirement === 'function') applyRoleRequirement(); });
+    const modal=document.getElementById('addUserModal');
+    if(modal){
+        // Prefer Bootstrap Modal API if present
+        try{
+            if (window.bootstrap && bootstrap.Modal){
+                let inst = bootstrap.Modal.getInstance(modal) || new bootstrap.Modal(modal);
+                inst.show();
+                return;
+            }
+        }catch(e){ console.warn('bootstrap modal show failed', e); }
+        // fallback: add classes and display
+        modal.classList.add('show');
+        modal.style.display = 'block';
+        // add backdrop if not present
+        if (!document.querySelector('.modal-backdrop')){
+            const bd = document.createElement('div'); bd.className = 'modal-backdrop fade show'; document.body.appendChild(bd);
+        }
+    }
+}
+// alias for backward compatibility with older callers
+function showAddUserModal(){ showAddUser(); }
+function closeAddUserModal(){ const modal=document.getElementById('addUserModal'); if(!modal) return; try{ if(window.bootstrap && bootstrap.Modal){ let inst = bootstrap.Modal.getInstance(modal); if(inst){ inst.hide(); return; } } }catch(e){ console.warn('bootstrap modal hide failed', e); }
+    modal.classList.remove('show'); modal.style.display='none'; const bd = document.querySelector('.modal-backdrop'); if(bd) bd.parentNode.removeChild(bd);
+}
+function submitUser(){ alert('Simpan pengguna - belum diimplementasi'); }
+</script>
+
+<script>
+// Global kontinjen helpers (must be global so modal/open flows can call them)
+let kontinjenLoaded = false;
+function applyRoleRequirement(){ const rEl = document.getElementById('userRole'); const r = rEl ? rEl.value : null; const wrapper = document.getElementById('kontinjenFieldWrapper'); const sel = document.getElementById('userKontinjen'); if(r === 'CONTINGENT'){ if(wrapper) wrapper.style.display='block'; if(sel) sel.setAttribute('required','required'); } else { if(sel) sel.removeAttribute('required'); if(wrapper) wrapper.style.display='none'; } }
+
+function loadKontinjenOptions(){
+    return new Promise((resolve, reject)=>{
+        if(kontinjenLoaded){ resolve(); return; }
+        fetch('<?php echo url('ajax/kontinjen_list.php'); ?>', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
+            .then(r=>r.json()).then(j=>{
+                const sel = document.getElementById('userKontinjen'); if(!sel){ kontinjenLoaded = true; resolve(); return; }
+                sel.innerHTML = '<option value="">-- Tiada --</option>';
+                if(j && j.success && Array.isArray(j.data)){
+                    j.data.forEach(c=>{ const opt = document.createElement('option'); opt.value = c.id; opt.textContent = (c.nama_universiti || c.kod_universiti || c.name || ('Kontinjen '+c.id)); sel.appendChild(opt); });
+                }
+                kontinjenLoaded = true; resolve();
+            }).catch(err=>{ kontinjenLoaded = true; resolve(); });
+    });
+}
+</script>

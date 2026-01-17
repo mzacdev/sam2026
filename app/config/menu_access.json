@@ -6,10 +6,11 @@
     "auth/logout.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
 
     "pages/contingent.php": ["ADMIN", "ORGANIZER"],
-    "pages/contingent-user.php": ["ADMIN", "ORGANIZER", "CONTINGENT"],
+    "pages/contingent-user.php": ["CONTINGENT"],
 
     "pages/sports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
     "pages/pasukan.php": ["ADMIN", "ORGANIZER", "JUDGE"],
+    "pages/pengurusan-pengguna.php": ["ADMIN"],
     "pages/athletes.php": ["ADMIN", "ORGANIZER", "JUDGE"],
     "pages/venues.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
     "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
