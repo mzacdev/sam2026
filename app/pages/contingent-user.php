@@ -164,6 +164,11 @@ ob_start();
 }
 /* Soft red badge for empty values */
 .no-data-badge{display:inline-block;padding:0.18rem 0.45rem;border-radius:0.35rem;background:#fdecea;color:#842029;font-size:0.8rem}
+
+/* Force single-line rows inside details table and enable truncation */
+.details-row .table{table-layout:fixed;width:100%}
+.details-row .table th,.details-row .table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.details-row .p-3{overflow:auto}
 </style>
 
 <script>
@@ -190,18 +195,29 @@ ob_start();
             var $controls = $('<div class="d-flex align-items-center"></div>').append($search).append($pageSizeSel);
             $topBar.append($controls).append($select);
 
-            var $table = $('<table class="table table-sm table-striped mb-0"><thead><tr>' +
-                '<th style="width:3%">#</th>' +
-                '<th style="width:32%">Nama</th>' +
-                '<th style="width:15%">No Kad Pengenalan</th>' +
-                '<th style="width:10%">No Matrik</th>' +
-                '<th style="width:10%">Peranan</th>' +
-                '<th style="width:10%">Sukan</th>' +
-                '<th style="width:20%">Pasukan</th>' +
+            var $table = $('<table class="table table-sm table-striped mb-0"><colgroup>' +
+                '<col style="width:3%"></col>' +
+                '<col style="width:22%"></col>' +
+                '<col style="width:12%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:20%"></col>' +
+                '</colgroup><thead><tr>' +
+                '<th>#</th>' +
+                '<th>Nama</th>' +
+                '<th>No Kad Pengenalan</th>' +
+                '<th>No Matrik</th>' +
+                '<th>Peranan</th>' +
+                '<th>Sukan</th>' +
+                '<th>Pasukan</th>' +
+                '<th>Acara</th>' +
                 '</tr></thead><tbody></tbody></table>');
-            var $pagerWrap = $('<div class="d-flex justify-content-end align-items-center mt-2"></div>');
+            var $pagerWrap = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>');
+            var $summary = $('<div class="text-muted small details-summary"></div>');
             var $pager = $('<nav aria-label="Page navigation"><ul class="pagination pagination-sm mb-0"></ul></nav>');
-            $pagerWrap.append($pager);
+            $pagerWrap.append($summary).append($pager);
 
             $container.append($topBar).append($table).append($pagerWrap);
             $detail.find('td').append($container);
@@ -242,7 +258,7 @@ ob_start();
                 var start = (currentPage - 1) * pageSize;
                 var end = start + pageSize;
                 $tbody.empty();
-                if (total === 0) { $tbody.append('<tr><td colspan="7">Tiada peserta untuk penapisan ini.</td></tr>'); }
+                if (total === 0) { $tbody.append('<tr><td colspan="8">Tiada peserta untuk penapisan ini.</td></tr>'); }
                 var pageRows = filtered.slice(start, end);
                 pageRows.forEach(function(r, idx){
                     var name = r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '';
@@ -250,11 +266,18 @@ ob_start();
                     var matrik = r.no_matrik || r.matrik || r.no_matrik || '';
                     var role = r._role || '';
                     var sport = r.nama_sukan || ('Sukan ' + (r.sukan_id || ''));
+                    var acara = r.nama_acara || r.nama_kategori || r.kategori || r.acara || r.event_name || r.nama_event || '';
                     var team = r.nama_pasukan || '';
                     var $r = $('<tr>');
                     var roleClass = 'role-' + (role||'').toString().toLowerCase();
                     $r.addClass(roleClass);
-                    function cell(val){ if (val === null || val === undefined || String(val).trim() === '') { return $('<td>').append($('<span>').addClass('no-data-badge').text('Tiada')); } return $('<td>').text(val); }
+                    function cell(val){
+                        if (val === null || val === undefined || String(val).trim() === '') {
+                            return $('<td>').append($('<span>').addClass('no-data-badge').text('Tiada'));
+                        }
+                        var display = String(val);
+                        return $('<td>').addClass('text-truncate').text(display).attr('title', display);
+                    }
                     $r.append(cell(start + idx + 1));
                     $r.append(cell(name));
                     $r.append(cell(nic));
@@ -262,6 +285,7 @@ ob_start();
                     $r.append(cell(role));
                     $r.append(cell(sport));
                     $r.append(cell(team));
+                    $r.append(cell(acara));
                     $tbody.append($r);
                 });
 
@@ -276,6 +300,14 @@ ob_start();
                 var startPage = Math.max(1, currentPage - 2); var endPage = Math.min(totalPages, startPage + 4);
                 for (var p = startPage; p <= endPage; p++){ $ul.append(createPageItem(p, p, false, p===currentPage)); }
                 $ul.append(createPageItem('»', Math.min(totalPages,currentPage+1), currentPage===totalPages, false));
+                // Update summary
+                var showingStart = total === 0 ? 0 : start + 1;
+                var showingEnd = Math.min(total, end);
+                if (total === 0) {
+                    $summary.text('Tiada data');
+                } else {
+                    $summary.text('Memaparkan ' + showingStart + '–' + showingEnd + ' daripada ' + total);
+                }
             }
 
             // Handlers

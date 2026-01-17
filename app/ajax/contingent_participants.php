@@ -41,16 +41,24 @@ try {
 
     // Fetch participants: athletes
     // Join `table_sukan` to include readable sport name where available.
-    $sqlAtlet = "SELECT pa.*, p.nama_pasukan, p.sukan_id, s.nama_sukan FROM table_pasukan_atlet pa
+    // Include category (acara) for athletes via table_kategori
+    $sqlAtlet = "SELECT pa.*, p.nama_pasukan, p.sukan_id, s.nama_sukan, kc.nama_kategori AS nama_kategori FROM table_pasukan_atlet pa
         JOIN table_pasukan p ON p.id = pa.pasukan_id
         LEFT JOIN table_sukan s ON s.id = p.sukan_id
+        LEFT JOIN table_kategori kc ON kc.id = pa.kategori_id
         WHERE " . $teamWhere . " AND pa.deleted_at IS NULL";
     $stmt = $pdo->prepare($sqlAtlet);
     $stmt->execute($params);
     $atlets = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch managers
-    $sqlPengurus = "SELECT pg.*, p.nama_pasukan, p.sukan_id, s.nama_sukan FROM table_pasukan_pengurus pg
+    // For pengurus/jurulatih there may not be a direct kategori_id on the team,
+    // so try to surface a representative nama_kategori via a subquery from athletes.
+    $sqlPengurus = "SELECT pg.*, p.nama_pasukan, p.sukan_id, s.nama_sukan,
+        (SELECT nama_kategori FROM table_kategori kc2 WHERE kc2.id = (
+            SELECT kategori_id FROM table_pasukan_atlet pa2 WHERE pa2.pasukan_id = p.id AND pa2.deleted_at IS NULL LIMIT 1
+        ) LIMIT 1) AS nama_kategori
+        FROM table_pasukan_pengurus pg
         JOIN table_pasukan p ON p.id = pg.pasukan_id
         LEFT JOIN table_sukan s ON s.id = p.sukan_id
         WHERE " . $teamWhere . " AND pg.deleted_at IS NULL";
@@ -59,7 +67,11 @@ try {
     $pengurus = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch coaches
-    $sqlJurulatih = "SELECT jr.*, p.nama_pasukan, p.sukan_id, s.nama_sukan FROM table_pasukan_jurulatih jr
+    $sqlJurulatih = "SELECT jr.*, p.nama_pasukan, p.sukan_id, s.nama_sukan,
+        (SELECT nama_kategori FROM table_kategori kc3 WHERE kc3.id = (
+            SELECT kategori_id FROM table_pasukan_atlet pa3 WHERE pa3.pasukan_id = p.id AND pa3.deleted_at IS NULL LIMIT 1
+        ) LIMIT 1) AS nama_kategori
+        FROM table_pasukan_jurulatih jr
         JOIN table_pasukan p ON p.id = jr.pasukan_id
         LEFT JOIN table_sukan s ON s.id = p.sukan_id
         WHERE " . $teamWhere . " AND jr.deleted_at IS NULL";

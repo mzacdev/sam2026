@@ -49,7 +49,8 @@ try {
     $stmt = $db->query($sql);
     $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
     foreach ($rows as $r) {
-        $participantCounts[(int)$r['kontinjen_id']] = (int)$r['jumlah_keseluruhan'];
+        // Store athlete-only counts (exclude pengurus and jurulatih)
+        $participantCounts[(int)$r['kontinjen_id']] = (int)$r['total_atlet'];
     }
 } catch (Exception $e) {
     error_log('[pasukan.php] participantCounts error: ' . $e->getMessage());
