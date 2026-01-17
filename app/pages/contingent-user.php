@@ -148,7 +148,7 @@ ob_start();
                                         </td>
                                         <td><?php echo htmlspecialchars($c['status_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-outline-primary contingent-view-btn" data-kid="<?php echo htmlspecialchars($c['id'], ENT_QUOTES, 'UTF-8'); ?>">Lihat</button>
+                                            <button class="btn btn-sm btn-outline-primary contingent-view-btn" data-kid="<?php echo htmlspecialchars($c['id'], ENT_QUOTES, 'UTF-8'); ?>">Show</button>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -217,7 +217,7 @@ ob_start();
             // disable acara until categories are loaded and populated for chosen sport
             $selectAcara.prop('disabled', true);
             var $search = $('<input type="search" class="form-control form-control-sm details-search" placeholder="Cari peserta...">');
-            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5" selected>5</option><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
+            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5">5</option><option value="10" selected>10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
             // left and right control groups
             var $leftControls = $('<div class="left-controls"></div>').append($select).append($selectAcara);
             var $rightControls = $('<div class="right-controls"></div>').append($search).append($pageSizeSel);
@@ -253,6 +253,8 @@ ob_start();
             $container.append($topBar).append($table).append($pagerWrap);
             $detail.find('td').append($container);
             $tr.after($detail);
+            // mark originating button as Hide
+            $tr.find('.contingent-view-btn').text('Hide');
 
             // Build row list: show Pengurus first, then Jurulatih, then Atlet
             var rows = [];
@@ -333,7 +335,7 @@ ob_start();
             });
 
             var $tbody = $table.find('tbody');
-            var pageSize = parseInt($pageSizeSel.val(),10) || 5;
+            var pageSize = parseInt($pageSizeSel.val(),10) || 10;
             var currentPage = 1;
 
             function applyFilters(){
@@ -478,9 +480,17 @@ ob_start();
             var kid = $btn.data('kid') || $tr.data('kontinjen');
             if (!kid) return;
             var $next = $tr.next();
-            if ($next.hasClass('details-row') && String($next.data('kid')) === String(kid)) { $next.remove(); return; }
+            // if its own details row is open, close it and reset label
+            if ($next.hasClass('details-row') && String($next.data('kid')) === String(kid)) { $next.remove(); $btn.text('Show'); return; }
+            // close any other open details and reset other buttons
             $('.details-row').remove();
-            fetchParticipants(kid).done(function(res){ if (res.status !== 'ok') { alert('Tiada data'); return; } renderDetailsRow($tr, res); }).fail(function(){ alert('Ralat memuatkan peserta'); });
+            $('.contingent-view-btn').text('Show');
+            fetchParticipants(kid).done(function(res){
+                if (res.status !== 'ok') { alert('Tiada data'); return; }
+                renderDetailsRow($tr, res);
+                // set this button to Hide after rendering
+                $tr.find('.contingent-view-btn').text('Hide');
+            }).fail(function(){ alert('Ralat memuatkan peserta'); });
         });
     });
 })();
