@@ -251,6 +251,10 @@ class ContingentModel {
             if ($status !== null) {
                 $where[] = "k.status = :status";
                 $bindings[':status'] = $status;
+                // If requesting active contingents, ensure the reference university is active as well
+                if ((int)$status === 1) {
+                    $where[] = "u.status = 1";
+                }
             }
             
             $whereClause = implode(' AND ', $where);

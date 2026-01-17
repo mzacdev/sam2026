@@ -11,10 +11,10 @@ header('Content-Type: application/json; charset=utf-8');
 
 try {
     $pdo = getDB();
-    $sql = "SELECT k.id, k.kod_universiti, COALESCE(u.nama_universiti, k.kod_universiti) AS nama_universiti
+        $sql = "SELECT k.id, k.kod_universiti, COALESCE(u.nama_universiti, k.kod_universiti) AS nama_universiti
             FROM table_kontinjen k
-            LEFT JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-            WHERE k.deleted_at IS NULL
+            INNER JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL AND u.status = 1
+            WHERE k.deleted_at IS NULL AND k.status = 1
             ORDER BY nama_universiti ASC";
     $stmt = $pdo->prepare($sql);
     $stmt->execute();

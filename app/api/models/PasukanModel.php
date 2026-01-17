@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../config/database.php';
 
 class PasukanModel {
     private $db;
+    private $stats = [];
     
     public function __construct() {
         $this->db = getDB();
@@ -20,6 +21,15 @@ class PasukanModel {
             } else {
                 $stmt = $this->db->query("\n                    SELECT \n                        COUNT(*) AS total,\n                        SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active,\n                        SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS inactive\n                    FROM table_pasukan\n                    WHERE deleted_at IS NULL\n                ");
             }
+
+            // store stats result for later use
+            try {
+                $this->stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            } catch (Exception $e) {
+                $this->stats = [];
+            }
+
+    }
 
     /**
      * Helper: get session kontingen_id (if available)
