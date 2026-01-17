@@ -9,6 +9,7 @@ $iconMap = [
     'cil-star' => 'ti-star',
     'cil-chart' => 'ti-bar-chart',
     'cil-settings' => 'ti-settings',
+    'cil-id-card' => 'ti-id-badge',
 ];
 
 // Get current user and RBAC if authenticated (layout.php may already provide this)

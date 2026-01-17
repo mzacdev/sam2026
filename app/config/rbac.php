@@ -54,6 +54,7 @@ class RBAC {
         // Settings - ADMIN only
         'pages/settings.php' => ['ADMIN'],
         'pages/university.php' => ['ADMIN'],
+        'pages/ic_audit.php' => ['ADMIN'],
         
         // Users management - ADMIN only
         'pages/users.php' => ['ADMIN'],

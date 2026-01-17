@@ -150,6 +150,7 @@ $nav_sections = [
             ['title' => 'General', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
             ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/university.php'],
             ['title' => 'Pengguna', 'icon' => 'cil-user', 'url' => 'pages/pengurusan-pengguna.php'],
+            ['title' => 'Audit MyKad', 'icon' => 'cil-id-card', 'url' => 'pages/ic_audit.php'],
         ],
     ],
 ];
