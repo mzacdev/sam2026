@@ -18,6 +18,7 @@
     "pages/reports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
 
     "pages/settings.php": ["ADMIN"],
+    "pages/ic_audit.php": ["ADMIN"],
     "pages/users.php": ["ADMIN"],
     "pages/university.php": ["ADMIN"]
   }

@@ -48,7 +48,18 @@ try {
     $row = $db->query("SELECT COUNT(*) AS c FROM table_ref_venues WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
     $summary['venues'] = (int)($row['c'] ?? 0);
 
-    $row = $db->query("SELECT COUNT(*) AS c FROM table_pasukan_atlet WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
+    // Count distinct athletes (MyKad) only from active universities; ignore deleted/non-athlete roles
+    $sqlAtlet = "
+        SELECT COUNT(DISTINCT pa.no_kad_pengenalan) AS c
+        FROM table_pasukan_atlet pa
+        INNER JOIN table_pasukan p ON pa.pasukan_id = p.id AND p.deleted_at IS NULL AND p.status = 1
+        INNER JOIN table_kontinjen k ON p.kontinjen_id = k.id AND k.deleted_at IS NULL AND k.status = 1
+        INNER JOIN table_ref_universiti u ON k.kod_universiti = u.kod_universiti AND u.status = 1
+        WHERE pa.deleted_at IS NULL
+          AND pa.no_kad_pengenalan IS NOT NULL
+          AND pa.no_kad_pengenalan <> ''
+    ";
+    $row = $db->query($sqlAtlet)->fetch(PDO::FETCH_ASSOC);
     $summary['atlet'] = (int)($row['c'] ?? 0);
     $row = $db->query("SELECT COUNT(*) AS c FROM table_pasukan_pengurus WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
     $summary['pengurus'] = (int)($row['c'] ?? 0);
