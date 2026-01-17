@@ -16,6 +16,7 @@
     "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
     "pages/medal-tally.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
     "pages/reports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
+    "pages/ringkasan.php": ["ADMIN", "ORGANIZER"],
 
     "pages/settings.php": ["ADMIN"],
     "pages/ic_audit.php": ["ADMIN"],

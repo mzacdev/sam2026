@@ -117,10 +117,13 @@ $items = [];
 $counts = ['VALID'=>0,'CHECK'=>0,'INVALID'=>0];
 foreach ($rows as $row) {
     $res = validateMyKad($row['no_kad_pengenalan'] ?? '');
+    $isValid = ($res['status'] ?? '') === 'VALID';
+    $displayRaw = $isValid ? ($res['normalized'] ?? ($res['raw'] ?? '')) : ($res['raw'] ?? '');
     $items[] = [
         'id' => $row['id'] ?? null,
         'nama' => $row['nama'] ?? '-',
-        'raw' => $res['raw'] ?? '',
+        // Show cleaned IC for valid records, keep original for invalid
+        'raw' => $displayRaw,
         'normalized' => $res['normalized'] ?? '',
         'gender' => $res['gender'] ?? '-',
         'date_of_birth' => $res['date_of_birth'] ?? '-',

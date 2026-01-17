@@ -142,6 +142,7 @@ $nav_sections = [
         'title' => 'Laporan',
         'children' => [
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
+            ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
         ],
     ],
     [

@@ -200,8 +200,12 @@ ob_start();
     function whenJQ(cb){ if(window.jQuery){ cb(window.jQuery); } else { setTimeout(function(){ whenJQ(cb); }, 50); } }
 
     whenJQ(function($){
-        function fetchParticipants(kid, sukan_id){
-            return $.ajax({ url: '<?php echo url('ajax/contingent_participants.php'); ?>', data: { kontinjen_id: kid, sukan_id: sukan_id }, dataType: 'json' });
+        function fetchParticipants(kid, sukan_id, kategori_id){
+            return $.ajax({
+                url: '<?php echo url('ajax/contingent_participants.php'); ?>',
+                data: { kontinjen_id: kid, sukan_id: sukan_id, kategori_id: kategori_id },
+                dataType: 'json'
+            });
         }
 
         function renderDetailsRow($tr, res){
@@ -209,6 +213,8 @@ ob_start();
             var kid = $tr.data('kontinjen') || $tr.find('td').eq(0).text();
             var $detail = $('<tr class="details-row" data-kid="'+kid+'"><td colspan="'+colspan+'"></td></tr>');
             var $container = $('<div class="p-3 bg-light border rounded">');
+            var currentSport = '';
+            var currentAcara = '';
 
             // Top bar: left-aligned selects (sport + acara) and right-aligned search + pager controls
             var $topBar = $('<div class="details-top-controls mb-2"></div>');
@@ -256,11 +262,15 @@ ob_start();
             // mark originating button as Hide
             $tr.find('.contingent-view-btn').text('Hide');
 
-            // Build row list: show Pengurus first, then Jurulatih, then Atlet
-            var rows = [];
-            (res.pengurus||[]).forEach(function(r){ r._role='Pengurus'; rows.push(r); });
-            (res.jurulatih||[]).forEach(function(r){ r._role='Jurulatih'; rows.push(r); });
-            (res.atlet||[]).forEach(function(r){ r._role='Atlet'; rows.push(r); });
+            function buildRows(data){
+                var list = [];
+                (data.pengurus||[]).forEach(function(r){ r._role='Pengurus'; list.push(r); });
+                (data.jurulatih||[]).forEach(function(r){ r._role='Jurulatih'; list.push(r); });
+                (data.atlet||[]).forEach(function(r){ r._role='Atlet'; list.push(r); });
+                return list;
+            }
+
+            var rows = buildRows(res);
 
             // Populate sport select and acara select
             var map = {};
@@ -339,57 +349,49 @@ ob_start();
             var currentPage = 1;
 
             function applyFilters(){
-                var sportFilter = $select.val() || '';
-                var acaraFilter = $selectAcara.val() || '';
                 var q = ($search.val()||'').trim().toLowerCase();
 
-                // Helper to match name/search
                 function matchesSearch(r){
                     var name = (r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '').toString().toLowerCase();
                     if (q && name.indexOf(q) === -1) return false;
                     return true;
                 }
 
-                // Managers and coaches (always appear first when acara is selected)
                 var managers = rows.filter(function(r){
                     var role = (r._role||'').toString();
-                    if (role !== 'Pengurus' && role !== 'Jurulatih') return false;
-                    // Apply sport filter if present
-                    if (sportFilter && String(r.sukan_id) !== String(sportFilter)) return false;
-                    // Always include managers/jurulatih even when acaraFilter is set (but respect search)
-                    return matchesSearch(r);
+                    return (role === 'Pengurus' || role === 'Jurulatih') && matchesSearch(r);
                 });
 
-                // Athletes: apply sport + acara + search filters
                 var athletes = rows.filter(function(r){
-                    var role = (r._role||'').toString();
-                    if (role !== 'Atlet') return false;
-                    if (sportFilter && String(r.sukan_id) !== String(sportFilter)) return false;
-                    if (acaraFilter){
-                        var rid = r.kategori_id || r.id_kategori || r.kategori || r.event_id || r.acara_id || '';
-                        var rname = r.nama_kategori || r.nama_acara || r.acara || r.event_name || r.kategori || '';
-                        if (String(rid) !== String(acaraFilter) && String(rname) !== String(acaraFilter)) return false;
-                    }
-                    return matchesSearch(r);
+                    return (r._role||'') === 'Atlet' && matchesSearch(r);
                 });
 
-                // If no acara selected, keep original intended order: Pengurus, Jurulatih, Atlet
-                if (!acaraFilter){
-                    var ordered = [];
-                    // push Pengurus then Jurulatih from managers (managers contains both)
-                    managers.filter(function(m){ return (m._role||'') === 'Pengurus'; }).forEach(function(m){ ordered.push(m); });
-                    managers.filter(function(m){ return (m._role||'') === 'Jurulatih'; }).forEach(function(m){ ordered.push(m); });
-                    // then athletes (already filtered)
-                    athletes.forEach(function(a){ ordered.push(a); });
-                    return ordered;
-                }
+                var ordered = [];
+                managers.filter(function(m){ return (m._role||'') === 'Pengurus'; }).forEach(function(m){ ordered.push(m); });
+                managers.filter(function(m){ return (m._role||'') === 'Jurulatih'; }).forEach(function(m){ ordered.push(m); });
+                athletes.forEach(function(a){ ordered.push(a); });
+                return ordered;
+            }
 
-                // When acara is selected, ensure Pengurus & Jurulatih (matching search/sport) display first, then athletes for that acara
-                var orderedWhenAcara = [];
-                managers.filter(function(m){ return (m._role||'') === 'Pengurus'; }).forEach(function(m){ orderedWhenAcara.push(m); });
-                managers.filter(function(m){ return (m._role||'') === 'Jurulatih'; }).forEach(function(m){ orderedWhenAcara.push(m); });
-                athletes.forEach(function(a){ orderedWhenAcara.push(a); });
-                return orderedWhenAcara;
+            function genderFromMyKad(ic){
+                var digits = (ic||'').toString().replace(/\D+/g,'');
+                if (!digits) return null;
+                var last = digits.slice(-1);
+                if (!last) return null;
+                return (parseInt(last,10) % 2 === 0) ? 'F' : 'M';
+            }
+
+            function roleGenderIcon(role, ic){
+                var g = genderFromMyKad(ic);
+                var genderLabel = g === 'F' ? 'Wanita' : (g === 'M' ? 'Lelaki' : '');
+                var iconClass = 'zmdi zmdi-account';
+                if (role === 'pengurus') {
+                    iconClass = (g === 'F') ? 'zmdi zmdi-female' : 'zmdi zmdi-male';
+                } else if (role === 'jurulatih') {
+                    iconClass = (g === 'F') ? 'zmdi zmdi-run' : 'zmdi zmdi-walk';
+                }
+                var title = (role.charAt(0).toUpperCase() + role.slice(1)) + (genderLabel ? ' - ' + genderLabel : '');
+                return '<i class="'+iconClass+' text-muted" title="'+title+'"></i>';
             }
 
             function renderPage(){
@@ -402,6 +404,8 @@ ob_start();
                 $tbody.empty();
                 if (total === 0) { $tbody.append('<tr><td colspan="8">Tiada peserta untuk penapisan ini.</td></tr>'); }
                 var pageRows = filtered.slice(start, end);
+                var athleteBefore = filtered.slice(0, start).filter(function(r){ return (r._role||'').toLowerCase() === 'atlet'; }).length;
+                var athleteCounter = athleteBefore;
                 pageRows.forEach(function(r, idx){
                     var name = r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '';
                     var nic = r.no_kad_pengenalan || r.ic || r.no_ic || r.mykad || '';
@@ -424,7 +428,14 @@ ob_start();
                         var display = String(val);
                         return $('<td>').addClass('text-truncate').text(display).attr('title', display);
                     }
-                    $r.append(cell(start + idx + 1));
+                    var roleLower = (role||'').toString().toLowerCase();
+                    if (roleLower === 'atlet') {
+                        athleteCounter++;
+                        $r.append(cell(athleteCounter));
+                    } else {
+                        var iconHtml = roleGenderIcon(roleLower, nic);
+                        $r.append($('<td class="text-center">').html(iconHtml));
+                    }
                     $r.append(cell(name));
                     $r.append(cell(nic));
                     $r.append(cell(matrik));
@@ -457,14 +468,25 @@ ob_start();
             }
 
             // Handlers
+            function reloadFromServer(){
+                currentSport = $select.val() || '';
+                currentAcara = $selectAcara.val() || '';
+                fetchParticipants(kid, currentSport, currentAcara).done(function(newRes){
+                    if (newRes.status !== 'ok') { alert('Tiada data'); return; }
+                    rows = buildRows(newRes);
+                    renderPage();
+                }).fail(function(){ alert('Ralat memuatkan peserta'); });
+            }
+
             $select.on('change', function(){
                 // repopulate acara options for the selected sport and reset acara selection
                 var sv = $(this).val() || '';
                 populateAcaraOptionsForSport(sv);
                 $selectAcara.val('');
-                currentPage = 1; renderPage();
+                currentPage = 1;
+                reloadFromServer();
             });
-            $selectAcara.on('change', function(){ currentPage = 1; renderPage(); });
+            $selectAcara.on('change', function(){ currentPage = 1; reloadFromServer(); });
             $search.on('input', function(){ currentPage = 1; renderPage(); });
             $pageSizeSel.on('change', function(){ pageSize = parseInt($(this).val(),10) || 5; currentPage = 1; renderPage(); });
             $pager.on('click', 'a.page-link', function(e){ e.preventDefault(); var p = $(this).data('page'); if (!p) return; currentPage = parseInt(p,10)||1; renderPage(); });

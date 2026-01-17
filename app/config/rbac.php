@@ -50,6 +50,7 @@ class RBAC {
         'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
+        'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER'],
         
         // Settings - ADMIN only
         'pages/settings.php' => ['ADMIN'],
