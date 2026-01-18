@@ -90,16 +90,14 @@ ob_start();
                                     <th scope="col">Sukan</th>
                                     <th scope="col">Kategori</th>
                                     <th scope="col">Tarikh</th>
-                                    <th scope="col">Tempat Pertama</th>
-                                    <th scope="col">Tempat Kedua</th>
-                                    <th scope="col">Tempat Ketiga</th>
+                                    <th scope="col">Kedudukan</th>
                                     <th scope="col">Status</th>
                                     <th scope="col">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody id="keputusanBody">
                                 <tr id="noKeputusanRow">
-                                    <td colspan="9" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-4">
                                         <i class="cil cil-award" style="font-size: 2rem;"></i>
                                         <p class="mt-2">Tiada keputusan direkodkan</p>
                                     </td>
@@ -149,28 +147,11 @@ ob_start();
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Pemenang</label>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <label for="keputusanPertama" class="form-label small text-muted">Tempat Pertama</label>
-                                <select class="form-select" id="keputusanPertama" name="tempat_pertama">
-                                    <option value="">Pilih Pemenang</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="keputusanKedua" class="form-label small text-muted">Tempat Kedua</label>
-                                <select class="form-select" id="keputusanKedua" name="tempat_kedua">
-                                    <option value="">Pilih Pemenang</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="keputusanKetiga" class="form-label small text-muted">Tempat Ketiga</label>
-                                <select class="form-select" id="keputusanKetiga" name="tempat_ketiga">
-                                    <option value="">Pilih Pemenang</option>
-                                </select>
-                            </div>
+                        <label class="form-label">Kedudukan <span class="text-danger">*</span></label>
+                        <div id="standingsContainer">
+                            <p class="text-muted">Pilih kategori terlebih dahulu untuk memuatkan senarai peserta</p>
                         </div>
-                        <small class="text-muted">Pilih kategori terlebih dahulu untuk memuatkan senarai peserta</small>
+                        <small class="text-muted">Semua kedudukan mesti diisi berdasarkan bilangan peserta yang menyertai</small>
                     </div>
                     
                     <div class="mb-3">
@@ -206,13 +187,13 @@ ob_start();
     const keputusanSukan = document.getElementById('keputusanSukan');
     const keputusanKategori = document.getElementById('keputusanKategori');
     const keputusanTarikh = document.getElementById('keputusanTarikh');
-    const keputusanPertama = document.getElementById('keputusanPertama');
-    const keputusanKedua = document.getElementById('keputusanKedua');
-    const keputusanKetiga = document.getElementById('keputusanKetiga');
+    const standingsContainer = document.getElementById('standingsContainer');
     const keputusanStatus = document.getElementById('keputusanStatus');
     const keputusanId = document.getElementById('keputusanId');
     
     let currentCategoryType = null;
+    let currentParticipants = [];
+    let participantCount = 0;
     
     function fetchJSON(url){
         return fetch(url, { 
@@ -332,15 +313,13 @@ ob_start();
     function loadParticipants(kategori_id){
         console.log('loadParticipants called with kategori_id:', kategori_id);
         if(!kategori_id){
-            keputusanPertama.innerHTML = '<option value="">Pilih Pemenang</option>';
-            keputusanKedua.innerHTML = '<option value="">Pilih Pemenang</option>';
-            keputusanKetiga.innerHTML = '<option value="">Pilih Pemenang</option>';
+            standingsContainer.innerHTML = '<p class="text-muted">Pilih kategori terlebih dahulu untuk memuatkan senarai peserta</p>';
+            currentParticipants = [];
+            participantCount = 0;
             return Promise.resolve();
         }
         
-        keputusanPertama.innerHTML = '<option value="">Loading...</option>';
-        keputusanKedua.innerHTML = '<option value="">Loading...</option>';
-        keputusanKetiga.innerHTML = '<option value="">Loading...</option>';
+        standingsContainer.innerHTML = '<p class="text-muted">Memuatkan senarai peserta...</p>';
         
         const url = '<?php echo url("ajax/get_participants_by_kategori.php"); ?>?kategori_id=' + encodeURIComponent(kategori_id);
         console.log('Fetching participants from:', url);
@@ -350,58 +329,57 @@ ob_start();
                 console.log('Participants response:', res);
                 if(res && res.success && Array.isArray(res.data)){
                     currentCategoryType = res.type;
-                    console.log('Found', res.data.length, 'participants, type:', res.type);
+                    currentParticipants = res.data;
+                    participantCount = res.data.length;
+                    console.log('Found', participantCount, 'participants, type:', res.type);
                     
                     if(res.data.length > 0){
-                        const optionHtml = '<option value="">Pilih Pemenang</option>' +
-                            res.data.map(p => `<option value="${p.id}">${p.display_name || p.nama || p.nama_pasukan}</option>`).join('');
-                        
-                        // Store current selections before clearing
-                        const currentPertama = keputusanPertama.value;
-                        const currentKedua = keputusanKedua.value;
-                        const currentKetiga = keputusanKetiga.value;
-                        
-                        keputusanPertama.innerHTML = optionHtml;
-                        keputusanKedua.innerHTML = optionHtml;
-                        keputusanKetiga.innerHTML = optionHtml;
-                        
-                        // Restore selections if they exist and are valid
-                        if (currentPertama) {
-                            const opt = keputusanPertama.querySelector(`option[value="${currentPertama}"]`);
-                            if (opt) keputusanPertama.value = currentPertama;
-                        }
-                        if (currentKedua) {
-                            const opt = keputusanKedua.querySelector(`option[value="${currentKedua}"]`);
-                            if (opt) keputusanKedua.value = currentKedua;
-                        }
-                        if (currentKetiga) {
-                            const opt = keputusanKetiga.querySelector(`option[value="${currentKetiga}"]`);
-                            if (opt) keputusanKetiga.value = currentKetiga;
-                        }
-                        
-                        // Update dropdowns to disable already selected options
+                        // Generate dynamic table
+                        generateStandingsTable(res.data);
                         updateParticipantDropdowns();
                     } else {
-                        const emptyHtml = '<option value="">Tiada peserta didaftarkan untuk kategori ini</option>';
-                        keputusanPertama.innerHTML = emptyHtml;
-                        keputusanKedua.innerHTML = emptyHtml;
-                        keputusanKetiga.innerHTML = emptyHtml;
+                        standingsContainer.innerHTML = '<p class="text-danger">Tiada peserta didaftarkan untuk kategori ini</p>';
                     }
                 } else {
                     console.warn('Invalid response or no data:', res);
-                    const emptyHtml = '<option value="">Tiada peserta didaftarkan</option>';
-                    keputusanPertama.innerHTML = emptyHtml;
-                    keputusanKedua.innerHTML = emptyHtml;
-                    keputusanKetiga.innerHTML = emptyHtml;
+                    standingsContainer.innerHTML = '<p class="text-danger">Tiada peserta didaftarkan</p>';
                 }
             })
             .catch(err=>{
                 console.error('Failed to fetch participants', err);
-                const errorHtml = '<option value="">Ralat memuat peserta</option>';
-                keputusanPertama.innerHTML = errorHtml;
-                keputusanKedua.innerHTML = errorHtml;
-                keputusanKetiga.innerHTML = errorHtml;
+                standingsContainer.innerHTML = '<p class="text-danger">Ralat memuat peserta</p>';
             });
+    }
+    
+    function generateStandingsTable(participants){
+        const optionHtml = '<option value="">Pilih Peserta</option>' +
+            participants.map(p => `<option value="${p.id}">${p.display_name || p.nama || p.nama_pasukan}</option>`).join('');
+        
+        let tableHtml = '<div class="table-responsive"><table class="table table-sm table-bordered">';
+        tableHtml += '<thead><tr><th style="width: 80px;">Kedudukan</th><th>Peserta</th></tr></thead>';
+        tableHtml += '<tbody>';
+        
+        for(let i = 1; i <= participantCount; i++){
+            tableHtml += `<tr>
+                <td class="align-middle"><strong>${i}</strong></td>
+                <td>
+                    <select class="form-select form-select-sm standings-select" data-position="${i}" name="standing_${i}">
+                        ${optionHtml}
+                    </select>
+                </td>
+            </tr>`;
+        }
+        
+        tableHtml += '</tbody></table></div>';
+        standingsContainer.innerHTML = tableHtml;
+        
+        // Add event listeners to all selects
+        const selects = standingsContainer.querySelectorAll('.standings-select');
+        selects.forEach(select => {
+            select.addEventListener('change', function(){
+                updateParticipantDropdowns(this);
+            });
+        });
     }
     
     function renderKeputusan(rows){
@@ -414,14 +392,26 @@ ob_start();
         
         rows.forEach((r, idx)=>{
             const tr = document.createElement('tr');
+            
+            // Format standings for display
+            let standingsHtml = '';
+            if (r.standings && Array.isArray(r.standings) && r.standings.length > 0) {
+                const standingsList = r.standings.map(s => {
+                    const pos = s.position || '';
+                    const name = s.participant_name || s.participant_id || '-';
+                    return `${pos}. ${name}`;
+                }).join('<br>');
+                standingsHtml = `<div class="small">${standingsList}</div>`;
+            } else {
+                standingsHtml = '<span class="text-muted">-</span>';
+            }
+            
             tr.innerHTML = `
                 <td>${idx+1}</td>
                 <td>${r.sukan || ''}</td>
                 <td>${r.kategori || ''}</td>
                 <td>${r.tarikh || ''}</td>
-                <td>${r.tempat_pertama_nama || r.tempat_pertama || '-'}</td>
-                <td>${r.tempat_kedua_nama || r.tempat_kedua || '-'}</td>
-                <td>${r.tempat_ketiga_nama || r.tempat_ketiga || '-'}</td>
+                <td>${standingsHtml}</td>
                 <td><span class="badge bg-${r.status === 'completed' ? 'success' : r.status === 'ongoing' ? 'warning' : 'info'}">${r.status || ''}</span></td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary me-1 btn-edit-keputusan" data-id="${r.id}">
@@ -468,13 +458,10 @@ ob_start();
         document.getElementById('modalKeputusanTitle').textContent = 'Rekod Keputusan Baru';
         keputusanKategori.disabled = true;
         keputusanKategori.innerHTML = '<option value="">Pilih Kategori</option>';
-        keputusanPertama.innerHTML = '<option value="">Pilih Pemenang</option>';
-        keputusanKedua.innerHTML = '<option value="">Pilih Pemenang</option>';
-        keputusanKetiga.innerHTML = '<option value="">Pilih Pemenang</option>';
+        standingsContainer.innerHTML = '<p class="text-muted">Pilih kategori terlebih dahulu untuk memuatkan senarai peserta</p>';
         currentCategoryType = null;
-        
-        // Reset dropdown states
-        updateParticipantDropdowns();
+        currentParticipants = [];
+        participantCount = 0;
         
         const modalEl = document.getElementById('modalKeputusan');
         if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
@@ -532,10 +519,8 @@ ob_start();
                     
                     document.getElementById('modalKeputusanTitle').textContent = 'Kemaskini Keputusan';
                     
-                    // Store the result values for later use
-                    const tempatPertama = r.tempat_pertama || '';
-                    const tempatKedua = r.tempat_kedua || '';
-                    const tempatKetiga = r.tempat_ketiga || '';
+                    // Store the standings for later use
+                    const standings = r.standings || [];
                     const kategoriId = r.kategori_id || '';
                     
                     // Load kategori for the sport, then set value and load participants
@@ -543,9 +528,17 @@ ob_start();
                         keputusanKategori.value = kategoriId;
                         if(kategoriId){
                             loadParticipants(kategoriId).then(()=>{
-                                keputusanPertama.value = tempatPertama;
-                                keputusanKedua.value = tempatKedua;
-                                keputusanKetiga.value = tempatKetiga;
+                                // Populate standings table with existing data
+                                if (standings && standings.length > 0) {
+                                    standings.forEach(standing => {
+                                        const position = standing.position;
+                                        const participantId = standing.participant_id;
+                                        const select = standingsContainer.querySelector(`.standings-select[data-position="${position}"]`);
+                                        if (select && participantId) {
+                                            select.value = participantId;
+                                        }
+                                    });
+                                }
                                 
                                 // Update dropdowns to disable already selected options
                                 updateParticipantDropdowns();
@@ -608,130 +601,86 @@ ob_start();
     }
     
     function updateParticipantDropdowns(changedSelect = null){
-        // Get current selected values BEFORE the change
-        let selectedPertama = keputusanPertama.value;
-        let selectedKedua = keputusanKedua.value;
-        let selectedKetiga = keputusanKetiga.value;
+        const selects = standingsContainer.querySelectorAll('.standings-select');
+        if (!selects || selects.length === 0) return;
         
-        // If a selection was just changed, get the new value and handle it
+        // Collect all selected values
+        const selectedValues = {};
+        selects.forEach(select => {
+            const position = parseInt(select.getAttribute('data-position'));
+            const value = select.value;
+            if (value && value !== '') {
+                selectedValues[position] = value;
+            }
+        });
+        
+        // If a selection was just changed, check for duplicates
         if (changedSelect) {
             const newValue = changedSelect.value;
+            const changedPosition = parseInt(changedSelect.getAttribute('data-position'));
             
-            // If user is clearing a selection (selecting empty), just update and return
-            if (!newValue || newValue === '') {
-                // Re-enable all options first
-                [keputusanPertama, keputusanKedua, keputusanKetiga].forEach(select => {
-                    Array.from(select.options).forEach(opt => {
-                        opt.disabled = false;
-                    });
-                });
-                
-                // Then disable currently selected options
-                selectedPertama = keputusanPertama.value;
-                selectedKedua = keputusanKedua.value;
-                selectedKetiga = keputusanKetiga.value;
-            } else {
-                // User selected a new value - check if it conflicts
-                const allSelected = [selectedPertama, selectedKedua, selectedKetiga];
-                const selectedCount = allSelected.filter(v => v && v !== '').length;
-                const uniqueCount = new Set(allSelected.filter(v => v && v !== '')).size;
-                
-                // If there's a duplicate (selectedCount > uniqueCount), prevent the selection
-                if (selectedCount > uniqueCount) {
-                    // Find which other dropdown has this value
-                    let conflictPosition = '';
-                    if (changedSelect !== keputusanPertama && selectedPertama === newValue) {
-                        conflictPosition = 'Tempat Pertama';
-                    } else if (changedSelect !== keputusanKedua && selectedKedua === newValue) {
-                        conflictPosition = 'Tempat Kedua';
-                    } else if (changedSelect !== keputusanKetiga && selectedKetiga === newValue) {
-                        conflictPosition = 'Tempat Ketiga';
+            if (newValue && newValue !== '') {
+                // Check if this value is already selected in another position
+                for (const [pos, val] of Object.entries(selectedValues)) {
+                    if (parseInt(pos) !== changedPosition && val === newValue) {
+                        // Duplicate found - reset the selection
+                        changedSelect.value = '';
+                        delete selectedValues[changedPosition];
+                        
+                        // Show warning
+                        if (window.Swal) {
+                            Swal.fire({
+                                text: `Pasukan/peserta ini sudah dipilih untuk kedudukan ${pos}`,
+                                icon: 'warning',
+                                timer: 2500,
+                                showConfirmButton: false
+                            });
+                        }
+                        break;
                     }
-                    
-                    // Reset the selection
-                    changedSelect.value = '';
-                    
-                    // Show warning
-                    if (window.Swal && conflictPosition) {
-                        Swal.fire({
-                            text: `Pasukan/peserta ini sudah dipilih untuk ${conflictPosition}`,
-                            icon: 'warning',
-                            timer: 2500,
-                            showConfirmButton: false
-                        });
-                    }
-                    
-                    // Recalculate after reset
-                    selectedPertama = keputusanPertama.value;
-                    selectedKedua = keputusanKedua.value;
-                    selectedKetiga = keputusanKetiga.value;
                 }
             }
         }
         
-        // Get final selected values
-        selectedPertama = keputusanPertama.value;
-        selectedKedua = keputusanKedua.value;
-        selectedKetiga = keputusanKetiga.value;
+        // Re-collect selected values after potential reset
+        const finalSelectedValues = {};
+        selects.forEach(select => {
+            const position = parseInt(select.getAttribute('data-position'));
+            const value = select.value;
+            if (value && value !== '') {
+                finalSelectedValues[position] = value;
+            }
+        });
         
-        // Enable all options first (except empty option)
-        [keputusanPertama, keputusanKedua, keputusanKetiga].forEach(select => {
+        // Enable all options first, then disable selected ones in other dropdowns
+        selects.forEach(select => {
+            const currentPosition = parseInt(select.getAttribute('data-position'));
+            const currentValue = select.value;
+            
             Array.from(select.options).forEach(opt => {
-                // Keep empty option enabled, disable others based on selections
                 if (opt.value === '') {
                     opt.disabled = false;
+                    opt.style.color = '';
                 } else {
-                    opt.disabled = false; // Will be set below if needed
+                    // Check if this option is selected in another position
+                    let isSelectedElsewhere = false;
+                    for (const [pos, val] of Object.entries(finalSelectedValues)) {
+                        if (parseInt(pos) !== currentPosition && val === opt.value) {
+                            isSelectedElsewhere = true;
+                            break;
+                        }
+                    }
+                    
+                    if (isSelectedElsewhere && opt.value !== currentValue) {
+                        opt.disabled = true;
+                        opt.style.color = '#999';
+                    } else {
+                        opt.disabled = false;
+                        opt.style.color = '';
+                    }
                 }
             });
         });
-        
-        // Disable selected options in other dropdowns
-        // This prevents users from selecting the same team/player in multiple positions
-        if (selectedPertama && selectedPertama !== '') {
-            Array.from(keputusanKedua.options).forEach(opt => {
-                if (opt.value === selectedPertama) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-            Array.from(keputusanKetiga.options).forEach(opt => {
-                if (opt.value === selectedPertama) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-        }
-        
-        if (selectedKedua && selectedKedua !== '') {
-            Array.from(keputusanPertama.options).forEach(opt => {
-                if (opt.value === selectedKedua) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-            Array.from(keputusanKetiga.options).forEach(opt => {
-                if (opt.value === selectedKedua) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-        }
-        
-        if (selectedKetiga && selectedKetiga !== '') {
-            Array.from(keputusanPertama.options).forEach(opt => {
-                if (opt.value === selectedKetiga) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-            Array.from(keputusanKedua.options).forEach(opt => {
-                if (opt.value === selectedKetiga) {
-                    opt.disabled = true;
-                    opt.style.color = '#999';
-                }
-            });
-        }
     }
     
     function saveKeputusan(){
@@ -789,20 +738,57 @@ ob_start();
     }
     
     function performSaveKeputusan(){
-        // Client-side validation: check for duplicate selections
-        const tempatPertama = keputusanPertama.value || null;
-        const tempatKedua = keputusanKedua.value || null;
-        const tempatKetiga = keputusanKetiga.value || null;
+        // Collect standings from dynamic table
+        const selects = standingsContainer.querySelectorAll('.standings-select');
+        const standings = [];
+        const selectedIds = [];
         
-        const selected = [tempatPertama, tempatKedua, tempatKetiga].filter(v => v !== null && v !== '');
-        if (selected.length !== new Set(selected).size) {
+        for (let i = 0; i < selects.length; i++) {
+            const select = selects[i];
+            const position = parseInt(select.getAttribute('data-position'));
+            const participantId = select.value ? select.value.trim() : '';
+            
+            if (!participantId || participantId === '') {
+                if (window.Swal) {
+                    Swal.fire({
+                        text: `Kedudukan ${position} mesti diisi`,
+                        icon: 'warning'
+                    });
+                } else {
+                    alert(`Kedudukan ${position} mesti diisi`);
+                }
+                return;
+            }
+            
+            // Check for duplicates
+            if (selectedIds.includes(participantId)) {
+                if (window.Swal) {
+                    Swal.fire({
+                        text: 'Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat',
+                        icon: 'warning'
+                    });
+                } else {
+                    alert('Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat');
+                }
+                return;
+            }
+            
+            selectedIds.push(participantId);
+            standings.push({
+                position: position,
+                participant_id: participantId
+            });
+        }
+        
+        // Validate all positions are filled
+        if (standings.length !== participantCount) {
             if (window.Swal) {
                 Swal.fire({
-                    text: 'Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat',
+                    text: `Semua kedudukan mesti diisi. Kategori ini mempunyai ${participantCount} peserta.`,
                     icon: 'warning'
                 });
             } else {
-                alert('Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat');
+                alert(`Semua kedudukan mesti diisi. Kategori ini mempunyai ${participantCount} peserta.`);
             }
             return;
         }
@@ -812,9 +798,7 @@ ob_start();
             sukan_id: keputusanSukan.value,
             kategori_id: keputusanKategori.value,
             tarikh: keputusanTarikh.value,
-            tempat_pertama: tempatPertama,
-            tempat_kedua: tempatKedua,
-            tempat_ketiga: tempatKetiga,
+            standings: standings,
             status: keputusanStatus.value
         };
         
@@ -1032,22 +1016,7 @@ ob_start();
     });
     
     // Note: Date change no longer affects category restrictions since we check regardless of date
-    
-    // Add event listeners to update dropdowns when selections change
-    keputusanPertama.addEventListener('change', function(){ updateParticipantDropdowns(this); });
-    keputusanKedua.addEventListener('change', function(){ updateParticipantDropdowns(this); });
-    keputusanKetiga.addEventListener('change', function(){ updateParticipantDropdowns(this); });
-    
-    // Update dropdowns when user focuses on any select to show current restrictions
-    [keputusanPertama, keputusanKedua, keputusanKetiga].forEach(select => {
-        select.addEventListener('focus', function(){
-            updateParticipantDropdowns();
-        });
-        select.addEventListener('mousedown', function(){
-            // Update before dropdown opens
-            updateParticipantDropdowns();
-        });
-    });
+    // Event listeners for dynamic standings table are added in generateStandingsTable()
     
     // Event listeners for buttons
     document.getElementById('btnAddKeputusan').addEventListener('click', showAddKeputusan);
@@ -1074,9 +1043,7 @@ ob_start();
 
 <style>
 /* Style for disabled options in participant dropdowns */
-#keputusanPertama option:disabled,
-#keputusanKedua option:disabled,
-#keputusanKetiga option:disabled {
+.standings-select option:disabled {
     color: #999 !important;
     font-style: italic;
     background-color: #f5f5f5;
@@ -1084,9 +1051,7 @@ ob_start();
 }
 
 /* Visual indicator for disabled options */
-#keputusanPertama option[disabled]:not([value=""]),
-#keputusanKedua option[disabled]:not([value=""]),
-#keputusanKetiga option[disabled]:not([value=""]) {
+.standings-select option[disabled]:not([value=""]) {
     opacity: 0.6;
 }
 
@@ -1097,6 +1062,15 @@ ob_start();
     background-color: #fff3cd;
     cursor: not-allowed;
     opacity: 0.7;
+}
+
+/* Standings table styling */
+#standingsContainer table {
+    margin-bottom: 0;
+}
+
+#standingsContainer .standings-select {
+    min-width: 250px;
 }
 </style>
 
