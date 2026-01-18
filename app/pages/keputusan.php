@@ -151,7 +151,7 @@ ob_start();
                         <div id="standingsContainer">
                             <p class="text-muted">Pilih kategori terlebih dahulu untuk memuatkan senarai peserta</p>
                         </div>
-                        <small class="text-muted">Semua kedudukan mesti diisi berdasarkan bilangan peserta yang menyertai</small>
+                        <small class="text-muted">Kedudukan 1, 2, dan 3 wajib diisi. Kedudukan 4 dan ke atas adalah pilihan.</small>
                     </div>
                     
                     <div class="mb-3">
@@ -360,10 +360,13 @@ ob_start();
         tableHtml += '<tbody>';
         
         for(let i = 1; i <= participantCount; i++){
+            const isRequired = i <= 3;
+            const requiredAttr = isRequired ? 'required' : '';
+            const requiredLabel = isRequired ? ' <span class="text-danger">*</span>' : '';
             tableHtml += `<tr>
-                <td class="align-middle"><strong>${i}</strong></td>
+                <td class="align-middle"><strong>${i}${requiredLabel}</strong></td>
                 <td>
-                    <select class="form-select form-select-sm standings-select" data-position="${i}" name="standing_${i}">
+                    <select class="form-select form-select-sm standings-select" data-position="${i}" name="standing_${i}" ${requiredAttr}>
                         ${optionHtml}
                     </select>
                 </td>
@@ -371,6 +374,7 @@ ob_start();
         }
         
         tableHtml += '</tbody></table></div>';
+        tableHtml += '<small class="text-muted"><span class="text-danger">*</span> Wajib diisi untuk kedudukan 1, 2, dan 3 sahaja</small>';
         standingsContainer.innerHTML = tableHtml;
         
         // Add event listeners to all selects
@@ -748,16 +752,23 @@ ob_start();
             const position = parseInt(select.getAttribute('data-position'));
             const participantId = select.value ? select.value.trim() : '';
             
+            // Only require positions 1-3
             if (!participantId || participantId === '') {
-                if (window.Swal) {
-                    Swal.fire({
-                        text: `Kedudukan ${position} mesti diisi`,
-                        icon: 'warning'
-                    });
+                if (position <= 3) {
+                    // Required positions 1-3
+                    if (window.Swal) {
+                        Swal.fire({
+                            text: `Kedudukan ${position} mesti diisi`,
+                            icon: 'warning'
+                        });
+                    } else {
+                        alert(`Kedudukan ${position} mesti diisi`);
+                    }
+                    return;
                 } else {
-                    alert(`Kedudukan ${position} mesti diisi`);
+                    // Optional positions 4+, skip if empty
+                    continue;
                 }
-                return;
             }
             
             // Check for duplicates
@@ -780,15 +791,19 @@ ob_start();
             });
         }
         
-        // Validate all positions are filled
-        if (standings.length !== participantCount) {
+        // Validate required positions (1-3) are filled
+        const requiredPositions = [1, 2, 3];
+        const filledPositions = standings.map(s => s.position);
+        const missingPositions = requiredPositions.filter(pos => !filledPositions.includes(pos));
+        
+        if (missingPositions.length > 0) {
             if (window.Swal) {
                 Swal.fire({
-                    text: `Semua kedudukan mesti diisi. Kategori ini mempunyai ${participantCount} peserta.`,
+                    text: `Kedudukan ${missingPositions.join(', ')} mesti diisi`,
                     icon: 'warning'
                 });
             } else {
-                alert(`Semua kedudukan mesti diisi. Kategori ini mempunyai ${participantCount} peserta.`);
+                alert(`Kedudukan ${missingPositions.join(', ')} mesti diisi`);
             }
             return;
         }

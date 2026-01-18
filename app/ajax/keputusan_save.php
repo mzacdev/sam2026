@@ -156,17 +156,15 @@ try {
     
     // Validate standings array
     if (empty($standings) || !is_array($standings)) {
-        throw new Exception('Standings diperlukan. Sila pilih peserta untuk semua kedudukan.');
+        throw new Exception('Standings diperlukan. Sila pilih peserta untuk kedudukan 1, 2, dan 3.');
     }
     
-    // Validate all positions are filled (1 to N)
-    if (count($standings) !== $participantCount) {
-        throw new Exception("Semua kedudukan mesti diisi. Kategori ini mempunyai {$participantCount} peserta.");
-    }
-    
-    // Validate positions are sequential and unique
+    // Validate required positions (1-3) are filled
     $positions = [];
     $participantIds = [];
+    $requiredPositions = [1, 2, 3];
+    $filledRequiredPositions = [];
+    
     foreach ($standings as $standing) {
         if (!isset($standing['position']) || !isset($standing['participant_id'])) {
             throw new Exception('Format standings tidak sah. Setiap kedudukan mesti mempunyai position dan participant_id.');
@@ -175,8 +173,9 @@ try {
         $pos = (int)$standing['position'];
         $participantId = trim($standing['participant_id']);
         
+        // Skip empty participant IDs (for optional positions 4+)
         if (empty($participantId)) {
-            throw new Exception("Kedudukan {$pos} mesti mempunyai peserta yang dipilih.");
+            continue;
         }
         
         // Check for duplicate positions
@@ -190,13 +189,34 @@ try {
             throw new Exception('Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat');
         }
         $participantIds[] = $participantId;
+        
+        // Track which required positions are filled
+        if (in_array($pos, $requiredPositions)) {
+            $filledRequiredPositions[] = $pos;
+        }
     }
     
-    // Validate positions are sequential (1, 2, 3, ..., N)
-    sort($positions);
-    for ($i = 0; $i < count($positions); $i++) {
-        if ($positions[$i] !== ($i + 1)) {
-            throw new Exception('Kedudukan mesti berurutan dari 1 hingga ' . $participantCount);
+    // Validate required positions (1-3) are all filled
+    $missingRequiredPositions = array_diff($requiredPositions, $filledRequiredPositions);
+    if (!empty($missingRequiredPositions)) {
+        throw new Exception('Kedudukan ' . implode(', ', $missingRequiredPositions) . ' mesti diisi');
+    }
+    
+    // Validate positions don't have gaps (if position 4 is filled, positions 1-3 must exist)
+    // But allow positions 4+ to be optional
+    if (!empty($positions)) {
+        sort($positions);
+        $minPos = min($positions);
+        $maxPos = max($positions);
+        
+        // If max position is > 3, ensure no gaps between 1 and max
+        if ($maxPos > 3) {
+            for ($i = 1; $i <= $maxPos; $i++) {
+                // Positions 1-3 must exist, positions 4+ can be skipped
+                if ($i <= 3 && !in_array($i, $positions)) {
+                    throw new Exception("Kedudukan {$i} mesti diisi");
+                }
+            }
         }
     }
     
