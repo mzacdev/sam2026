@@ -105,7 +105,17 @@ function validateMyKad($ic) {
 $rows = [];
 try {
     $db = getDB();
-    $stmt = $db->prepare("SELECT id, pasukan_id, nama, no_kad_pengenalan FROM table_pasukan_atlet WHERE deleted_at IS NULL");
+    $stmt = $db->prepare("
+        SELECT 
+            pa.id, 
+            pa.pasukan_id, 
+            pa.nama, 
+            pa.no_kad_pengenalan,
+            p.nama_pasukan
+        FROM table_pasukan_atlet pa
+        LEFT JOIN table_pasukan p ON pa.pasukan_id = p.id AND p.deleted_at IS NULL
+        WHERE pa.deleted_at IS NULL
+    ");
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -122,6 +132,7 @@ foreach ($rows as $row) {
     $items[] = [
         'id' => $row['id'] ?? null,
         'nama' => $row['nama'] ?? '-',
+        'pasukan' => $row['nama_pasukan'] ?? '-',
         // Show cleaned IC for valid records, keep original for invalid
         'raw' => $displayRaw,
         'normalized' => $res['normalized'] ?? '',
@@ -179,6 +190,7 @@ ob_start();
                         <tr>
                             <th>No</th>
                             <th>Nama</th>
+                            <th>Pasukan</th>
                             <th>IC Asal</th>
                             <th>IC Clean</th>
                             <th>Jantina</th>
@@ -216,7 +228,7 @@ require_once __DIR__ . '/../includes/layout.php';
 
     function applyIcFilter(q, status){ var ql = (q||'').toString().trim().toLowerCase(); icFiltered = icData.filter(function(item){ var matchesQ = true; if (ql){ var n=(item.nama||'').toString().toLowerCase(); var r=(item.raw||'').toString().toLowerCase(); var c=(item.normalized||'').toString().toLowerCase(); matchesQ = n.indexOf(ql)!==-1 || r.indexOf(ql)!==-1 || c.indexOf(ql)!==-1; } var matchesStatus = true; if (status) matchesStatus = ((item.status||'') === status); return matchesQ && matchesStatus; }); icCurrentPage = 1; }
 
-    function renderIcPage(){ var tbody = document.getElementById('icTableBody'); if(!tbody) return; var total = icFiltered.length; var totalPages = Math.max(1, Math.ceil(total / icPageSize)); if(icCurrentPage>totalPages) icCurrentPage = totalPages; var start = (icCurrentPage-1)*icPageSize; var end = Math.min(total, start+icPageSize); if(total===0){ tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">Tiada rekod ditemui.</td></tr>'; } else { var html=''; var slice = icFiltered.slice(start,end); for(var i=0;i<slice.length;i++){ var it = slice[i]; var rowIdx = start + i + 1; var cls=''; if(it.status==='VALID') cls='table-success'; if(it.status==='CHECK') cls='table-warning'; if(it.status==='INVALID') cls='table-danger'; html += '<tr class="'+cls+'">'; html += '<td>'+rowIdx+'</td>'; html += '<td>'+escHtml(it.nama||'-')+'</td>'; html += '<td>'+escHtml(it.raw||'-')+'</td>'; html += '<td>'+escHtml(it.normalized||'-')+'</td>'; html += '<td>'+escHtml(it.gender||'-')+'</td>'; html += '<td>'+escHtml(it.date_of_birth||'-')+'</td>'; html += '<td>'+escHtml(it.status||'-')+'</td>'; html += '<td>'+escHtml(it.reasons||'')+'</td>'; html += '</tr>'; } tbody.innerHTML = html; } var infoEl = document.getElementById('icPagingInfo'); if(infoEl){ if(total===0) infoEl.textContent=''; else infoEl.textContent = 'Memaparkan ' + (start+1) + '–' + end + ' daripada ' + total; } renderIcPaginationControls(total, icCurrentPage, icPageSize); }
+    function renderIcPage(){ var tbody = document.getElementById('icTableBody'); if(!tbody) return; var total = icFiltered.length; var totalPages = Math.max(1, Math.ceil(total / icPageSize)); if(icCurrentPage>totalPages) icCurrentPage = totalPages; var start = (icCurrentPage-1)*icPageSize; var end = Math.min(total, start+icPageSize); if(total===0){ tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5">Tiada rekod ditemui.</td></tr>'; } else { var html=''; var slice = icFiltered.slice(start,end); for(var i=0;i<slice.length;i++){ var it = slice[i]; var rowIdx = start + i + 1; var cls=''; if(it.status==='VALID') cls='table-success'; if(it.status==='CHECK') cls='table-warning'; if(it.status==='INVALID') cls='table-danger'; html += '<tr class="'+cls+'">'; html += '<td>'+rowIdx+'</td>'; html += '<td>'+escHtml(it.nama||'-')+'</td>'; html += '<td>'+escHtml(it.pasukan||'-')+'</td>'; html += '<td>'+escHtml(it.raw||'-')+'</td>'; html += '<td>'+escHtml(it.normalized||'-')+'</td>'; html += '<td>'+escHtml(it.gender||'-')+'</td>'; html += '<td>'+escHtml(it.date_of_birth||'-')+'</td>'; html += '<td>'+escHtml(it.status||'-')+'</td>'; html += '<td>'+escHtml(it.reasons||'')+'</td>'; html += '</tr>'; } tbody.innerHTML = html; } var infoEl = document.getElementById('icPagingInfo'); if(infoEl){ if(total===0) infoEl.textContent=''; else infoEl.textContent = 'Memaparkan ' + (start+1) + '–' + end + ' daripada ' + total; } renderIcPaginationControls(total, icCurrentPage, icPageSize); }
     function renderIcPaginationControls(totalItems, currentPage, pageSize){ var container = document.getElementById('icPagination'); if(!container) return; var totalPages = Math.max(1, Math.ceil(totalItems / pageSize)); var html = '<nav aria-label="ic-pagination"><ul class="pagination pagination-sm mb-0">'; var prevDisabled = (currentPage<=1)?' disabled':''; html += '<li class="page-item'+prevDisabled+'"><a class="page-link" href="#" data-page="'+(currentPage-1)+'">‹</a></li>'; var maxButtons = 5; var startPage = Math.max(1, currentPage - Math.floor(maxButtons/2)); var endPage = Math.min(totalPages, startPage + maxButtons -1); if(endPage - startPage < maxButtons -1) startPage = Math.max(1, endPage - maxButtons +1); for(var p=startPage;p<=endPage;p++){ var active = (p===currentPage)?' active':''; html += '<li class="page-item'+active+'"><a class="page-link" href="#" data-page="'+p+'">'+p+'</a></li>'; } var nextDisabled = (currentPage>=totalPages)?' disabled':''; html += '<li class="page-item'+nextDisabled+'"><a class="page-link" href="#" data-page="'+(currentPage+1)+'">›</a></li>'; html += '</ul></nav>'; container.innerHTML = html; var links = container.querySelectorAll('.page-link'); for(var i=0;i<links.length;i++){ links[i].addEventListener('click', function(e){ e.preventDefault(); var p = parseInt(this.getAttribute('data-page'))||1; goToIcPage(p); }); } }
 
     document.addEventListener('DOMContentLoaded', function(){ var search = document.getElementById('icSearch'); if(search){ search.addEventListener('input', function(){ var status = document.getElementById('filterStatusSelect').value || ''; applyIcFilter(this.value, status); renderIcPage(); }); } var ps = document.getElementById('icPageSizeSelect'); if(ps){ ps.addEventListener('change', function(){ setIcPageSize(this.value); }); } var statusSel = document.getElementById('filterStatusSelect'); if(statusSel){ statusSel.addEventListener('change', function(){ var q = (document.getElementById('icSearch')||{value:''}).value || ''; applyIcFilter(q, this.value || ''); renderIcPage(); }); } var initStatus = (document.getElementById('filterStatusSelect')||{value:''}).value || ''; applyIcFilter((document.getElementById('icSearch')||{value:''}).value || '', initStatus); try{ document.getElementById('icPageSizeSelect').value = '10'; icPageSize = 10; }catch(e){} renderIcPage(); });
