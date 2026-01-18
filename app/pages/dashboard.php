@@ -72,106 +72,60 @@ try {
 
     $stmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, k.kod_universiti, p.created_at FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 6");
     $stmt->execute(); $recent['teams'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    // medal tally: return all universities from reference table and left-join aggregated counts (show zeros)
-        // If main query returned no rows, build rows from reference table (show zeros) and then merge any actual counts
-        if (empty($medalRows)) {
-            // try to load all universities from reference table
-            try {
-                $refStmt = $db->query("SELECT kod_universiti, nama_pendek FROM table_ref_universiti WHERE status = 1 ORDER BY kod_universiti ASC");
-                $refs = $refStmt ? $refStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-                if (!empty($refs)) {
-                    // initialize medalRows with zeros
-                    $medalRows = [];
-                    foreach ($refs as $r) {
-                        $medalRows[$r['kod_universiti']] = [
-                            'nama_pendek' => $r['nama_pendek'] ?: $r['kod_universiti'],
-                            'kod_universiti' => $r['kod_universiti'],
-                            'emas' => 0,
-                            'perak' => 0,
-                            'gangsa' => 0,
-                            'jumlah' => 0
-                        ];
-                    }
-                    // fetch aggregated counts and merge
-                    $countSql = "SELECT k.kod_universiti, " .
-                                "SUM(CASE WHEN rr.tempat_pertama IS NOT NULL AND rr.tempat_pertama != '' THEN 1 ELSE 0 END) AS emas, " .
-                                "SUM(CASE WHEN rr.tempat_kedua IS NOT NULL AND rr.tempat_kedua != '' THEN 1 ELSE 0 END) AS perak, " .
-                                "SUM(CASE WHEN rr.tempat_ketiga IS NOT NULL AND rr.tempat_ketiga != '' THEN 1 ELSE 0 END) AS gangsa " .
-                                "FROM table_results rr " .
-                                "JOIN table_pasukan p ON (rr.tempat_pertama = p.id OR rr.tempat_kedua = p.id OR rr.tempat_ketiga = p.id) " .
-                                "JOIN table_kontinjen k ON p.kontinjen_id = k.id " .
-                                "JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti " .
-                                "WHERE r.status = 1 " .
-                                "GROUP BY k.kod_universiti";
-                    $cntStmt = $db->query($countSql);
-                    $counts = $cntStmt ? $cntStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-                    foreach ($counts as $c) {
-                        $kod = $c['kod_universiti'];
-                        if (!isset($medalRows[$kod])) {
-                            $medalRows[$kod] = [
-                                'nama_pendek' => $kod,
-                                'kod_universiti' => $kod,
-                                'emas' => (int)$c['emas'],
-                                'perak' => (int)$c['perak'],
-                                'gangsa' => (int)$c['gangsa'],
-                                'jumlah' => (int)$c['emas'] + (int)$c['perak'] + (int)$c['gangsa']
-                            ];
-                        } else {
-                            $medalRows[$kod]['emas'] = (int)$c['emas'];
-                            $medalRows[$kod]['perak'] = (int)$c['perak'];
-                            $medalRows[$kod]['gangsa'] = (int)$c['gangsa'];
-                            $medalRows[$kod]['jumlah'] = (int)$c['emas'] + (int)$c['perak'] + (int)$c['gangsa'];
-                        }
-                    }
-                    // convert associative by kod back to indexed array preserving order
-                    $medalRows = array_values($medalRows);
-                } else {
-                    // fallback: try to use table_kontinjen kod_universiti list
-                    $stmt = $db->query("SELECT COALESCE(r.nama_pendek, k.kod_universiti) AS nama_pendek, k.kod_universiti FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE r.status = 1 GROUP BY k.kod_universiti ORDER BY k.kod_universiti ASC");
-                    $list = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-                    $medalRows = [];
-                    foreach ($list as $l) {
-                        $kod = $l['kod_universiti'] ?? null;
-                        $medalRows[] = [
-                            'nama_pendek' => $l['nama_pendek'] ?: $kod,
-                            'kod_universiti' => $kod,
-                            'emas' => 0,
-                            'perak' => 0,
-                            'gangsa' => 0,
-                            'jumlah' => 0
-                        ];
-                    }
-                }
-            } catch (Exception $e) {
-                // keep medalRows empty on error
-            }
-        }
+    // Medal ranking using Olympic/SEA Games rules: Gold, then Silver, then Bronze (ties share rank)
+    $medalRows = [];
+    try {
+        $sqlMedal = "
+            SELECT
+                base.kod_universiti,
+                base.nama_pendek,
+                COALESCE(mc.emas, 0)   AS emas,
+                COALESCE(mc.perak, 0)  AS perak,
+                COALESCE(mc.gangsa, 0) AS gangsa
+            FROM (
+                SELECT DISTINCT
+                    k.kod_universiti,
+                    COALESCE(r.nama_pendek, k.kod_universiti) AS nama_pendek
+                FROM table_kontinjen k
+                JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti
+                WHERE k.deleted_at IS NULL AND k.status = 1 AND r.status = 1
+            ) base
+            LEFT JOIN (
+                SELECT
+                    k.kod_universiti,
+                    SUM(CASE WHEN w.medal = 'emas' THEN 1 ELSE 0 END)   AS emas,
+                    SUM(CASE WHEN w.medal = 'perak' THEN 1 ELSE 0 END)  AS perak,
+                    SUM(CASE WHEN w.medal = 'gangsa' THEN 1 ELSE 0 END) AS gangsa
+                FROM (
+                    SELECT tempat_pertama AS pasukan_id, 'emas' AS medal FROM table_results WHERE tempat_pertama IS NOT NULL AND tempat_pertama <> ''
+                    UNION ALL
+                    SELECT tempat_kedua AS pasukan_id, 'perak' AS medal FROM table_results WHERE tempat_kedua IS NOT NULL AND tempat_kedua <> ''
+                    UNION ALL
+                    SELECT tempat_ketiga AS pasukan_id, 'gangsa' AS medal FROM table_results WHERE tempat_ketiga IS NOT NULL AND tempat_ketiga <> ''
+                ) w
+                JOIN table_pasukan p ON p.id = w.pasukan_id AND p.deleted_at IS NULL
+                JOIN table_kontinjen k ON k.id = p.kontinjen_id AND k.deleted_at IS NULL AND k.status = 1
+                JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
+                GROUP BY k.kod_universiti
+            ) mc ON mc.kod_universiti = base.kod_universiti
+            ORDER BY emas DESC, perak DESC, gangsa DESC, base.nama_pendek ASC
+        ";
 
-    // If ref table is empty or query returned no rows, fallback to listing kod_universiti from table_kontinjen
-    if (empty($medalRows) || empty($summary['universiti'])) {
-        try {
-                $sql2 = "SELECT COALESCE(k.nama_pendek, k.kod_universiti) AS nama_pendek, k.kod_universiti AS kod_universiti, " .
-                    "COALESCE(m.emas,0) AS emas, COALESCE(m.perak,0) AS perak, COALESCE(m.gangsa,0) AS gangsa, " .
-                    "(COALESCE(m.emas,0) + COALESCE(m.perak,0) + COALESCE(m.gangsa,0)) AS jumlah \n" .
-                    "FROM (SELECT DISTINCT k.kod_universiti, COALESCE(r.nama_pendek,k.kod_universiti) AS nama_pendek FROM table_kontinjen k JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE k.deleted_at IS NULL AND r.status = 1) k \n" .
-                    "LEFT JOIN (\n" .
-                    "  SELECT k2.kod_universiti, \n" .
-                    "    SUM(CASE WHEN rr.tempat_pertama IS NOT NULL AND rr.tempat_pertama != '' THEN 1 ELSE 0 END) AS emas,\n" .
-                    "    SUM(CASE WHEN rr.tempat_kedua IS NOT NULL AND rr.tempat_kedua != '' THEN 1 ELSE 0 END) AS perak,\n" .
-                    "    SUM(CASE WHEN rr.tempat_ketiga IS NOT NULL AND rr.tempat_ketiga != '' THEN 1 ELSE 0 END) AS gangsa\n" .
-                    "  FROM table_results rr\n" .
-                    "  JOIN table_pasukan p2 ON (rr.tempat_pertama = p2.id OR rr.tempat_kedua = p2.id OR rr.tempat_ketiga = p2.id)\n" .
-                    "  JOIN table_kontinjen k2 ON p2.kontinjen_id = k2.id\n" .
-                    "  JOIN table_ref_universiti r2 ON k2.kod_universiti = r2.kod_universiti\n" .
-                    "  WHERE r2.status = 1\n" .
-                    "  GROUP BY k2.kod_universiti\n" .
-                    ") m ON k.kod_universiti = m.kod_universiti\n" .
-                    "ORDER BY emas DESC, perak DESC, gangsa DESC, k.kod_universiti ASC";
-            $mStmt2 = $db->query($sql2);
-            $medalRows = $mStmt2 ? $mStmt2->fetchAll(PDO::FETCH_ASSOC) : [];
-        } catch (Exception $e) {
-            // keep medalRows as empty array
+        $mStmt = $db->query($sqlMedal);
+        $rows = $mStmt ? $mStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+        $ranked = [];
+        $position = 0; // sequential ranking (no repeats even if tied)
+        foreach ($rows as $row) {
+            $position++;
+            $row['rank'] = $position;
+            $row['jumlah'] = (int)$row['emas'] + (int)$row['perak'] + (int)$row['gangsa'];
+            $ranked[] = $row;
         }
+        $medalRows = $ranked;
+    } catch (Exception $e) {
+        error_log('[dashboard medal rank] ' . $e->getMessage());
+        $medalRows = [];
     }
 
 } catch (Exception $e) {
@@ -206,7 +160,7 @@ ob_start();
         /* Make the whole ranking box follow the neo-card appearance */
         .medal-table-card.neo-card { background: #f4f7fb; box-shadow: 6px 6px 14px rgba(16,24,40,0.06), -6px -6px 14px rgba(255,255,255,0.8); border: none; }
         .medal-table { width:100%; border-collapse:separate; border-spacing:0; }
-        .medal-table thead th { background: #fbfdff; border-bottom: 1px solid #eef2f7; color:#172554; font-weight:600; font-size:0.82rem; padding:.35rem .45rem; }
+        .medal-table thead th { background: #fbfdff; border-bottom: 1px solid #eef2f7; color:#172554; font-weight:700; font-size:0.82rem; padding:.3rem .4rem; text-transform:uppercase; letter-spacing:0.02em; white-space:nowrap; }
         .medal-table tbody tr { transition: background .08s ease; }
         .medal-table tbody tr:hover { background: #fbfdff; }
         /* Subtle zebra and highlighted backgrounds for ranking rows */
@@ -217,12 +171,17 @@ ob_start();
         .medal-table tbody tr.top-1 .medal-name, .medal-table tbody tr.top-1 .medal-count { color:#7a4300; }
         .medal-table tbody tr.top-2 .medal-name, .medal-table tbody tr.top-2 .medal-count { color:#0b5ed7; }
         .medal-table tbody tr.top-3 .medal-name, .medal-table tbody tr.top-3 .medal-count { color:#8b5a2b; }
-        .medal-table td, .medal-table th { padding: .28rem .4rem; vertical-align: middle; font-size: .82rem; }
-        .medal-rank { font-weight:700; color:#0b5ed7; font-size:.9rem; }
-        .medal-name { font-weight:600; color:#0f1724; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:11rem; }
-        .medal-count { font-weight:700; color:#0b5ed7; }
-        .medal-badge { display:inline-block; min-width:1.6rem; padding:.15rem .35rem; border-radius:.25rem; text-align:center; background:#f1f5f9; color:#0b5ed7; font-weight:700; font-size:.82rem; }
+        .medal-table td, .medal-table th { padding: .26rem .35rem; vertical-align: middle; font-size: .85rem; }
+        .medal-rank { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:20px; border-radius:6px; background:#f1f5f9; color:#0f172a; font-weight:700; font-size:.78rem; }
+        .medal-name { font-weight:600; color:#0f1724; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:10rem; font-size:.85rem; }
+        .medal-count { display:inline-block; min-width:32px; padding:0.16rem 0.4rem; border-radius:6px; background:#e5e7eb; color:#0f172a; font-weight:700; font-size:.85rem; }
+        .medal-badge { display:inline-block; min-width:28px; padding:.14rem .35rem; border-radius:6px; text-align:center; background:#eef2f7; color:#0b5ed7; font-weight:700; font-size:.85rem; }
+        .medal-table .btn.medal-detail-btn { font-weight:700; padding:0; font-size:.85rem; }
+        .medal-table .btn.medal-detail-btn:focus { box-shadow:none; }
         .medal-table-small { font-size:.78rem; color:#6b7280; }
+        /* Modal positioning: top-centered without overlaying header */
+        .modal-top .modal-dialog { margin-top: 60px; margin-bottom: 20px; }
+        body.modal-open { overflow: hidden; padding-right: 0 !important; }
     </style>
     <div class="row align-items-center mb-4">
         <div class="col">
@@ -325,33 +284,187 @@ ob_start();
                                     <tr>
                                         <th>#</th>
                                         <th>Kontinjen</th>
-                                        <th class="text-center"><span class="me-1">🥇</span> Emas</th>
-                                        <th class="text-center"><span class="me-1">🥈</span> Perak</th>
-                                        <th class="text-center" style="width:5rem;"><span class="me-1">🥉</span> Gangsa</th>
+                                        <th class="text-center"><i class="cil cil-star text-warning me-1"></i>Emas</th>
+                                        <th class="text-center"><i class="cil cil-star text-secondary me-1"></i>Perak</th>
+                                        <th class="text-center" style="width:5rem;"><i class="cil cil-star text-danger me-1"></i>Gangsa</th>
                                         <th class="text-center" style="width:5rem;">Jumlah</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                     <?php $rank = 1; foreach ($medalRows as $mr): ?>
-                                         <?php $r = $rank++; $rowClass = ($r==1? 'top-1' : ($r==2? 'top-2' : ($r==3? 'top-3' : ''))); ?>
-                                         <tr class="<?php echo $rowClass; ?>">
-                                            <td class="align-middle"><span class="medal-rank"><?php echo $r; ?></span></td>
-                                            <td class="align-middle"><div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div></td>
-                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['emas'] ?? 0); ?></span></td>
-                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['perak'] ?? 0); ?></span></td>
-                                            <td class="text-center"><span class="medal-badge"><?php echo (int)($mr['gangsa'] ?? 0); ?></span></td>
-                                            <td class="text-center"><span class="medal-count"><?php echo (int)($mr['jumlah'] ?? 0); ?></span></td>
-                                         </tr>
-                                     <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php else: ?>
-                        <div class="text-muted small p-3">Tiada data pingat.</div>
-                    <?php endif; ?>
+                        <tbody>
+                             <?php foreach ($medalRows as $mr): ?>
+                                 <?php $r = (int)($mr['rank'] ?? 0); $rowClass = ($r==1? 'top-1' : ($r==2? 'top-2' : ($r==3? 'top-3' : ''))); ?>
+                                 <tr class="<?php echo $rowClass; ?>" data-kod="<?php echo htmlspecialchars($mr['kod_universiti'], ENT_QUOTES, 'UTF-8'); ?>" data-kontinjen="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>">
+                                    <td class="align-middle">
+                                        <?php if ($r === 1): ?>
+                                            <span class="medal-rank" style="background:linear-gradient(135deg,#ffedb3,#ffd44f); color:#7a4300;"><i class="cil cil-star"></i></span>
+                                        <?php elseif ($r === 2): ?>
+                                            <span class="medal-rank" style="background:linear-gradient(135deg,#e6ebf5,#cfd6e6); color:#2d3748;"><i class="cil cil-star"></i></span>
+                                        <?php elseif ($r === 3): ?>
+                                            <span class="medal-rank" style="background:linear-gradient(135deg,#ffe6d3,#f7b98a); color:#7a3b1a;"><i class="cil cil-star"></i></span>
+                                        <?php else: ?>
+                                            <span class="medal-rank"><?php echo $r; ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="align-middle"><div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                    <td class="text-center"><button type="button" class="btn btn-link p-0 text-warning medal-detail-btn" data-medal="emas"><?php echo (int)($mr['emas'] ?? 0); ?></button></td>
+                                    <td class="text-center"><button type="button" class="btn btn-link p-0 text-secondary medal-detail-btn" data-medal="perak"><?php echo (int)($mr['perak'] ?? 0); ?></button></td>
+                                    <td class="text-center"><button type="button" class="btn btn-link p-0 text-danger medal-detail-btn" data-medal="gangsa"><?php echo (int)($mr['gangsa'] ?? 0); ?></button></td>
+                                    <td class="text-center"><span class="medal-count"><?php echo (int)($mr['jumlah'] ?? 0); ?></span></td>
+                                 </tr>
+                             <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="text-muted small p-3">Tiada data pingat.</div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<div class="modal fade modal-top" id="medalDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Penerima Pingat</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold" id="medalDetailTitle"></div>
+                    <div class="badge bg-light text-dark" id="medalDetailMedal"></div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Nama</th>
+                                <th>Kontinjen</th>
+                                <th>Sukan</th>
+                                <th>Acara</th>
+                            </tr>
+                        </thead>
+                        <tbody id="medalDetailBody">
+                            <tr><td colspan="5" class="text-center text-muted">Memuatkan...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="text-muted small" id="medalDetailSummary"></div>
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm" id="medalDetailPageSize" style="width:80px;">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                        <nav aria-label="Medal pagination">
+                            <ul class="pagination pagination-sm mb-0" id="medalDetailPager"></ul>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+<script>
+(function(){
+    function whenJQ(cb){ if (window.jQuery){ cb(window.jQuery); } else { setTimeout(function(){ whenJQ(cb); }, 50); } }
+    whenJQ(function($){
+        var medalRowsCache = [];
+        var pageSize = 10;
+        var currentPage = 1;
+
+        function renderPager(total){
+            var totalPages = Math.max(1, Math.ceil(total / pageSize));
+            if (currentPage > totalPages) currentPage = totalPages;
+            var $pager = $('#medalDetailPager');
+            $pager.empty();
+            var add = function(label, page, disabled, active){
+                var li = $('<li class="page-item">');
+                if (disabled) li.addClass('disabled');
+                if (active) li.addClass('active');
+                var a = $('<a class="page-link" href="#">').text(label).data('page', page);
+                li.append(a); $pager.append(li);
+            };
+            add('«', currentPage-1, currentPage===1, false);
+            var start = Math.max(1, currentPage-2), end = Math.min(totalPages, start+4);
+            for (var p=start; p<=end; p++){ add(p, p, false, p===currentPage); }
+            add('»', currentPage+1, currentPage===totalPages, false);
+            var startRow = total === 0 ? 0 : (currentPage-1)*pageSize + 1;
+            var endRow = Math.min(total, currentPage*pageSize);
+            $('#medalDetailSummary').text(total === 0 ? 'Tiada data' : ('Memaparkan '+startRow+' - '+endRow+' daripada '+total));
+        }
+
+        function renderDetailTable(){
+            var $body = $('#medalDetailBody');
+            if (!medalRowsCache.length){
+                $body.html('<tr><td colspan="5" class="text-center text-muted">Tiada rekod penerima.</td></tr>');
+                renderPager(0); return;
+            }
+            var start = (currentPage-1)*pageSize;
+            var end = start + pageSize;
+            var pageRows = medalRowsCache.slice(start, end);
+            var html = '';
+            pageRows.forEach(function(r, idx){
+                html += '<tr>'+
+                    '<td>'+(start+idx+1)+'</td>'+
+                    '<td>'+(r.nama_pasukan || '-')+'</td>'+
+                    '<td>'+(r.nama_kontinjen || r.kod_universiti || '-')+'</td>'+
+                    '<td>'+(r.nama_sukan || '-')+'</td>'+
+                    '<td>'+(r.nama_kategori || '-')+'</td>'+
+                '</tr>';
+            });
+            $body.html(html);
+            renderPager(medalRowsCache.length);
+        }
+
+        $('#medalDetailPager').on('click', 'a.page-link', function(e){
+            e.preventDefault();
+            var p = $(this).data('page');
+            if (!p) return;
+            currentPage = parseInt(p,10) || 1;
+            renderDetailTable();
+        });
+
+        $('#medalDetailPageSize').on('change', function(){
+            pageSize = parseInt($(this).val(),10) || 10;
+            currentPage = 1;
+            renderDetailTable();
+        });
+
+        $(document).on('click', '.medal-detail-btn', function(){
+            var $tr = $(this).closest('tr');
+            var kod = $tr.data('kod');
+            var name = $tr.data('kontinjen') || kod;
+            var medal = $(this).data('medal');
+            if (!kod || !medal) return;
+            $('#medalDetailTitle').text(name);
+            $('#medalDetailMedal').text(medal.toUpperCase());
+            $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-muted">Memuatkan...</td></tr>');
+            $('#medalDetailSummary').text('');
+            medalRowsCache = []; currentPage = 1;
+            $('#medalDetailModal').modal('show');
+            $.ajax({
+                url: '<?php echo url('ajax/medal_recipients.php'); ?>',
+                data: { kod_universiti: kod, medal: medal },
+                dataType: 'json'
+            }).done(function(res){
+                if (!res || res.status !== 'ok') {
+                    $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Gagal memuatkan data</td></tr>');
+                    $('#medalDetailSummary').text('Gagal memuatkan data');
+                    return;
+                }
+                medalRowsCache = res.data || [];
+                renderDetailTable();
+            }).fail(function(){
+                $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Ralat memuatkan data</td></tr>');
+                $('#medalDetailSummary').text('Ralat memuatkan data');
+            });
+        });
+    });
+})();
+</script>
     </div>
 
 </div>
