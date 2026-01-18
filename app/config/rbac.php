@@ -53,6 +53,7 @@ class RBAC {
         'pages/reports.php' => ['ADMIN', 'ORGANIZER'],
         'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER'],
         'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
+        'pages/checklist.php' => ['ADMIN', 'ORGANIZER'],
         'pages/matrix-access.php' => ['ADMIN'],
         
         // Settings - ADMIN only

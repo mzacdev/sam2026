@@ -145,6 +145,7 @@ $nav_sections = [
             ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
             ['title' => 'Kontingen', 'icon' => 'cil-people', 'url' => 'pages/contingent-admin.php'],
+            ['title' => 'Checklist', 'icon' => 'cil-list', 'url' => 'pages/checklist.php'],
         ],
     ],
     [

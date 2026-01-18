@@ -68,6 +68,10 @@
       "ORGANIZER",
       "JUDGE"
     ],
+    "pages/checklist.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
     "pages/matrix-access.php": [
       "ADMIN"
     ],
