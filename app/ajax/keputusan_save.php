@@ -50,9 +50,7 @@ try {
     $sukan_id = isset($input['sukan_id']) ? (int)$input['sukan_id'] : 0;
     $kategori_id = isset($input['kategori_id']) ? (int)$input['kategori_id'] : 0;
     $tarikh = isset($input['tarikh']) ? trim($input['tarikh']) : '';
-    $tempat_pertama = isset($input['tempat_pertama']) ? trim($input['tempat_pertama']) : null;
-    $tempat_kedua = isset($input['tempat_kedua']) ? trim($input['tempat_kedua']) : null;
-    $tempat_ketiga = isset($input['tempat_ketiga']) ? trim($input['tempat_ketiga']) : null;
+    $standings = isset($input['standings']) && is_array($input['standings']) ? $input['standings'] : [];
     $status = isset($input['status']) ? trim($input['status']) : 'completed';
     
     // Validation
@@ -95,87 +93,171 @@ try {
     }
     
     $penilaian = $category['penilaian'];
+    if (empty($penilaian)) {
+        $penilaian = 'berkumpulan'; // Default to team-based
+    }
     
-    // Validate participants are registered to the category
+    // Get participant count for this category
+    $participantCount = 0;
     if ($penilaian === 'individu') {
-        // Validate atlet IDs
-        if ($tempat_pertama) {
-            $checkStmt = $db->prepare("
-                SELECT id FROM table_pasukan_atlet 
-                WHERE id = :id AND kategori_id = :kategori_id AND deleted_at IS NULL
+        $checkColStmt = $db->query("SHOW COLUMNS FROM table_pasukan_atlet LIKE 'kategori_id'");
+        $hasKategoriId = $checkColStmt && $checkColStmt->rowCount() > 0;
+        if ($hasKategoriId) {
+            $countStmt = $db->prepare("
+                SELECT COUNT(*) as cnt FROM table_pasukan_atlet 
+                WHERE kategori_id = :kategori_id AND deleted_at IS NULL
             ");
-            $checkStmt->execute([':id' => (int)$tempat_pertama, ':kategori_id' => $kategori_id]);
-            if (!$checkStmt->fetch()) {
-                throw new Exception('Peserta tempat pertama tidak didaftarkan dalam kategori ini');
-            }
-        }
-        if ($tempat_kedua) {
-            $checkStmt = $db->prepare("
-                SELECT id FROM table_pasukan_atlet 
-                WHERE id = :id AND kategori_id = :kategori_id AND deleted_at IS NULL
+            $countStmt->execute([':kategori_id' => $kategori_id]);
+            $countResult = $countStmt->fetch(PDO::FETCH_ASSOC);
+            $participantCount = (int)$countResult['cnt'];
+        } else {
+            // Fallback: count by sukan_id
+            $countStmt = $db->prepare("
+                SELECT COUNT(DISTINCT pa.id) as cnt 
+                FROM table_pasukan_atlet pa
+                JOIN table_pasukan p ON pa.pasukan_id = p.id
+                WHERE p.sukan_id = :sukan_id AND pa.deleted_at IS NULL AND p.deleted_at IS NULL
             ");
-            $checkStmt->execute([':id' => (int)$tempat_kedua, ':kategori_id' => $kategori_id]);
-            if (!$checkStmt->fetch()) {
-                throw new Exception('Peserta tempat kedua tidak didaftarkan dalam kategori ini');
-            }
-        }
-        if ($tempat_ketiga) {
-            $checkStmt = $db->prepare("
-                SELECT id FROM table_pasukan_atlet 
-                WHERE id = :id AND kategori_id = :kategori_id AND deleted_at IS NULL
-            ");
-            $checkStmt->execute([':id' => (int)$tempat_ketiga, ':kategori_id' => $kategori_id]);
-            if (!$checkStmt->fetch()) {
-                throw new Exception('Peserta tempat ketiga tidak didaftarkan dalam kategori ini');
-            }
+            $countStmt->execute([':sukan_id' => $sukan_id]);
+            $countResult = $countStmt->fetch(PDO::FETCH_ASSOC);
+            $participantCount = (int)$countResult['cnt'];
         }
     } else {
-        // Validate pasukan IDs
-        if ($tempat_pertama) {
-            $checkStmt = $db->prepare("
-                SELECT p.id FROM table_pasukan p
+        // Team-based: count distinct teams
+        $checkColStmt = $db->query("SHOW COLUMNS FROM table_pasukan_atlet LIKE 'kategori_id'");
+        $hasKategoriId = $checkColStmt && $checkColStmt->rowCount() > 0;
+        if ($hasKategoriId) {
+            $countStmt = $db->prepare("
+                SELECT COUNT(DISTINCT p.id) as cnt 
+                FROM table_pasukan p
                 JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id
-                WHERE p.id = :id AND pa.kategori_id = :kategori_id 
+                WHERE pa.kategori_id = :kategori_id 
                 AND pa.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 1
             ");
-            $checkStmt->execute([':id' => (int)$tempat_pertama, ':kategori_id' => $kategori_id]);
-            if (!$checkStmt->fetch()) {
-                throw new Exception('Pasukan tempat pertama tidak didaftarkan dalam kategori ini');
-            }
+            $countStmt->execute([':kategori_id' => $kategori_id]);
+            $countResult = $countStmt->fetch(PDO::FETCH_ASSOC);
+            $participantCount = (int)$countResult['cnt'];
+        } else {
+            // Fallback: count by sukan_id
+            $countStmt = $db->prepare("
+                SELECT COUNT(DISTINCT p.id) as cnt 
+                FROM table_pasukan p
+                WHERE p.sukan_id = :sukan_id AND p.deleted_at IS NULL AND p.status = 1
+            ");
+            $countStmt->execute([':sukan_id' => $sukan_id]);
+            $countResult = $countStmt->fetch(PDO::FETCH_ASSOC);
+            $participantCount = (int)$countResult['cnt'];
         }
-        if ($tempat_kedua) {
-            $checkStmt = $db->prepare("
-                SELECT p.id FROM table_pasukan p
-                JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id
-                WHERE p.id = :id AND pa.kategori_id = :kategori_id 
-                AND pa.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 1
-            ");
-            $checkStmt->execute([':id' => (int)$tempat_kedua, ':kategori_id' => $kategori_id]);
-            if (!$checkStmt->fetch()) {
-                throw new Exception('Pasukan tempat kedua tidak didaftarkan dalam kategori ini');
-            }
+    }
+    
+    if ($participantCount === 0) {
+        throw new Exception('Tiada peserta didaftarkan untuk kategori ini');
+    }
+    
+    // Validate standings array
+    if (empty($standings) || !is_array($standings)) {
+        throw new Exception('Standings diperlukan. Sila pilih peserta untuk semua kedudukan.');
+    }
+    
+    // Validate all positions are filled (1 to N)
+    if (count($standings) !== $participantCount) {
+        throw new Exception("Semua kedudukan mesti diisi. Kategori ini mempunyai {$participantCount} peserta.");
+    }
+    
+    // Validate positions are sequential and unique
+    $positions = [];
+    $participantIds = [];
+    foreach ($standings as $standing) {
+        if (!isset($standing['position']) || !isset($standing['participant_id'])) {
+            throw new Exception('Format standings tidak sah. Setiap kedudukan mesti mempunyai position dan participant_id.');
         }
-        if ($tempat_ketiga) {
-            $checkStmt = $db->prepare("
-                SELECT p.id FROM table_pasukan p
-                JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id
-                WHERE p.id = :id AND pa.kategori_id = :kategori_id 
-                AND pa.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 1
-            ");
-            $checkStmt->execute([':id' => (int)$tempat_ketiga, ':kategori_id' => $kategori_id]);
+        
+        $pos = (int)$standing['position'];
+        $participantId = trim($standing['participant_id']);
+        
+        if (empty($participantId)) {
+            throw new Exception("Kedudukan {$pos} mesti mempunyai peserta yang dipilih.");
+        }
+        
+        // Check for duplicate positions
+        if (in_array($pos, $positions)) {
+            throw new Exception("Kedudukan {$pos} diduplikasi.");
+        }
+        $positions[] = $pos;
+        
+        // Check for duplicate participants
+        if (in_array($participantId, $participantIds)) {
+            throw new Exception('Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat');
+        }
+        $participantIds[] = $participantId;
+    }
+    
+    // Validate positions are sequential (1, 2, 3, ..., N)
+    sort($positions);
+    for ($i = 0; $i < count($positions); $i++) {
+        if ($positions[$i] !== ($i + 1)) {
+            throw new Exception('Kedudukan mesti berurutan dari 1 hingga ' . $participantCount);
+        }
+    }
+    
+    // Validate all participants are registered to the category
+    foreach ($standings as $standing) {
+        $participantId = trim($standing['participant_id']);
+        
+        if ($penilaian === 'individu') {
+            // Validate atlet ID
+            $checkColStmt = $db->query("SHOW COLUMNS FROM table_pasukan_atlet LIKE 'kategori_id'");
+            $hasKategoriId = $checkColStmt && $checkColStmt->rowCount() > 0;
+            if ($hasKategoriId) {
+                $checkStmt = $db->prepare("
+                    SELECT id FROM table_pasukan_atlet 
+                    WHERE id = :id AND kategori_id = :kategori_id AND deleted_at IS NULL
+                ");
+                $checkStmt->execute([':id' => (int)$participantId, ':kategori_id' => $kategori_id]);
+            } else {
+                // Fallback: check by sukan_id
+                $checkStmt = $db->prepare("
+                    SELECT pa.id FROM table_pasukan_atlet pa
+                    JOIN table_pasukan p ON pa.pasukan_id = p.id
+                    WHERE pa.id = :id AND p.sukan_id = :sukan_id 
+                    AND pa.deleted_at IS NULL AND p.deleted_at IS NULL
+                ");
+                $checkStmt->execute([':id' => (int)$participantId, ':sukan_id' => $sukan_id]);
+            }
             if (!$checkStmt->fetch()) {
-                throw new Exception('Pasukan tempat ketiga tidak didaftarkan dalam kategori ini');
+                throw new Exception("Peserta ID {$participantId} tidak didaftarkan dalam kategori ini");
+            }
+        } else {
+            // Validate pasukan ID
+            $checkColStmt = $db->query("SHOW COLUMNS FROM table_pasukan_atlet LIKE 'kategori_id'");
+            $hasKategoriId = $checkColStmt && $checkColStmt->rowCount() > 0;
+            if ($hasKategoriId) {
+                $checkStmt = $db->prepare("
+                    SELECT p.id FROM table_pasukan p
+                    JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id
+                    WHERE p.id = :id AND pa.kategori_id = :kategori_id 
+                    AND pa.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 1
+                ");
+                $checkStmt->execute([':id' => (int)$participantId, ':kategori_id' => $kategori_id]);
+            } else {
+                // Fallback: check by sukan_id
+                $checkStmt = $db->prepare("
+                    SELECT p.id FROM table_pasukan p
+                    WHERE p.id = :id AND p.sukan_id = :sukan_id 
+                    AND p.deleted_at IS NULL AND p.status = 1
+                ");
+                $checkStmt->execute([':id' => (int)$participantId, ':sukan_id' => $sukan_id]);
+            }
+            if (!$checkStmt->fetch()) {
+                throw new Exception("Pasukan ID {$participantId} tidak didaftarkan dalam kategori ini");
             }
         }
     }
     
-    // Validate no duplicate participants in different positions
-    $participants = array_filter([$tempat_pertama, $tempat_kedua, $tempat_ketiga], function($p) {
-        return !empty($p);
-    });
-    
-    if (count($participants) !== count(array_unique($participants))) {
-        throw new Exception('Pasukan/peserta yang sama tidak boleh dipilih untuk lebih daripada satu tempat');
+    // Prepare standings JSON
+    $standingsJson = json_encode($standings);
+    if ($standingsJson === false) {
+        throw new Exception('Ralat menyediakan data standings');
     }
     
     // Check if table_results has kategori_id column
@@ -226,9 +308,7 @@ try {
                 SET sukan_id = :sukan_id,
                     kategori_id = :kategori_id,
                     tarikh = :tarikh,
-                    tempat_pertama = :tempat_pertama,
-                    tempat_kedua = :tempat_kedua,
-                    tempat_ketiga = :tempat_ketiga,
+                    standings = :standings,
                     status = :status,
                     updated_at = CURRENT_TIMESTAMP,
                     updated_by = :updated_by
@@ -239,9 +319,7 @@ try {
                 ':sukan_id' => $sukan_id,
                 ':kategori_id' => $kategori_id,
                 ':tarikh' => $tarikh,
-                ':tempat_pertama' => $tempat_pertama ?: null,
-                ':tempat_kedua' => $tempat_kedua ?: null,
-                ':tempat_ketiga' => $tempat_ketiga ?: null,
+                ':standings' => $standingsJson,
                 ':status' => $status,
                 ':updated_by' => $userId
             ]);
@@ -251,9 +329,7 @@ try {
                 UPDATE table_results 
                 SET sukan_id = :sukan_id,
                     tarikh = :tarikh,
-                    tempat_pertama = :tempat_pertama,
-                    tempat_kedua = :tempat_kedua,
-                    tempat_ketiga = :tempat_ketiga,
+                    standings = :standings,
                     status = :status,
                     updated_at = CURRENT_TIMESTAMP,
                     updated_by = :updated_by
@@ -263,9 +339,7 @@ try {
                 ':id' => $id,
                 ':sukan_id' => $sukan_id,
                 ':tarikh' => $tarikh,
-                ':tempat_pertama' => $tempat_pertama ?: null,
-                ':tempat_kedua' => $tempat_kedua ?: null,
-                ':tempat_ketiga' => $tempat_ketiga ?: null,
+                ':standings' => $standingsJson,
                 ':status' => $status,
                 ':updated_by' => $userId
             ]);
@@ -286,21 +360,17 @@ try {
             $stmt = $db->prepare("
                 INSERT INTO table_results (
                     sukan_id, kategori_id, tarikh, 
-                    tempat_pertama, tempat_kedua, tempat_ketiga, 
-                    status, created_by
+                    standings, status, created_by
                 ) VALUES (
                     :sukan_id, :kategori_id, :tarikh,
-                    :tempat_pertama, :tempat_kedua, :tempat_ketiga,
-                    :status, :created_by
+                    :standings, :status, :created_by
                 )
             ");
             $stmt->execute([
                 ':sukan_id' => $sukan_id,
                 ':kategori_id' => $kategori_id,
                 ':tarikh' => $tarikh,
-                ':tempat_pertama' => $tempat_pertama ?: null,
-                ':tempat_kedua' => $tempat_kedua ?: null,
-                ':tempat_ketiga' => $tempat_ketiga ?: null,
+                ':standings' => $standingsJson,
                 ':status' => $status,
                 ':created_by' => $userId
             ]);
@@ -309,20 +379,16 @@ try {
             $stmt = $db->prepare("
                 INSERT INTO table_results (
                     sukan_id, tarikh, 
-                    tempat_pertama, tempat_kedua, tempat_ketiga, 
-                    status, created_by
+                    standings, status, created_by
                 ) VALUES (
                     :sukan_id, :tarikh,
-                    :tempat_pertama, :tempat_kedua, :tempat_ketiga,
-                    :status, :created_by
+                    :standings, :status, :created_by
                 )
             ");
             $stmt->execute([
                 ':sukan_id' => $sukan_id,
                 ':tarikh' => $tarikh,
-                ':tempat_pertama' => $tempat_pertama ?: null,
-                ':tempat_kedua' => $tempat_kedua ?: null,
-                ':tempat_ketiga' => $tempat_ketiga ?: null,
+                ':standings' => $standingsJson,
                 ':status' => $status,
                 ':created_by' => $userId
             ]);

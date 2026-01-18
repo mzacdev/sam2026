@@ -59,58 +59,8 @@ try {
                 k.nama_kategori AS kategori,
                 k.penilaian,
                 DATE_FORMAT(r.tarikh, '%Y-%m-%d') AS tarikh,
-                r.tempat_pertama, 
-                r.tempat_kedua, 
-                r.tempat_ketiga, 
-                r.status,
-                -- Get participant names for tempat pertama
-                CASE 
-                    WHEN k.penilaian = 'individu' THEN 
-                        (SELECT CONCAT(pa.nama, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan_atlet pa 
-                         JOIN table_pasukan p ON pa.pasukan_id = p.id
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE pa.id = r.tempat_pertama AND pa.deleted_at IS NULL)
-                    ELSE 
-                        (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan p
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE p.id = r.tempat_pertama AND p.deleted_at IS NULL)
-                END AS tempat_pertama_nama,
-                -- Get participant names for tempat kedua
-                CASE 
-                    WHEN k.penilaian = 'individu' THEN 
-                        (SELECT CONCAT(pa.nama, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan_atlet pa 
-                         JOIN table_pasukan p ON pa.pasukan_id = p.id
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE pa.id = r.tempat_kedua AND pa.deleted_at IS NULL)
-                    ELSE 
-                        (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan p
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE p.id = r.tempat_kedua AND p.deleted_at IS NULL)
-                END AS tempat_kedua_nama,
-                -- Get participant names for tempat ketiga
-                CASE 
-                    WHEN k.penilaian = 'individu' THEN 
-                        (SELECT CONCAT(pa.nama, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan_atlet pa 
-                         JOIN table_pasukan p ON pa.pasukan_id = p.id
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE pa.id = r.tempat_ketiga AND pa.deleted_at IS NULL)
-                    ELSE 
-                        (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                         FROM table_pasukan p
-                         JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                         LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                         WHERE p.id = r.tempat_ketiga AND p.deleted_at IS NULL)
-                END AS tempat_ketiga_nama
+                r.standings,
+                r.status
             FROM table_results r
             LEFT JOIN table_sukan s ON r.sukan_id = s.id
             LEFT JOIN table_kategori k ON r.kategori_id = k.id
@@ -127,25 +77,8 @@ try {
                 '' AS kategori,
                 NULL AS penilaian,
                 DATE_FORMAT(r.tarikh, '%Y-%m-%d') AS tarikh,
-                r.tempat_pertama, 
-                r.tempat_kedua, 
-                r.tempat_ketiga, 
-                r.status,
-                (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                 FROM table_pasukan p
-                 JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                 LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                 WHERE p.id = r.tempat_pertama AND p.deleted_at IS NULL) AS tempat_pertama_nama,
-                (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                 FROM table_pasukan p
-                 JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                 LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                 WHERE p.id = r.tempat_kedua AND p.deleted_at IS NULL) AS tempat_kedua_nama,
-                (SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) 
-                 FROM table_pasukan p
-                 JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
-                 LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
-                 WHERE p.id = r.tempat_ketiga AND p.deleted_at IS NULL) AS tempat_ketiga_nama
+                r.standings,
+                r.status
             FROM table_results r
             LEFT JOIN table_sukan s ON r.sukan_id = s.id
             WHERE " . implode(' AND ', $where) . "
@@ -157,8 +90,97 @@ try {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    // Parse standings JSON and get participant names
+    $checkColStmt = $db->query("SHOW COLUMNS FROM table_pasukan_atlet LIKE 'kategori_id'");
+    $hasKategoriIdInAtlet = $checkColStmt && $checkColStmt->rowCount() > 0;
+    
+    foreach ($rows as &$row) {
+        $standings = [];
+        if (!empty($row['standings'])) {
+            $standingsData = json_decode($row['standings'], true);
+            if (is_array($standingsData)) {
+                $penilaian = $row['penilaian'] ?? 'berkumpulan';
+                if (empty($penilaian)) {
+                    $penilaian = 'berkumpulan';
+                }
+                
+                foreach ($standingsData as $standing) {
+                    $position = isset($standing['position']) ? (int)$standing['position'] : 0;
+                    $participantId = isset($standing['participant_id']) ? trim($standing['participant_id']) : '';
+                    
+                    if (empty($participantId)) {
+                        continue;
+                    }
+                    
+                    $participantName = '';
+                    
+                    if ($penilaian === 'individu') {
+                        // Get individual player name
+                        if ($hasKategoriIdInAtlet) {
+                            $nameStmt = $db->prepare("
+                                SELECT CONCAT(pa.nama, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) AS nama
+                                FROM table_pasukan_atlet pa 
+                                JOIN table_pasukan p ON pa.pasukan_id = p.id
+                                JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
+                                LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
+                                WHERE pa.id = :id AND pa.deleted_at IS NULL
+                            ");
+                        } else {
+                            $nameStmt = $db->prepare("
+                                SELECT CONCAT(pa.nama, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) AS nama
+                                FROM table_pasukan_atlet pa 
+                                JOIN table_pasukan p ON pa.pasukan_id = p.id
+                                JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
+                                LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
+                                WHERE pa.id = :id AND pa.deleted_at IS NULL AND p.deleted_at IS NULL
+                            ");
+                        }
+                        $nameStmt->execute([':id' => (int)$participantId]);
+                        $nameResult = $nameStmt->fetch(PDO::FETCH_ASSOC);
+                        $participantName = $nameResult['nama'] ?? '';
+                    } else {
+                        // Get team name
+                        if ($hasKategoriIdInAtlet) {
+                            $nameStmt = $db->prepare("
+                                SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) AS nama
+                                FROM table_pasukan p
+                                JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
+                                LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
+                                WHERE p.id = :id AND p.deleted_at IS NULL AND p.status = 1
+                            ");
+                        } else {
+                            $nameStmt = $db->prepare("
+                                SELECT CONCAT(p.nama_pasukan, ' - ', COALESCE(u.nama_universiti, k2.kod_universiti, '')) AS nama
+                                FROM table_pasukan p
+                                JOIN table_kontinjen k2 ON p.kontinjen_id = k2.id
+                                LEFT JOIN table_ref_universiti u ON k2.kod_universiti = u.kod_universiti AND u.deleted_at IS NULL
+                                WHERE p.id = :id AND p.deleted_at IS NULL AND p.status = 1
+                            ");
+                        }
+                        $nameStmt->execute([':id' => (int)$participantId]);
+                        $nameResult = $nameStmt->fetch(PDO::FETCH_ASSOC);
+                        $participantName = $nameResult['nama'] ?? '';
+                    }
+                    
+                    $standings[] = [
+                        'position' => $position,
+                        'participant_id' => $participantId,
+                        'participant_name' => $participantName
+                    ];
+                }
+                
+                // Sort by position
+                usort($standings, function($a, $b) {
+                    return $a['position'] <=> $b['position'];
+                });
+            }
+        }
+        $row['standings'] = $standings;
+    }
+    unset($row);
+    
     // Debug logging
-    error_log('[ajax/keputusan_list] Query executed. Found ' . count($rows) . ' rows. SQL: ' . $sql);
+    error_log('[ajax/keputusan_list] Query executed. Found ' . count($rows) . ' rows.');
     if (!empty($params)) {
         error_log('[ajax/keputusan_list] Params: ' . json_encode($params));
     }

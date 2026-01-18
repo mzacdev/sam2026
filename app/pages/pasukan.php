@@ -203,7 +203,7 @@ ob_start();
                                     <th scope="col" style="width:18%;">Jurulatih</th>
                                     <th scope="col" style="width:8%;">Bil. Atlet</th>
                                     <th scope="col" style="width:8%;">Status</th>
-                                    <th scope="col">Tindakan</th>
+                                    <th scope="col" style="width:10%;">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody id="pasukanTableBody">
@@ -249,7 +249,7 @@ ob_start();
                                                 ?>
                                                 <span class="badge <?php echo $badgeClass; ?>"><?php echo $statusText; ?></span>
                                             </div></td>
-                                            <td><div class="cell-inner">
+                                            <td style="width:10%;"><div class="cell-inner d-flex gap-1">
                                                 <a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#"
                                                    data-id="<?php echo (int)$t['id']; ?>">
                                                     <i class="fa fa-edit"></i>
@@ -406,6 +406,9 @@ require_once __DIR__ . '/../includes/layout.php';
 .table-fixed{table-layout:fixed;width:100%}
 .table-fixed th,.table-fixed td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .table-fixed td .cell-inner{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Allow action buttons to be visible */
+.table-fixed td:last-child .cell-inner{overflow:visible;white-space:normal}
+.table-fixed td:last-child{overflow:visible}
 .table-responsive{overflow-x:auto;overflow-y:visible}
 
 /* Print only the table content when user clicks Cetak */
@@ -1889,10 +1892,10 @@ function renderPasukanPage(page) {
             html += '<td><div class="small">' + escapeHtml(jurulatihList.slice(0, 2).join(', ')) + (jurulatihList.length > 2 ? '...' : '') + '</div></td>';
             html += '<td class="text-center"><span class="badge bg-info">' + (parseInt(t.atlet_count || 0)) + '</span></td>';
             html += '<td><span class="badge ' + badgeClass + '">' + statusText + '</span></td>';
-            html += '<td>';
-            html += '<a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-edit"></i></a> ';
+            html += '<td style="width:10%;"><div class="cell-inner d-flex gap-1">';
+            html += '<a class="btn btn-sm btn-outline-primary edit-pasukan" title="Edit" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-edit"></i></a>';
             html += '<a class="btn btn-sm btn-outline-danger delete-pasukan" title="Padam" href="#" data-id="' + (t.id || 0) + '"><i class="fa fa-trash"></i></a>';
-            html += '</td>';
+            html += '</div></td>';
             html += '</tr>';
         });
         tbody.innerHTML = html;
