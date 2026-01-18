@@ -39,10 +39,11 @@ if (!$auth->isLoggedIn()) {
 }
 
 $rbac = getRBAC();
-// Minimum JUDGE (includes ORGANIZER, ADMIN)
-if (!$rbac->hasMinimumRole('JUDGE')) {
+// Only ADMIN and ORGANIZER can edit participants
+$userRole = Session::get('user_role');
+if (!in_array($userRole, ['ADMIN', 'ORGANIZER'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN, ORGANIZER, dan JUDGE dibenarkan.']);
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN dan ORGANIZER dibenarkan untuk mengedit peserta.']);
     exit;
 }
 
@@ -75,8 +76,8 @@ try {
     // Define allowed fields for each participant type
     $allowedFields = [
         'atlet' => ['nama', 'no_kad_pengenalan', 'no_matrik'],
-        'pengurus' => ['nama', 'no_kad_pengenalan'],
-        'jurulatih' => ['nama', 'no_kad_pengenalan']
+        'pengurus' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel'],
+        'jurulatih' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel']
     ];
     
     if (!in_array($field_name, $allowedFields[$participant_type])) {
@@ -111,8 +112,14 @@ try {
     $fieldMap = [
         'nama' => 'nama',
         'no_kad_pengenalan' => 'no_kad_pengenalan',
-        'no_matrik' => 'no_matrik'
+        'no_matrik' => 'no_matrik',
+        'no_telefon' => 'no_telefon',
+        'emel' => 'emel'
     ];
+    
+    if (!isset($fieldMap[$field_name])) {
+        throw new Exception('Medan tidak sah.');
+    }
     
     $dbFieldName = $fieldMap[$field_name];
     
@@ -133,6 +140,23 @@ try {
         // Basic validation: max length
         if (mb_strlen($field_value) > 50) {
             throw new Exception('No Matrik tidak boleh melebihi 50 aksara.');
+        }
+    }
+    
+    if ($field_name === 'no_telefon' && !empty($field_value)) {
+        // Basic validation: max length
+        if (mb_strlen($field_value) > 20) {
+            throw new Exception('No Telefon tidak boleh melebihi 20 aksara.');
+        }
+    }
+    
+    if ($field_name === 'emel' && !empty($field_value)) {
+        // Basic validation: email format and max length
+        if (mb_strlen($field_value) > 100) {
+            throw new Exception('Emel tidak boleh melebihi 100 aksara.');
+        }
+        if (!filter_var($field_value, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('Format emel tidak sah.');
         }
     }
     

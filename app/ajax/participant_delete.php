@@ -38,10 +38,11 @@ if (!$auth->isLoggedIn()) {
 }
 
 $rbac = getRBAC();
-// Minimum JUDGE (includes ORGANIZER, ADMIN)
-if (!$rbac->hasMinimumRole('JUDGE')) {
+// Only ADMIN and ORGANIZER can delete participants
+$userRole = Session::get('user_role');
+if (!in_array($userRole, ['ADMIN', 'ORGANIZER'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN, ORGANIZER, dan JUDGE dibenarkan.']);
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN dan ORGANIZER dibenarkan untuk memadam peserta.']);
     exit;
 }
 

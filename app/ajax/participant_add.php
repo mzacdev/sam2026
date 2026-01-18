@@ -38,10 +38,11 @@ if (!$auth->isLoggedIn()) {
 }
 
 $rbac = getRBAC();
-// Minimum JUDGE (includes ORGANIZER, ADMIN)
-if (!$rbac->hasMinimumRole('JUDGE')) {
+// Only ADMIN and ORGANIZER can add participants
+$userRole = Session::get('user_role');
+if (!in_array($userRole, ['ADMIN', 'ORGANIZER'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN, ORGANIZER, dan JUDGE dibenarkan.']);
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN dan ORGANIZER dibenarkan untuk menambah peserta.']);
     exit;
 }
 
@@ -62,6 +63,8 @@ try {
     $nama = isset($input['nama']) ? trim($input['nama']) : '';
     $no_kad_pengenalan = isset($input['no_kad_pengenalan']) ? trim($input['no_kad_pengenalan']) : null;
     $no_matrik = isset($input['no_matrik']) ? trim($input['no_matrik']) : null;
+    $no_telefon = isset($input['no_telefon']) ? trim($input['no_telefon']) : null;
+    $emel = isset($input['emel']) ? trim($input['emel']) : null;
     $kategori_id = isset($input['kategori_id']) && !empty($input['kategori_id']) ? (int)$input['kategori_id'] : null;
     
     // Validation
@@ -89,6 +92,21 @@ try {
     // Validate matrik length if provided
     if (!empty($no_matrik) && mb_strlen($no_matrik) > 50) {
         throw new Exception('No Matrik tidak boleh melebihi 50 aksara.');
+    }
+    
+    // Validate phone length if provided
+    if (!empty($no_telefon) && mb_strlen($no_telefon) > 20) {
+        throw new Exception('No Telefon tidak boleh melebihi 20 aksara.');
+    }
+    
+    // Validate email format if provided
+    if (!empty($emel)) {
+        if (mb_strlen($emel) > 100) {
+            throw new Exception('Emel tidak boleh melebihi 100 aksara.');
+        }
+        if (!filter_var($emel, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('Format emel tidak sah.');
+        }
     }
     
     $db = getDB();
@@ -164,6 +182,14 @@ try {
     
     if (in_array('no_matrik', $fields)) {
         $params[':no_matrik'] = $no_matrik;
+    }
+    
+    if (in_array('no_telefon', $fields)) {
+        $params[':no_telefon'] = $no_telefon;
+    }
+    
+    if (in_array('emel', $fields)) {
+        $params[':emel'] = $emel;
     }
     
     if (in_array('kategori_id', $fields)) {
