@@ -2,28 +2,86 @@
   "ensure_admin": true,
   "public_pages": [],
   "pages": {
-    "index.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
-    "auth/logout.php": ["ADMIN", "ORGANIZER", "JUDGE", "CONTINGENT", "VIEWER"],
-
-    "pages/contingent.php": ["ADMIN", "ORGANIZER"],
-    "pages/contingent-user.php": ["CONTINGENT"],
-
-    "pages/sports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/pasukan.php": ["ADMIN", "ORGANIZER", "JUDGE"],
-    "pages/pengurusan-pengguna.php": ["ADMIN"],
-    "pages/athletes.php": ["ADMIN", "ORGANIZER", "JUDGE"],
-    "pages/venues.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/keputusan.php": ["ADMIN", "ORGANIZER", "JUDGE"],
-    "pages/results.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/medal-tally.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/reports.php": ["ADMIN", "ORGANIZER", "JUDGE", "VIEWER"],
-    "pages/ringkasan.php": ["ADMIN", "ORGANIZER"],
-    "pages/contingent-admin.php": ["ADMIN", "ORGANIZER", "JUDGE"],
-    "pages/matrix-access.php": ["ADMIN"],
-
-    "pages/settings.php": ["ADMIN"],
-    "pages/ic_audit.php": ["ADMIN"],
-    "pages/users.php": ["ADMIN"],
-    "pages/university.php": ["ADMIN"]
+    "index.php": [
+      "ADMIN",
+      "ORGANIZER",
+      "JUDGE",
+      "CONTINGENT",
+      "VIEWER"
+    ],
+    "auth/logout.php": [
+      "ADMIN",
+      "ORGANIZER",
+      "JUDGE",
+      "CONTINGENT",
+      "VIEWER"
+    ],
+    "pages/contingent.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/contingent-user.php": [
+      "CONTINGENT"
+    ],
+    "pages/sports.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/pasukan.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/pengurusan-pengguna.php": [
+      "ADMIN"
+    ],
+    "pages/athletes.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/venues.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/keputusan.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/results.php": [
+      "ADMIN",
+      "ORGANIZER",
+      "JUDGE"
+    ],
+    "pages/medal-tally.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/reports.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/ringkasan.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
+    "pages/contingent-admin.php": [
+      "ADMIN",
+      "ORGANIZER",
+      "JUDGE"
+    ],
+    "pages/matrix-access.php": [
+      "ADMIN"
+    ],
+    "pages/settings.php": [
+      "ADMIN"
+    ],
+    "pages/ic_audit.php": [
+      "ADMIN"
+    ],
+    "pages/users.php": [
+      "ADMIN"
+    ],
+    "pages/university.php": [
+      "ADMIN"
+    ]
   }
 }

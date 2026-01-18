@@ -63,8 +63,8 @@ $add('pages/contingent-user.php', 'Kontingen - User', 'Pengurusan');
 
 // Laporan group
 $add('', 'Laporan', 'Laporan');
-$add('pages/results.php', 'Keputusan', 'Laporan');
 $add('pages/ringkasan.php', 'Ringkasan', 'Laporan');
+$add('pages/results.php', 'Keputusan', 'Laporan');
 $add('pages/contingent-admin.php', 'Kontingen - Admin', 'Laporan');
 
 // Tetapan group

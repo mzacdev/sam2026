@@ -28,6 +28,22 @@ if (!defined('SKIP_AUTH_CHECK') && $rbac === null) {
     }
 }
 
+$contingentCode = Session::get('kod_universiti') ?? Session::get('kod_university') ?? '';
+if (!$contingentCode) {
+    try {
+        $role = Session::get('user_role');
+        $kontinjenId = Session::get('kontinjen_id');
+        if ($role === 'CONTINGENT' && $kontinjenId) {
+            $db = getDB();
+            $stmt = $db->prepare("SELECT k.kod_universiti FROM table_kontinjen k WHERE k.id = :id AND k.deleted_at IS NULL");
+            $stmt->execute([':id' => $kontinjenId]);
+            $contingentCode = $stmt->fetchColumn() ?: '';
+        }
+    } catch (Exception $e) {
+        // ignore
+    }
+}
+
 $displayNavItems = $nav_items;
 $useSections = isset($nav_sections) && is_array($nav_sections);
 
@@ -119,11 +135,15 @@ $isLoggedIn = ($auth && $auth->isLoggedIn());
                         <li class="<?php echo $parentClasses; ?>">
                             <a href="#"><i class="ti-list"></i> <span><?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?></span></a>
                             <ul class="side-header-sub-menu" <?php echo $sectionActive ? 'style="display:block;"' : ''; ?>>
-                                <?php foreach ($visibleChildren as $child): ?>
-                                    <?php
-                                    $icon = $iconMap[$child['icon']] ?? 'ti-angle-right';
-                                    $childHref = url($child['url']);
-                                    $childPath = parse_url($childHref, PHP_URL_PATH) ?: '/' . ltrim($child['url'], '/');
+                    <?php foreach ($visibleChildren as $child): ?>
+                        <?php
+                        $icon = $iconMap[$child['icon']] ?? 'ti-angle-right';
+                        // dynamic title override for contingent-user (show Kod Universiti)
+                        if (($child['url'] ?? '') === 'pages/contingent-user.php' && !empty($contingentCode)) {
+                            $child['title'] = 'Kontinjen ' . $contingentCode;
+                        }
+                        $childHref = url($child['url']);
+                        $childPath = parse_url($childHref, PHP_URL_PATH) ?: '/' . ltrim($child['url'], '/');
 
                                     // remove BASE_URL prefix if present
                                     if (defined('BASE_URL') && BASE_URL) {

@@ -185,6 +185,16 @@ ob_start();
             var $container = $('<div class="p-3 bg-light border rounded">');
             var currentSport = '';
             var currentAcara = '';
+            function parseId(val){
+                var n = parseInt(val,10);
+                return isNaN(n) ? '' : n;
+            }
+            function getFilters(){
+                return {
+                    sportId: parseId(currentSport || $select.val() || ''),
+                    kategoriId: parseId(currentAcara || $selectAcara.val() || '')
+                };
+            }
 
             var $topBar = $('<div class="details-top-controls mb-2"></div>');
             var $select = $('<select class="form-select form-select-sm details-select select-sukan"><option value="">Semua Sukan</option></select>');
@@ -292,6 +302,9 @@ ob_start();
             var currentPage = 1;
 
             function applyFilters(){
+                var filterIds = getFilters();
+                var sportId = filterIds.sportId;
+                var kategoriId = filterIds.kategoriId;
                 var q = ($search.val()||'').trim().toLowerCase();
 
                 function matchesSearch(r){
@@ -300,12 +313,21 @@ ob_start();
                     return true;
                 }
 
-                var managers = rows.filter(function(r){
+                var filteredByIds = rows.filter(function(r){
+                    if (sportId && String(r.sukan_id || '') !== String(sportId)) return false;
+                    if (kategoriId){
+                        var kidVal = r.kategori_id || r.id_kategori || r.acara_id || r.event_id;
+                        if (String(kidVal || '') !== String(kategoriId)) return false;
+                    }
+                    return true;
+                });
+
+                var managers = filteredByIds.filter(function(r){
                     var role = (r._role||'').toString();
                     return (role === 'Pengurus' || role === 'Jurulatih') && matchesSearch(r);
                 });
 
-                var athletes = rows.filter(function(r){
+                var athletes = filteredByIds.filter(function(r){
                     return (r._role||'') === 'Atlet' && matchesSearch(r);
                 });
 
@@ -410,7 +432,8 @@ ob_start();
             function reloadFromServer(){
                 currentSport = $select.val() || '';
                 currentAcara = $selectAcara.val() || '';
-                fetchParticipants(kid, currentSport, currentAcara).done(function(newRes){
+                var ids = getFilters();
+                fetchParticipants(kid, ids.sportId || '', ids.kategoriId || '').done(function(newRes){
                     if (newRes.status !== 'ok') { alert('Tiada data'); return; }
                     rows = buildRows(newRes);
                     renderPage();

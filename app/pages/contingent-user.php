@@ -7,8 +7,6 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../api/models/ContingentModel.php';
 
-$page_title = 'Kontinjen User';
-
 // Start session & auth
 Session::start();
 $auth = getAuth();
@@ -26,6 +24,23 @@ $currentKontinjenId = Session::get('kontinjen_id') ?? null;
 if ($restrictToOwnContingent && empty($currentKontinjenId)) {
     header('Location: ' . url('pages/access-denied.php'));
     exit;
+}
+
+$page_title = 'Kontinjen User';
+// Override page title with kod_universiti if available (matches menu)
+$contingentCode = Session::get('kod_universiti') ?? Session::get('kod_university') ?? '';
+if (!$contingentCode && $restrictToOwnContingent && !empty($currentKontinjenId)) {
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare("SELECT k.kod_universiti FROM table_kontinjen k WHERE k.id = :id AND k.deleted_at IS NULL");
+        $stmt->execute([':id' => $currentKontinjenId]);
+        $contingentCode = $stmt->fetchColumn() ?: '';
+    } catch (Exception $e) {
+        // ignore lookup errors and keep default title
+    }
+}
+if ($contingentCode) {
+    $page_title = 'Kontinjen ' . $contingentCode;
 }
 
 // Fetch contingents and participant counts (reuse existing queries)
@@ -100,8 +115,8 @@ ob_start();
             <div class="card bg-light border-0 shadow-sm overflow-hidden">
                 <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
                     <div>
-                        <h2 class="mb-1">Kontinjen User</h2>
-                        <p class="text-muted mb-0">Halaman hanya untuk paparan data — tiada borang pendaftaran di sini.</p>
+                        <h2 class="mb-1"><?php echo htmlspecialchars($page_title, ENT_QUOTES, "UTF-8"); ?></h2>
+                        <p class="text-muted mb-0">Halaman hanya untuk paparan data; tiada borang pendaftaran di sini.</p>
                     </div>
                 </div>
             </div>
@@ -218,7 +233,16 @@ ob_start();
             var $container = $('<div class="p-3 bg-light border rounded">');
             var currentSport = '';
             var currentAcara = '';
-
+            function parseId(val){
+                var n = parseInt(val,10);
+                return isNaN(n) ? '' : n;
+            }
+            function getFilters(){
+                return {
+                    sportId: parseId(currentSport || $select.val() || ''),
+                    kategoriId: parseId(currentAcara || $selectAcara.val() || '')
+                };
+            }
             // Top bar: left-aligned selects (sport + acara) and right-aligned search + pager controls
             var $topBar = $('<div class="details-top-controls mb-2"></div>');
             var $select = $('<select class="form-select form-select-sm details-select select-sukan"><option value="">Semua Sukan</option></select>');
@@ -353,6 +377,9 @@ ob_start();
 
             function applyFilters(){
                 var q = ($search.val()||'').trim().toLowerCase();
+                var filterIds = getFilters();
+                var sportId = filterIds.sportId;
+                var kategoriId = filterIds.kategoriId;
 
                 function matchesSearch(r){
                     var name = (r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '').toString().toLowerCase();
@@ -360,12 +387,21 @@ ob_start();
                     return true;
                 }
 
-                var managers = rows.filter(function(r){
+                var filteredByIds = rows.filter(function(r){
+                    if (sportId && String(r.sukan_id || '') !== String(sportId)) return false;
+                    if (kategoriId){
+                        var kidVal = r.kategori_id || r.id_kategori || r.acara_id || r.event_id;
+                        if (String(kidVal || '') !== String(kategoriId)) return false;
+                    }
+                    return true;
+                });
+
+                var managers = filteredByIds.filter(function(r){
                     var role = (r._role||'').toString();
                     return (role === 'Pengurus' || role === 'Jurulatih') && matchesSearch(r);
                 });
 
-                var athletes = rows.filter(function(r){
+                var athletes = filteredByIds.filter(function(r){
                     return (r._role||'') === 'Atlet' && matchesSearch(r);
                 });
 
@@ -456,17 +492,17 @@ ob_start();
                     var $a = $('<a class="page-link" href="#">').text(label).data('page', page);
                     $li.append($a); return $li;
                 };
-                $ul.append(createPageItem('«', Math.max(1,currentPage-1), currentPage===1, false));
+                $ul.append(createPageItem('<<', Math.max(1,currentPage-1), currentPage===1, false));
                 var startPage = Math.max(1, currentPage - 2); var endPage = Math.min(totalPages, startPage + 4);
                 for (var p = startPage; p <= endPage; p++){ $ul.append(createPageItem(p, p, false, p===currentPage)); }
-                $ul.append(createPageItem('»', Math.min(totalPages,currentPage+1), currentPage===totalPages, false));
+                $ul.append(createPageItem('>>', Math.min(totalPages,currentPage+1), currentPage===totalPages, false));
                 // Update summary
                 var showingStart = total === 0 ? 0 : start + 1;
                 var showingEnd = Math.min(total, end);
                 if (total === 0) {
                     $summary.text('Tiada data');
                 } else {
-                    $summary.text('Memaparkan ' + showingStart + '–' + showingEnd + ' daripada ' + total);
+                    $summary.text('Memaparkan ' + showingStart + ' - ' + showingEnd + ' daripada ' + total);
                 }
             }
 
@@ -474,7 +510,8 @@ ob_start();
             function reloadFromServer(){
                 currentSport = $select.val() || '';
                 currentAcara = $selectAcara.val() || '';
-                fetchParticipants(kid, currentSport, currentAcara).done(function(newRes){
+                var ids = getFilters();
+                fetchParticipants(kid, ids.sportId || '', ids.kategoriId || '' ).done(function(newRes){
                     if (newRes.status !== 'ok') { alert('Tiada data'); return; }
                     rows = buildRows(newRes);
                     renderPage();
