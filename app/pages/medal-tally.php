@@ -15,7 +15,8 @@ $totals = ['emas' => 0, 'perak' => 0, 'gangsa' => 0];
 try {
     $db = getDB();
 
-    // Build medal counts per contingent; include all active contingents even if zero medals
+    // Build medal counts per contingent; include all active contingents even if zero medals.
+    // Only count standings position 1/2/3 from completed results.
     $sql = "
         SELECT
             base.kod_universiti,
@@ -34,19 +35,18 @@ try {
         LEFT JOIN (
             SELECT
                 k.kod_universiti,
-                SUM(CASE WHEN w.medal = 'emas' THEN 1 ELSE 0 END)   AS emas,
-                SUM(CASE WHEN w.medal = 'perak' THEN 1 ELSE 0 END)  AS perak,
-                SUM(CASE WHEN w.medal = 'gangsa' THEN 1 ELSE 0 END) AS gangsa
-            FROM (
-                SELECT tempat_pertama AS pasukan_id, 'emas' AS medal FROM table_results WHERE tempat_pertama IS NOT NULL AND tempat_pertama <> ''
-                UNION ALL
-                SELECT tempat_kedua AS pasukan_id, 'perak' AS medal FROM table_results WHERE tempat_kedua IS NOT NULL AND tempat_kedua <> ''
-                UNION ALL
-                SELECT tempat_ketiga AS pasukan_id, 'gangsa' AS medal FROM table_results WHERE tempat_ketiga IS NOT NULL AND tempat_ketiga <> ''
-            ) w
-            JOIN table_pasukan p ON p.id = w.pasukan_id AND p.deleted_at IS NULL
+                SUM(CASE WHEN jt.position = 1 THEN 1 ELSE 0 END) AS emas,
+                SUM(CASE WHEN jt.position = 2 THEN 1 ELSE 0 END) AS perak,
+                SUM(CASE WHEN jt.position = 3 THEN 1 ELSE 0 END) AS gangsa
+            FROM table_results tr
+            JOIN JSON_TABLE(tr.standings, '$[*]' COLUMNS(
+                position INT PATH '$.position',
+                participant_id VARCHAR(255) PATH '$.participant_id'
+            )) jt ON jt.position IN (1,2,3)
+            JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
             JOIN table_kontinjen k ON k.id = p.kontinjen_id AND k.deleted_at IS NULL AND k.status = 1
             JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
+            WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
             GROUP BY k.kod_universiti
         ) mc ON mc.kod_universiti = base.kod_universiti
         ORDER BY emas DESC, perak DESC, gangsa DESC, base.nama_pendek ASC

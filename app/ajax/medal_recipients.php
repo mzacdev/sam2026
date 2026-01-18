@@ -22,26 +22,26 @@ try {
     $db = getDB();
     $sql = "
         SELECT
-            w.medal,
+            CASE jt.position WHEN 1 THEN 'emas' WHEN 2 THEN 'perak' WHEN 3 THEN 'gangsa' END AS medal,
             p.id AS pasukan_id,
             p.nama_pasukan,
             COALESCE(r.nama_pendek, k.kod_universiti) AS nama_kontinjen,
             k.kod_universiti,
             s.nama_sukan,
             kat.nama_kategori
-        FROM (
-            SELECT tempat_pertama AS pasukan_id, kategori_id, 'emas' AS medal FROM table_results WHERE tempat_pertama IS NOT NULL AND tempat_pertama <> '' AND deleted_at IS NULL
-            UNION ALL
-            SELECT tempat_kedua AS pasukan_id, kategori_id, 'perak' AS medal FROM table_results WHERE tempat_kedua IS NOT NULL AND tempat_kedua <> '' AND deleted_at IS NULL
-            UNION ALL
-            SELECT tempat_ketiga AS pasukan_id, kategori_id, 'gangsa' AS medal FROM table_results WHERE tempat_ketiga IS NOT NULL AND tempat_ketiga <> '' AND deleted_at IS NULL
-        ) w
-        JOIN table_pasukan p ON p.id = w.pasukan_id AND p.deleted_at IS NULL
+        FROM table_results tr
+        JOIN JSON_TABLE(tr.standings, '$[*]' COLUMNS(
+            position INT PATH '$.position',
+            participant_id VARCHAR(255) PATH '$.participant_id'
+        )) jt ON jt.position IN (1,2,3)
+        JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
         JOIN table_kontinjen k ON k.id = p.kontinjen_id AND k.deleted_at IS NULL AND k.status = 1
         JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
         LEFT JOIN table_sukan s ON s.id = p.sukan_id
-        LEFT JOIN table_kategori kat ON kat.id = w.kategori_id
-        WHERE k.kod_universiti = :kod AND w.medal = :medal
+        LEFT JOIN table_kategori kat ON kat.id = tr.kategori_id
+        WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
+          AND k.kod_universiti = :kod
+          AND CASE jt.position WHEN 1 THEN 'emas' WHEN 2 THEN 'perak' WHEN 3 THEN 'gangsa' END = :medal
         ORDER BY s.nama_sukan ASC, kat.nama_kategori ASC, p.nama_pasukan ASC
     ";
     $stmt = $db->prepare($sql);
