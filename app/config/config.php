@@ -144,6 +144,7 @@ $nav_sections = [
         'children' => [
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
             ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
+            ['title' => 'Kontingen', 'icon' => 'cil-people', 'url' => 'pages/contingent-admin.php'],
         ],
     ],
     [
@@ -153,6 +154,7 @@ $nav_sections = [
             ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/university.php'],
             ['title' => 'Pengguna', 'icon' => 'cil-user', 'url' => 'pages/pengurusan-pengguna.php'],
             ['title' => 'Audit MyKad', 'icon' => 'cil-id-card', 'url' => 'pages/ic_audit.php'],
+            ['title' => 'Akses Matrix', 'icon' => 'cil-lock-unlocked', 'url' => 'pages/matrix-access.php'],
         ],
     ],
 ];

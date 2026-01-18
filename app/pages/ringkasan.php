@@ -58,18 +58,30 @@ foreach ($rows as $r) {
     $totals['WANITA'] += (int)($r['wanita'] ?? 0);
 }
 
-// Tab 2 data: per-sport, per-gender counts by university
-$unis = [];
+// Tab 2 data: per-sport, per-gender counts by university (fixed order)
+$unis = [
+    ['kod_universiti' => 'KMS',   'nama_universiti' => 'KMS'],
+    ['kod_universiti' => 'APM',   'nama_universiti' => 'APM'],
+    ['kod_universiti' => 'UIAM',  'nama_universiti' => 'UIAM'],
+    ['kod_universiti' => 'UKM',   'nama_universiti' => 'UKM'],
+    ['kod_universiti' => 'UM',    'nama_universiti' => 'UM'],
+    ['kod_universiti' => 'UMK',   'nama_universiti' => 'UMK'],
+    ['kod_universiti' => 'UMS',   'nama_universiti' => 'UMS'],
+    ['kod_universiti' => 'UNIMAS','nama_universiti' => 'UNIMAS'],
+    ['kod_universiti' => 'UMT',   'nama_universiti' => 'UMT'],
+    ['kod_universiti' => 'UPNM',  'nama_universiti' => 'UPNM'],
+    ['kod_universiti' => 'UPM',   'nama_universiti' => 'UPM'],
+    ['kod_universiti' => 'USIM',  'nama_universiti' => 'USIM'],
+    ['kod_universiti' => 'UniSZA','nama_universiti' => 'UniSZA'],
+    ['kod_universiti' => 'UiTM',  'nama_universiti' => 'UiTM'],
+    ['kod_universiti' => 'UUM',   'nama_universiti' => 'UUM'],
+];
 $sportMatrix = [];
 $colTotals = [];
 try {
     $db = getDB();
-    // Active universities list
-    $stmt = $db->query("SELECT kod_universiti, nama_universiti FROM table_ref_universiti WHERE status = 1 ORDER BY nama_universiti");
-    $unis = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($unis as $u) {
-        $colTotals[$u['kod_universiti']] = 0;
-    }
+    // keep provided order; initialise totals
+    foreach ($unis as $u) { $colTotals[$u['kod_universiti']] = 0; }
 
     $sql = "WITH cleaned AS (
         SELECT DISTINCT
@@ -197,17 +209,21 @@ ob_start();
                         <table class="table table-sm table-hover align-middle">
                             <thead class="table-light">
                                 <tr>
-                                    <th style="width:18%;">Acara</th>
-                                    <th style="width:7%;">Jantina</th>
+                                    <th style="width:3%;">Bil</th>
+                                    <th style="width:12%;">Acara</th>
+                                    <th style="width:10%;">Jantina</th>
                                     <?php foreach ($unis as $uni): ?>
-                                        <th class="text-end"><?php echo htmlspecialchars($uni['kod_universiti'] ?? $uni['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></th>
+                                        <th style="width:5%;" class="text-end"><?php echo htmlspecialchars($uni['kod_universiti'] ?? $uni['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></th>
                                     <?php endforeach; ?>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (empty($sportMatrix)): ?>
-                                    <tr><td colspan="<?php echo 2 + count($unis); ?>" class="text-center text-muted py-4">Tiada data untuk dipaparkan.</td></tr>
+                                    <tr><td colspan="<?php echo 3 + count($unis); ?>" class="text-center py-4">
+                                        <span class="badge badge-outline badge-info">Tiada</span>
+                                    </td></tr>
                                 <?php else: ?>
+                                    <?php $bilAcara = 1; ?>
                                     <?php foreach ($sportMatrix as $sukan => $genders): ?>
                                         <?php foreach (['LELAKI','WANITA'] as $idxGender => $g): ?>
                                             <?php
@@ -216,21 +232,29 @@ ob_start();
                                                 if (!$hasData) { continue; }
                                             ?>
                                             <tr>
+                                                <td><?php echo $idxGender === 0 ? $bilAcara : ''; ?></td>
                                                 <td><?php echo $idxGender === 0 ? htmlspecialchars($sukan, ENT_QUOTES, 'UTF-8') : ''; ?></td>
                                                 <td><?php echo ($g === 'LELAKI') ? '<i class="cil-male me-1"></i>Lelaki' : '<i class="cil-child me-1"></i>Wanita'; ?></td>
                                                 <?php foreach ($unis as $uni): ?>
                                                     <?php $val = (int)($counts[$uni['kod_universiti']] ?? 0); ?>
-                                                    <td class="text-end"><?php echo $val === 0 ? '&ndash;' : number_format($val); ?></td>
+                                                    <td class="text-end">
+                                                        <?php if ($val === 0): ?>
+                                                            <span class="badge badge-outline badge-info">Tiada</span>
+                                                        <?php else: ?>
+                                                            <?php echo number_format($val); ?>
+                                                        <?php endif; ?>
+                                                    </td>
                                                 <?php endforeach; ?>
                                             </tr>
                                         <?php endforeach; ?>
+                                        <?php $bilAcara++; ?>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </tbody>
                             <?php if (!empty($sportMatrix) && !empty($unis)): ?>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="2" class="text-end">Jumlah</th>
+                                    <th colspan="3" class="text-end">Jumlah</th>
                                     <?php foreach ($unis as $uni): ?>
                                         <?php $val = (int)($colTotals[$uni['kod_universiti']] ?? 0); ?>
                                         <th class="text-end fw-bold"><?php echo number_format($val); ?></th>

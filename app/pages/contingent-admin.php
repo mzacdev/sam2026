@@ -1,42 +1,27 @@
 <?php
 /**
- * Contingent User Management (view-only)
+ * Contingent Admin View
+ * Roles: ADMIN, ORGANIZER, JUDGE
+ * Shows all active contingents with Show/Hide inline participants
  */
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../api/models/ContingentModel.php';
+require_once __DIR__ . '/../config/rbac.php';
 
-$page_title = 'Kontinjen User';
-
-// Start session & auth
 Session::start();
 $auth = getAuth();
 $auth->requireAuth();
-$currentUserRole = Session::get('user_role') ?? '';
-$restrictToOwnContingent = ($currentUserRole === 'CONTINGENT');
+$rbac = getRBAC();
+// Minimum JUDGE (includes ORGANIZER, ADMIN)
+$rbac->requireMinimumRole('JUDGE');
 
-// Restrict this page to CONTINGENT role only
-if ($currentUserRole !== 'CONTINGENT') {
-    header('Location: ' . url('pages/access-denied.php'));
-    exit;
-}
-$currentKontinjenId = Session::get('kontinjen_id') ?? null;
+$page_title = 'Kontinjen (Admin)';
 
-if ($restrictToOwnContingent && empty($currentKontinjenId)) {
-    header('Location: ' . url('pages/access-denied.php'));
-    exit;
-}
-
-// Fetch contingents and participant counts (reuse existing queries)
+// Fetch contingents (active only)
 $contingents = [];
 try {
     $pdo = getDB();
-    $where = "k.deleted_at IS NULL AND k.status = 1";
-    if ($restrictToOwnContingent && $currentKontinjenId) {
-        $where .= " AND k.id = :kontinjen_id";
-    }
-
     $sql = "SELECT
         k.id,
         u.nama_universiti,
@@ -62,7 +47,8 @@ try {
         WHERE deleted_at IS NULL
         GROUP BY pasukan_id
     ) a ON a.pasukan_id = p.id
-    WHERE " . $where . "
+    WHERE k.deleted_at IS NULL
+        AND k.status = 1
     GROUP BY
         k.id,
         u.nama_universiti,
@@ -76,20 +62,10 @@ try {
     ORDER BY k.created_at DESC
     LIMIT 1000";
 
-    if ($restrictToOwnContingent && $currentKontinjenId) {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':kontinjen_id' => (int)$currentKontinjenId]);
-    } else {
-        $stmt = $pdo->query($sql);
-    }
+    $stmt = $pdo->query($sql);
     $contingents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    error_log('[contingent-user.php] DB error: ' . $e->getMessage());
-}
-// Determine current contingent name (if page is restricted to own contingent)
-$contingentName = '';
-if (!empty($contingents) && isset($contingents[0]['nama_universiti'])) {
-    $contingentName = $contingents[0]['nama_universiti'];
+    error_log('[contingent-admin.php] DB error: ' . $e->getMessage());
 }
 
 ob_start();
@@ -100,8 +76,8 @@ ob_start();
             <div class="card bg-light border-0 shadow-sm overflow-hidden">
                 <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
                     <div>
-                        <h2 class="mb-1">Kontinjen User</h2>
-                        <p class="text-muted mb-0">Halaman hanya untuk paparan data — tiada borang pendaftaran di sini.</p>
+                        <h2 class="mb-1">Kontinjen (Admin/Organizer/Judge)</h2>
+                        <p class="text-muted mb-0">Paparan semua kontinjen aktif. Klik Show untuk melihat peserta.</p>
                     </div>
                 </div>
             </div>
@@ -114,9 +90,7 @@ ob_start();
             <div class="card mb-4 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <strong>Senarai Kontinjen<?php if(!empty(
-                            $contingentName
-                        )): ?>, <?php echo htmlspecialchars($contingentName, ENT_QUOTES, 'UTF-8'); ?><?php endif; ?></strong>
+                        <strong>Senarai Kontinjen Aktif</strong>
                     </div>
                 </div>
                 <div class="card-body">
@@ -144,7 +118,11 @@ ob_start();
                                         <td><?php echo htmlspecialchars($c['no_telefon'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td>
                                             <?php $count = (int)($c['jumlah_atlet'] ?? 0); ?>
-                                            <span class="badge badge-pill badge-primary"><?php echo $count; ?></span>
+                                            <?php if ($count === 0): ?>
+                                                <span class="badge badge-pill badge-danger"><?php echo $count; ?></span>
+                                            <?php else: ?>
+                                                <span class="badge badge-pill badge-primary"><?php echo $count; ?></span>
+                                            <?php endif; ?>
                                         </td>
                                         <td><?php echo htmlspecialchars($c['status_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td>
@@ -177,28 +155,17 @@ ob_start();
     .details-top-controls .left-controls .details-select.select-sukan{min-width:160px;width:160px}
     .details-top-controls .left-controls .details-select.select-acara{min-width:180px;width:180px}
 }
-
-/* Highlight rows for Pengurus and Jurulatih */
-.details-row tr.role-pengurus td, .details-row tr.role-jurulatih td {
-    background-color: rgba(255, 245, 204, 0.9); /* light yellow */
-}
-.details-row tr.role-pengurus td:first-child, .details-row tr.role-jurulatih td:first-child {
-    border-left: 4px solid #f0ad4e; /* accent */
-}
-/* Soft red badge for empty values */
 .no-data-badge{display:inline-block;padding:0.18rem 0.45rem;border-radius:0.35rem;background:#fdecea;color:#842029;font-size:0.8rem}
-
-/* Force single-line rows inside details table and enable truncation */
 .details-row .table{table-layout:fixed;width:100%}
 .details-row .table th,.details-row .table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .details-row .table th:first-child,.details-row .table td:first-child{text-align:center;}
 .details-row .p-3{overflow:auto}
+.row-highlight{background:rgba(13,110,253,0.08);}
 .role-pengurus td:first-child,.role-jurulatih td:first-child{border-left:4px solid #f0ad4e;}
 .role-pengurus td,.role-jurulatih td{background:rgba(255,245,204,0.6);}
 </style>
 
 <script>
-// Inline details expansion (view-only)
 (function(){
     function whenJQ(cb){ if(window.jQuery){ cb(window.jQuery); } else { setTimeout(function(){ whenJQ(cb); }, 50); } }
 
@@ -219,15 +186,12 @@ ob_start();
             var currentSport = '';
             var currentAcara = '';
 
-            // Top bar: left-aligned selects (sport + acara) and right-aligned search + pager controls
             var $topBar = $('<div class="details-top-controls mb-2"></div>');
             var $select = $('<select class="form-select form-select-sm details-select select-sukan"><option value="">Semua Sukan</option></select>');
             var $selectAcara = $('<select class="form-select form-select-sm details-select select-acara"><option value="">Semua Acara</option></select>');
-            // disable acara until categories are loaded and populated for chosen sport
             $selectAcara.prop('disabled', true);
             var $search = $('<input type="search" class="form-control form-control-sm details-search" placeholder="Cari peserta...">');
             var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5">5</option><option value="10" selected>10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
-            // left and right control groups
             var $leftControls = $('<div class="left-controls"></div>').append($select).append($selectAcara);
             var $rightControls = $('<div class="right-controls"></div>').append($search).append($pageSizeSel);
             $topBar.append($leftControls).append($rightControls);
@@ -253,7 +217,6 @@ ob_start();
                 '</tr></thead><tbody></tbody></table>');
             var $summary = $('<div class="text-muted small details-summary me-2"></div>');
             var $pager = $('<nav aria-label="Page navigation"><ul class="pagination pagination-sm mb-0"></ul></nav>');
-            // keep search + pagesize in top-right; summary + pager sit below the table
             $rightControls.append($search).append($pageSizeSel);
 
             var $pagerWrap = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>');
@@ -262,7 +225,6 @@ ob_start();
             $container.append($topBar).append($table).append($pagerWrap);
             $detail.find('td').append($container);
             $tr.after($detail);
-            // mark originating button as Hide
             $tr.find('.contingent-view-btn').text('Hide');
 
             function buildRows(data){
@@ -275,10 +237,7 @@ ob_start();
 
             var rows = buildRows(res);
 
-            // Populate sport select and acara select
             var map = {};
-            var mapAcara = {};
-            // sport -> acara mapping for dependent dropdown
             var mapBySport = {};
             ['atlet','pengurus','jurulatih'].forEach(function(k){
                 (res[k]||[]).forEach(function(r){
@@ -288,10 +247,7 @@ ob_start();
 
                     var aid = r.kategori_id || r.id_kategori || r.kategori || r.event_id || r.acara_id || '';
                     var aname = r.nama_kategori || r.nama_acara || r.acara || r.event_name || r.kategori || (aid?('Acara '+aid):'');
-                    if (aid){ if(!mapAcara[aid]) mapAcara[aid]=aname; }
-                    else { if(aname && !mapAcara[aname]) mapAcara[aname]=aname; }
 
-                    // populate mapBySport
                     if (id){
                         if (!mapBySport[id]) mapBySport[id] = {};
                         var key = aid || aname || '';
@@ -301,48 +257,32 @@ ob_start();
             });
             Object.keys(map).forEach(function(id){ $select.append($('<option>').val(id).text(map[id])); });
 
-            // function to populate acara options filtered by sport id (or all when empty)
             function populateAcaraOptionsForSport(sportId){
                 $selectAcara.empty();
                 $selectAcara.append($('<option>').val('').text('Semua Acara'));
                 var added = 0;
                 if(!sportId){
-                    // no sport selected: keep disabled and do not list all acara
                     $selectAcara.prop('disabled', true);
                     return;
                 }
                 var m = mapBySport[sportId] || {};
                 Object.keys(m).forEach(function(aid){ $selectAcara.append($('<option>').val(aid).text(m[aid])); added++; });
-                if(added === 0){
-                    // no acara for this sport
-                    $selectAcara.prop('disabled', true);
-                } else {
-                    $selectAcara.prop('disabled', false);
-                }
+                $selectAcara.prop('disabled', added === 0);
             }
 
-            // Load canonical acara list from server (table_kategori) and build mapBySport
             $.ajax({ url: '<?php echo url('ajax/kategori_list.php'); ?>', dataType: 'json' }).done(function(kres){
                 if (kres && kres.success && Array.isArray(kres.data)){
-                    mapAcara = {};
                     mapBySport = {};
                     kres.data.forEach(function(row){
                         var aid = row.id;
                         var sid = row.sukan_id;
                         var aname = row.nama_kategori || row.nama_acara || row.kod_kategori || ('Acara '+aid);
-                        if (aid) mapAcara[aid] = aname;
                         if (sid){ mapBySport[sid] = mapBySport[sid] || {}; mapBySport[sid][aid] = aname; }
                     });
-                } else {
-                    // if server returns no categories, try to build mapBySport from participant-derived mapBySport
-                    // mapBySport may already be populated from participants above
                 }
-                // initialize acara options filtered by currently selected sport (if any)
                 populateAcaraOptionsForSport($select.val() || '');
-                // now render page
                 renderPage();
             }).fail(function(){
-                // fallback: use participant-derived mapBySport
                 populateAcaraOptionsForSport($select.val() || '');
                 renderPage();
             });
@@ -377,7 +317,7 @@ ob_start();
             }
 
             function genderFromMyKad(ic){
-                var digits = (ic||'').toString().replace(/\D+/g,'');
+                var digits = (ic||'').toString().replace(/\\D+/g,'');
                 if (!digits) return null;
                 var last = digits.slice(-1);
                 if (!last) return null;
@@ -405,7 +345,7 @@ ob_start();
                 var start = (currentPage - 1) * pageSize;
                 var end = start + pageSize;
                 $tbody.empty();
-                if (total === 0) { $tbody.append('<tr><td colspan="8">Tiada peserta untuk penapisan ini.</td></tr>'); }
+                if (total === 0) { $tbody.append('<tr><td colspan=\"8\">Tiada peserta untuk penapisan ini.</td></tr>'); }
                 var pageRows = filtered.slice(start, end);
                 var athleteBefore = filtered.slice(0, start).filter(function(r){ return (r._role||'').toLowerCase() === 'atlet'; }).length;
                 var athleteCounter = athleteBefore;
@@ -415,7 +355,6 @@ ob_start();
                     var matrik = r.no_matrik || r.matrik || r.no_matrik || '';
                     var role = r._role || '';
                     var sport = r.nama_sukan || ('Sukan ' + (r.sukan_id || ''));
-                    // For Pengurus and Jurulatih, always show 'Tiada' for Acara (use empty value so badge is rendered)
                     var acara = r.nama_acara || r.nama_kategori || r.kategori || r.acara || r.event_name || r.nama_event || '';
                     if ((role||'').toString().toLowerCase() === 'pengurus' || (role||'').toString().toLowerCase() === 'jurulatih') {
                         acara = '';
@@ -449,28 +388,25 @@ ob_start();
                     $tbody.append($r);
                 });
 
-                // Render pager (simple prev/next + page numbers upto 5 pages)
                 var $ul = $pager.find('ul'); $ul.empty();
                 var createPageItem = function(label, page, disabled, active){
                     var $li = $('<li class="page-item">'); if (disabled) $li.addClass('disabled'); if (active) $li.addClass('active');
                     var $a = $('<a class="page-link" href="#">').text(label).data('page', page);
                     $li.append($a); return $li;
                 };
-                $ul.append(createPageItem('«', Math.max(1,currentPage-1), currentPage===1, false));
+                $ul.append(createPageItem('<<', Math.max(1,currentPage-1), currentPage===1, false));
                 var startPage = Math.max(1, currentPage - 2); var endPage = Math.min(totalPages, startPage + 4);
                 for (var p = startPage; p <= endPage; p++){ $ul.append(createPageItem(p, p, false, p===currentPage)); }
-                $ul.append(createPageItem('»', Math.min(totalPages,currentPage+1), currentPage===totalPages, false));
-                // Update summary
+                $ul.append(createPageItem('>>', Math.min(totalPages,currentPage+1), currentPage===totalPages, false));
                 var showingStart = total === 0 ? 0 : start + 1;
                 var showingEnd = Math.min(total, end);
                 if (total === 0) {
                     $summary.text('Tiada data');
                 } else {
-                    $summary.text('Memaparkan ' + showingStart + '–' + showingEnd + ' daripada ' + total);
+                    $summary.text('Memaparkan ' + showingStart + ' - ' + showingEnd + ' daripada ' + total);
                 }
             }
 
-            // Handlers
             function reloadFromServer(){
                 currentSport = $select.val() || '';
                 currentAcara = $selectAcara.val() || '';
@@ -482,7 +418,6 @@ ob_start();
             }
 
             $select.on('change', function(){
-                // repopulate acara options for the selected sport and reset acara selection
                 var sv = $(this).val() || '';
                 populateAcaraOptionsForSport(sv);
                 $selectAcara.val('');
@@ -494,7 +429,6 @@ ob_start();
             $pageSizeSel.on('change', function(){ pageSize = parseInt($(this).val(),10) || 5; currentPage = 1; renderPage(); });
             $pager.on('click', 'a.page-link', function(e){ e.preventDefault(); var p = $(this).data('page'); if (!p) return; currentPage = parseInt(p,10)||1; renderPage(); });
 
-            // initial render
             renderPage();
         }
 
@@ -505,16 +439,15 @@ ob_start();
             var kid = $btn.data('kid') || $tr.data('kontinjen');
             if (!kid) return;
             var $next = $tr.next();
-            // if its own details row is open, close it and reset label
-            if ($next.hasClass('details-row') && String($next.data('kid')) === String(kid)) { $next.remove(); $btn.text('Show'); return; }
-            // close any other open details and reset other buttons
+            if ($next.hasClass('details-row') && String($next.data('kid')) === String(kid)) { $next.remove(); $btn.text('Show'); $tr.removeClass('row-highlight'); return; }
             $('.details-row').remove();
             $('.contingent-view-btn').text('Show');
+            $('tr.row-highlight').removeClass('row-highlight');
             fetchParticipants(kid).done(function(res){
                 if (res.status !== 'ok') { alert('Tiada data'); return; }
                 renderDetailsRow($tr, res);
-                // set this button to Hide after rendering
                 $tr.find('.contingent-view-btn').text('Hide');
+                $tr.addClass('row-highlight');
             }).fail(function(){ alert('Ralat memuatkan peserta'); });
         });
     });
