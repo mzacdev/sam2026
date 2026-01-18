@@ -47,6 +47,7 @@ class RBAC {
         'pages/sports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/pasukan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
         'pages/venues.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
+        'pages/keputusan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
         'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],

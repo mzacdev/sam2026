@@ -135,6 +135,7 @@ $nav_sections = [
             ['title' => 'Sukan', 'icon' => 'cil-gamepad', 'url' => 'pages/sports.php'],
             ['title' => 'Pasukan', 'icon' => 'cil-people', 'url' => 'pages/pasukan.php'],
             ['title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php'],
+            ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/keputusan.php'],
             ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'],
         ],
     ],
