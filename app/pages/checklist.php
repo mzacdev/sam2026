@@ -1,7 +1,7 @@
 <?php
 /**
  * Checklist Page - Admin
- * Roles: ADMIN, ORGANIZER
+ * Roles: ADMIN only
  * Shows distinct athlete counts per sport per contingent in matrix format
  */
 require_once __DIR__ . '/../config.php';
@@ -13,8 +13,8 @@ Session::start();
 $auth = getAuth();
 $auth->requireAuth();
 $rbac = getRBAC();
-// Require ORGANIZER minimum (ADMIN allowed by hierarchy)
-$rbac->requireMinimumRole('ORGANIZER');
+// ADMIN only
+$rbac->requireMinimumRole('ADMIN');
 
 $page_title = 'Checklist Atlet';
 
