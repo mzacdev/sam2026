@@ -61,12 +61,14 @@
     ],
     "pages/ringkasan.php": [
       "ADMIN",
-      "ORGANIZER"
+      "ORGANIZER",
+      "VIEWER"
     ],
     "pages/contingent-admin.php": [
       "ADMIN",
       "ORGANIZER",
-      "JUDGE"
+      "JUDGE",
+      "VIEWER"
     ],
     "pages/checklist.php": [
       "ADMIN"

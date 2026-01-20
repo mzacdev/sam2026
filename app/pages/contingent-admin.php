@@ -1,7 +1,7 @@
 <?php
 /**
  * Contingent Admin View
- * Roles: ADMIN, ORGANIZER, JUDGE
+ * Roles: ADMIN, ORGANIZER, JUDGE, VIEWER
  * Shows all active contingents with Show/Hide inline participants
  */
 require_once __DIR__ . '/../config.php';
@@ -13,8 +13,8 @@ Session::start();
 $auth = getAuth();
 $auth->requireAuth();
 $rbac = getRBAC();
-// Minimum JUDGE (includes ORGANIZER, ADMIN)
-$rbac->requireMinimumRole('JUDGE');
+// Enforce page-specific access (allows VIEWER via RBAC rules)
+$rbac->requirePageAccess('pages/contingent-admin.php');
 
 // Get current user role for JavaScript
 $currentUserRole = Session::get('user_role') ?? '';

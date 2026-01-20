@@ -51,8 +51,8 @@ class RBAC {
         'pages/results.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER'],
-        'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER'],
-        'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
+        'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
+        'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/checklist.php' => ['ADMIN'],
         'pages/matrix-access.php' => ['ADMIN'],
         

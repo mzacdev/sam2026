@@ -1,7 +1,7 @@
 <?php
 /**
  * Ringkasan Laporan
- * Access: ADMIN, ORGANIZER only
+ * Access: ADMIN, ORGANIZER, VIEWER
  */
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/database.php';
@@ -12,8 +12,8 @@ Session::start();
 $auth = getAuth();
 $auth->requireAuth();
 $rbac = getRBAC();
-// Require ORGANIZER minimum (ADMIN allowed by hierarchy)
-$rbac->requireMinimumRole('ORGANIZER');
+// Enforce page-specific access (VIEWER allowed via RBAC rules)
+$rbac->requirePageAccess('pages/ringkasan.php');
 
 $page_title = 'Ringkasan Laporan';
 
