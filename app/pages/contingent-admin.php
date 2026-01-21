@@ -18,7 +18,8 @@ $rbac->requirePageAccess('pages/contingent-admin.php');
 
 // Get current user role for JavaScript
 $currentUserRole = Session::get('user_role') ?? '';
-$canEdit = in_array($currentUserRole, ['ADMIN', 'ORGANIZER']);
+// Allow VIEWER to manage participants the same way as ADMIN/ORGANIZER on this page
+$canEdit = in_array($currentUserRole, ['ADMIN', 'ORGANIZER', 'VIEWER']);
 
 $page_title = 'Kontinjen (Admin)';
 
@@ -80,7 +81,7 @@ ob_start();
             <div class="card bg-light border-0 shadow-sm overflow-hidden">
                 <div class="card-body py-4 d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
                     <div>
-                        <h2 class="mb-1">Kontinjen (Admin/Organizer/Judge)</h2>
+                        <h2 class="mb-1">Kontinjen</h2>
                         <p class="text-muted mb-0">Paparan semua kontinjen aktif. Klik Show untuk melihat peserta.</p>
                     </div>
                 </div>
@@ -103,7 +104,7 @@ ob_start();
                             <thead class="table-light">
                                 <tr>
                                     <th scope="col" style="width:3%;">#</th>
-                                    <th scope="col" style="width:23%;">Nama Kontingen</th>
+                                    <th scope="col" style="width:23%;">Nama Kontinjen</th>
                                     <th scope="col" style="width:10%;">Kod</th>
                                     <th scope="col" style="width:30%;">Pegawai</th>
                                     <th scope="col" style="width:10%;">Telefon</th>
@@ -216,7 +217,7 @@ ob_start();
             var $selectAcara = $('<select class="form-select form-select-sm details-select select-acara"><option value="">Semua Acara</option></select>');
             $selectAcara.prop('disabled', true);
             var $search = $('<input type="search" class="form-control form-control-sm details-search" placeholder="Cari peserta...">');
-            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="10" selected>10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select>');
+            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select>');
             var $addBtn = $('<button class="btn btn-sm btn-success add-participant-btn" title="Tambah Peserta"><i class="fa fa-plus"></i> Tambah</button>');
             // Only show add button if user can edit
             if (!canEdit) {
@@ -232,14 +233,16 @@ ob_start();
             var $summaryPengurus = $('<div class="text-muted small details-summary me-2"></div>');
             var $pagerWrapPengurus = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>').append($summaryPengurus).append($pagerPengurus);
             var $tablePengurus = $('<div class="participant-section mb-4"><h6 class="mb-2 text-primary"><i class="fa fa-user-tie me-1"></i> Pengurus</h6><table class="table table-sm table-striped mb-0 table-pengurus"><colgroup>' +
-                '<col style="width:25%"></col>' +
-                '<col style="width:15%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:18%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:6%"></col>' +
+                '<col style="width:3%"></col>' +
+                '<col style="width:32%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:20%"></col>' +
+                '<col style="width:5%"></col>' +
                 '</colgroup><thead><tr>' +
+                '<th>#</th>' +
                 '<th>Nama</th>' +
                 '<th>No Kad Pengenalan</th>' +
                 '<th>No Telefon</th>' +
@@ -255,14 +258,16 @@ ob_start();
             var $summaryJurulatih = $('<div class="text-muted small details-summary me-2"></div>');
             var $pagerWrapJurulatih = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>').append($summaryJurulatih).append($pagerJurulatih);
             var $tableJurulatih = $('<div class="participant-section mb-4"><h6 class="mb-2 text-warning"><i class="fa fa-user-graduate me-1"></i> Jurulatih</h6><table class="table table-sm table-striped mb-0 table-jurulatih"><colgroup>' +
-                '<col style="width:25%"></col>' +
-                '<col style="width:15%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:18%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:6%"></col>' +
+                '<col style="width:3%"></col>' +
+                '<col style="width:32%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:20%"></col>' +
+                '<col style="width:5%"></col>' +
                 '</colgroup><thead><tr>' +
+                '<th>#</th>' +
                 '<th>Nama</th>' +
                 '<th>No Kad Pengenalan</th>' +
                 '<th>No Telefon</th>' +
@@ -279,13 +284,13 @@ ob_start();
             var $pagerWrapAtlet = $('<div class="d-flex justify-content-between align-items-center mt-2"></div>').append($summaryAtlet).append($pagerAtlet);
             var $tableAtlet = $('<div class="participant-section mb-4"><h6 class="mb-2 text-success"><i class="fa fa-running me-1"></i> Atlet</h6><table class="table table-sm table-striped mb-0 table-atlet"><colgroup>' +
                 '<col style="width:3%"></col>' +
-                '<col style="width:20%"></col>' +
-                '<col style="width:12%"></col>' +
+                '<col style="width:32%"></col>' +
                 '<col style="width:10%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:12%"></col>' +
-                '<col style="width:18%"></col>' +
-                '<col style="width:6%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:20%"></col>' +
+                '<col style="width:10%"></col>' +
+                '<col style="width:5%"></col>' +
                 '</colgroup><thead><tr>' +
                 '<th>#</th>' +
                 '<th>Nama</th>' +
@@ -372,7 +377,7 @@ ob_start();
             var $tbodyPengurus = $tablePengurus.find('tbody');
             var $tbodyJurulatih = $tableJurulatih.find('tbody');
             var $tbodyAtlet = $tableAtlet.find('tbody');
-            var pageSize = parseInt($pageSizeSel.val(), 10) || 10;
+            var pageSize = parseInt($pageSizeSel.val(), 10) || 25;
             var currentPagePengurus = 1;
             var currentPageJurulatih = 1;
             var currentPageAtlet = 1;
@@ -394,8 +399,10 @@ ob_start();
                 }
 
                 var filteredByIds = rows.filter(function(r){
+                    var role = (r._role || '').toString().toLowerCase();
                     if (sportId && String(r.sukan_id || '') !== String(sportId)) return false;
-                    if (kategoriId){
+                    // Only enforce kategori filter on Atlet; allow Pengurus/Jurulatih to show with no kategori_id
+                    if (kategoriId && role === 'atlet') {
                         var kidVal = r.kategori_id || r.id_kategori || r.acara_id || r.event_id;
                         if (String(kidVal || '') !== String(kategoriId)) return false;
                     }
@@ -694,9 +701,9 @@ ob_start();
                 var pagePengurus = filtered.pengurus.slice(startPengurus, endPengurus);
                 
                 if (pagePengurus.length === 0 && totalPengurus === 0) {
-                    $tbodyPengurus.append('<tr><td colspan="7" class="text-center text-muted py-2">Tiada pengurus untuk penapisan ini.</td></tr>');
+                    $tbodyPengurus.append('<tr><td colspan="8" class="text-center text-muted py-2">Tiada pengurus untuk penapisan ini.</td></tr>');
                 } else if (pagePengurus.length === 0 && totalPengurus > 0) {
-                    $tbodyPengurus.append('<tr><td colspan="7" class="text-center text-muted py-2">Tiada pengurus pada halaman ini.</td></tr>');
+                    $tbodyPengurus.append('<tr><td colspan="8" class="text-center text-muted py-2">Tiada pengurus pada halaman ini.</td></tr>');
                 } else {
                     pagePengurus.forEach(function(r){
                         var name = safeValue(r.nama || r.nama_pengurus, '');
@@ -713,7 +720,13 @@ ob_start();
                         $r.attr('data-participant-type', 'pengurus');
                         $r.attr('data-pasukan-id', pasukanId);
                         $r.attr('data-sukan-id', sukanId);
+                        $r.attr('data-nama', name);
+                        $r.attr('data-ic', nic);
+                        $r.attr('data-telefon', phone);
+                        $r.attr('data-emel', email);
                         
+                        // Use FA4-compatible icon for pengurus
+                        $r.append($('<td class="text-center">').html('<i class="fa fa-user text-primary"></i>'));
                         $r.append(cell(name, true, 'nama'));
                         $r.append(cell(nic, true, 'no_kad_pengenalan'));
                         $r.append(cell(phone, true, 'no_telefon'));
@@ -723,6 +736,8 @@ ob_start();
                         
                         var $actionsTd = $('<td>').addClass('text-center');
                         if (canEdit) {
+                            var $updateBtn = $('<button class="btn btn-sm btn-outline-primary me-1 update-participant-btn" title="Kemaskini" style="padding: 2px 6px;"><i class="fa fa-pencil"></i></button>');
+                            $actionsTd.append($updateBtn);
                             var $deleteBtn = $('<button class="btn btn-sm btn-outline-danger delete-participant-btn" title="Padam" style="padding: 2px 6px;"><i class="fa fa-trash"></i></button>');
                             $deleteBtn.data('participant-id', r.id || 0).data('participant-type', 'pengurus').data('participant-name', name);
                             $actionsTd.append($deleteBtn);
@@ -746,9 +761,9 @@ ob_start();
                 var pageJurulatih = filtered.jurulatih.slice(startJurulatih, endJurulatih);
                 
                 if (pageJurulatih.length === 0 && totalJurulatih === 0) {
-                    $tbodyJurulatih.append('<tr><td colspan="7" class="text-center text-muted py-2">Tiada jurulatih untuk penapisan ini.</td></tr>');
+                    $tbodyJurulatih.append('<tr><td colspan="8" class="text-center text-muted py-2">Tiada jurulatih untuk penapisan ini.</td></tr>');
                 } else if (pageJurulatih.length === 0 && totalJurulatih > 0) {
-                    $tbodyJurulatih.append('<tr><td colspan="7" class="text-center text-muted py-2">Tiada jurulatih pada halaman ini.</td></tr>');
+                    $tbodyJurulatih.append('<tr><td colspan="8" class="text-center text-muted py-2">Tiada jurulatih pada halaman ini.</td></tr>');
                 } else {
                     pageJurulatih.forEach(function(r){
                         var name = safeValue(r.nama || r.nama_jurulatih, '');
@@ -765,7 +780,13 @@ ob_start();
                         $r.attr('data-participant-type', 'jurulatih');
                         $r.attr('data-pasukan-id', pasukanId);
                         $r.attr('data-sukan-id', sukanId);
+                        $r.attr('data-nama', name);
+                        $r.attr('data-ic', nic);
+                        $r.attr('data-telefon', phone);
+                        $r.attr('data-emel', email);
                         
+                        // Use FA4-compatible icon for jurulatih
+                        $r.append($('<td class="text-center">').html('<i class="fa fa-graduation-cap text-warning"></i>'));
                         $r.append(cell(name, true, 'nama'));
                         $r.append(cell(nic, true, 'no_kad_pengenalan'));
                         $r.append(cell(phone, true, 'no_telefon'));
@@ -775,6 +796,8 @@ ob_start();
                         
                         var $actionsTd = $('<td>').addClass('text-center');
                         if (canEdit) {
+                            var $updateBtn = $('<button class="btn btn-sm btn-outline-primary me-1 update-participant-btn" title="Kemaskini" style="padding: 2px 6px;"><i class="fa fa-pencil"></i></button>');
+                            $actionsTd.append($updateBtn);
                             var $deleteBtn = $('<button class="btn btn-sm btn-outline-danger delete-participant-btn" title="Padam" style="padding: 2px 6px;"><i class="fa fa-trash"></i></button>');
                             $deleteBtn.data('participant-id', r.id || 0).data('participant-type', 'jurulatih').data('participant-name', name);
                             $actionsTd.append($deleteBtn);
@@ -811,12 +834,17 @@ ob_start();
                         var acara = safeValue(r.nama_kategori || r.nama_acara || r.kategori || r.acara || r.event_name || r.nama_event, '');
                         var pasukanId = r.pasukan_id || 0;
                         var sukanId = r.sukan_id || 0;
+                        var kategoriId = r.kategori_id || r.id_kategori || r.acara_id || r.event_id || null;
                         
                         var $r = $('<tr>').addClass('role-atlet');
                         $r.attr('data-participant-id', r.id || 0);
                         $r.attr('data-participant-type', 'atlet');
                         $r.attr('data-pasukan-id', pasukanId);
                         $r.attr('data-sukan-id', sukanId);
+                        $r.attr('data-kategori-id', kategoriId);
+                        $r.attr('data-nama', name);
+                        $r.attr('data-ic', nic);
+                        $r.attr('data-matrik', matrik);
                         
                         // Use page-based counter for atlet numbering
                         var atletNumber = startAtlet + idx + 1;
@@ -830,6 +858,8 @@ ob_start();
                         
                         var $actionsTd = $('<td>').addClass('text-center');
                         if (canEdit) {
+                            var $updateBtn = $('<button class="btn btn-sm btn-outline-primary me-1 update-participant-btn" title="Kemaskini" style="padding: 2px 6px;"><i class="fa fa-pencil"></i></button>');
+                            $actionsTd.append($updateBtn);
                             var $deleteBtn = $('<button class="btn btn-sm btn-outline-danger delete-participant-btn" title="Padam" style="padding: 2px 6px;"><i class="fa fa-trash"></i></button>');
                             $deleteBtn.data('participant-id', r.id || 0).data('participant-type', 'atlet').data('participant-name', name);
                             $actionsTd.append($deleteBtn);
@@ -926,9 +956,14 @@ ob_start();
             var $addModal = $('<div class="modal fade" id="addParticipantModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Tambah Peserta</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="addParticipantForm"><div class="mb-3"><label class="form-label">Jenis Peserta <span class="text-danger">*</span></label><select class="form-select" id="addParticipantType" required><option value="">Pilih jenis...</option><option value="atlet">Atlet</option><option value="pengurus">Pengurus</option><option value="jurulatih">Jurulatih</option></select></div><div class="mb-3"><label class="form-label">Pasukan <span class="text-danger">*</span></label><select class="form-select" id="addParticipantPasukan" required><option value="">Pilih pasukan...</option></select></div><div class="mb-3"><label class="form-label">Nama <span class="text-danger">*</span></label><input type="text" class="form-control" id="addParticipantNama" required></div><div class="mb-3"><label class="form-label">No Kad Pengenalan</label><input type="text" class="form-control" id="addParticipantIC" maxlength="12"></div><div class="mb-3" id="addParticipantMatrikGroup" style="display:none;"><label class="form-label">No Matrik</label><input type="text" class="form-control" id="addParticipantMatrik" maxlength="50"></div><div class="mb-3" id="addParticipantKategoriGroup" style="display:none;"><label class="form-label">Acara/Kategori</label><select class="form-select" id="addParticipantKategori"><option value="">Pilih acara...</option></select></div><div class="mb-3" id="addParticipantPhoneGroup" style="display:none;"><label class="form-label">No Telefon</label><input type="text" class="form-control" id="addParticipantPhone" maxlength="20"></div><div class="mb-3" id="addParticipantEmailGroup" style="display:none;"><label class="form-label">Emel</label><input type="email" class="form-control" id="addParticipantEmail" maxlength="100"></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="addParticipantSubmit">Simpan</button></div></div></div></div>');
             $('body').append($addModal);
             
+            // Update participant modal (for edit/update per row)
+            var $updateModal = $('<div class="modal fade" id="updateParticipantModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="updateParticipantTitle">Kemaskini Peserta</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="updateParticipantForm"><input type="hidden" id="updParticipantId"><input type="hidden" id="updParticipantType"><div class="mb-3"><label class="form-label">Pasukan</label><select class="form-select" id="updParticipantPasukan"></select></div><div class="mb-3" id="updParticipantKategoriGroup"><label class="form-label">Acara/Kategori</label><select class="form-select" id="updParticipantKategori"><option value="">Pilih acara...</option></select></div><div class="mb-3"><label class="form-label">Nama <span class="text-danger">*</span></label><input type="text" class="form-control" id="updParticipantName" required></div><div class="mb-3"><label class="form-label">No Kad Pengenalan</label><input type="text" class="form-control" id="updParticipantIC" maxlength="12"></div><div class="mb-3" id="updParticipantMatrikGroup"><label class="form-label">No Matrik</label><input type="text" class="form-control" id="updParticipantMatrik" maxlength="50"></div><div class="mb-3" id="updParticipantPhoneGroup"><label class="form-label">No Telefon</label><input type="text" class="form-control" id="updParticipantPhone" maxlength="20"></div><div class="mb-3" id="updParticipantEmailGroup"><label class="form-label">Emel</label><input type="email" class="form-control" id="updParticipantEmail" maxlength="100"></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="updateParticipantSubmit">Simpan</button></div></div></div></div>');
+            $('body').append($updateModal);
+            
             // Get available pasukan for this kontinjen
             var availablePasukan = {};
             var availableKategori = {};
+            var updatePasukanMap = {};
             
             function loadPasukanForKontinjen() {
                 $.ajax({
@@ -965,6 +1000,62 @@ ob_start();
                 loadPasukanForKontinjen();
                 $('#addParticipantModal').modal('show');
             });
+
+            function populateUpdatePasukanSelect(selectedId, sukanId, kategoriIdForAtlet){
+                var $sel = $('#updParticipantPasukan');
+                updatePasukanMap = {};
+                $sel.empty().append($('<option>').val('').text('Pilih pasukan...'));
+                return $.ajax({
+                    url: '<?php echo url('ajax/pasukan_list.php'); ?>',
+                    data: { kontinjen_id: kid, sukan_id: sukanId || '' },
+                    dataType: 'json'
+                }).done(function(res){
+                    if (res.success && Array.isArray(res.data)) {
+                        res.data.forEach(function(p){
+                            if (p.status == 1 && !p.deleted_at) {
+                                updatePasukanMap[p.id] = p;
+                                var opt = $('<option>').val(p.id).text(p.nama_pasukan || ('Pasukan ' + p.id));
+                                opt.data('sukan-id', p.sukan_id || null);
+                                opt.data('sukan-name', p.nama_sukan || '');
+                                $sel.append(opt);
+                            }
+                        });
+                        if (selectedId) {
+                            $sel.val(String(selectedId));
+                        }
+                        $sel.data('original', selectedId ? String(selectedId) : '');
+                        if ($('#updParticipantType').val() === 'atlet') {
+                            var sid = sukanId || (selectedId && updatePasukanMap[selectedId] ? updatePasukanMap[selectedId].sukan_id : null);
+                            populateUpdateKategoriSelect(sid, kategoriIdForAtlet);
+                        } else {
+                            $('#updParticipantKategori').empty().append($('<option>').val('').text('Tidak terpakai'));
+                        }
+                    }
+                });
+            }
+
+            function populateUpdateKategoriSelect(sukanId, selectedKategoriId){
+                var $sel = $('#updParticipantKategori');
+                $sel.empty().append($('<option>').val('').text('Pilih acara...'));
+                $sel.data('original', '');
+                if (!sukanId) { return; }
+                $.ajax({
+                    url: '<?php echo url('ajax/get_kategori_by_sukan.php'); ?>',
+                    data: { sukan_id: sukanId },
+                    dataType: 'json'
+                }).done(function(res){
+                    if (res.success && Array.isArray(res.data)) {
+                        res.data.forEach(function(k){
+                            var opt = $('<option>').val(k.id).text(k.nama_kategori || ('Acara ' + k.id));
+                            $sel.append(opt);
+                        });
+                        if (selectedKategoriId) {
+                            $sel.val(String(selectedKategoriId));
+                        }
+                        $sel.data('original', selectedKategoriId ? String(selectedKategoriId) : '');
+                    }
+                });
+            }
             
             // Handle participant type change
             $('#addParticipantType').on('change', function() {
@@ -988,6 +1079,16 @@ ob_start();
                 if (type === 'atlet' && pasukanId) {
                     loadKategoriForPasukan(pasukanId);
                 }
+            });
+
+            // Handle pasukan change in update modal (to refresh acara list for atlet)
+            $(document).on('change', '#updParticipantPasukan', function() {
+                var type = ($('#updParticipantType').val() || '').toString();
+                if (type !== 'atlet') { return; }
+                var sel = $(this).find('option:selected');
+                var sid = parseInt(sel.data('sukan-id'), 10) || null;
+                populateUpdateKategoriSelect(sid, null);
+                $('#updParticipantKategori').data('original', '');
             });
             
             function loadKategoriForPasukan(pasukanId) {
@@ -1065,6 +1166,198 @@ ob_start();
                 });
             });
             
+            // Handle update participant modal show + submit
+            function toggleUpdateFields(type) {
+                $('#updParticipantMatrikGroup').toggle(type === 'atlet');
+                $('#updParticipantKategoriGroup').toggle(type === 'atlet');
+                $('#updParticipantPhoneGroup').toggle(type === 'pengurus' || type === 'jurulatih');
+                $('#updParticipantEmailGroup').toggle(type === 'pengurus' || type === 'jurulatih');
+                if (type !== 'atlet') {
+                    $('#updParticipantKategori').val('').data('original', '');
+                }
+            }
+
+            function setUpdateField($input, value) {
+                var val = value || '';
+                $input.val(val);
+                $input.data('original', val);
+            }
+
+            $(document).on('click', '.update-participant-btn', function(e) {
+                e.preventDefault();
+                var $row = $(this).closest('tr');
+                var pid = parseInt($row.data('participant-id'), 10) || 0;
+                var type = ($row.data('participant-type') || '').toString();
+                if (!pid || !type) return;
+
+                var name = $row.data('nama') || '';
+                var ic = $row.data('ic') || '';
+                var matrik = $row.data('matrik') || '';
+                var phone = $row.data('telefon') || '';
+                var email = $row.data('emel') || '';
+                var pasukanIdCurrent = parseInt($row.data('pasukan-id'), 10) || 0;
+                var kategoriIdCurrent = parseInt($row.data('kategori-id'), 10) || null;
+                var sukanIdCurrent = parseInt($row.data('sukan-id'), 10) || null;
+
+                $('#updParticipantId').val(pid);
+                $('#updParticipantType').val(type);
+                $('#updateParticipantTitle').text('Kemaskini ' + (type.charAt(0).toUpperCase() + type.slice(1)));
+
+                toggleUpdateFields(type);
+                populateUpdatePasukanSelect(pasukanIdCurrent, sukanIdCurrent, type === 'atlet' ? kategoriIdCurrent : null);
+                setUpdateField($('#updParticipantName'), name);
+                setUpdateField($('#updParticipantIC'), ic);
+                setUpdateField($('#updParticipantMatrik'), matrik);
+                setUpdateField($('#updParticipantPhone'), phone);
+                setUpdateField($('#updParticipantEmail'), email);
+
+                $('#updateParticipantModal').modal('show');
+            });
+
+            $('#updateParticipantSubmit').on('click', function() {
+                var pid = parseInt($('#updParticipantId').val(), 10) || 0;
+                var type = ($('#updParticipantType').val() || '').toString();
+                if (!pid || !type) {
+                    alert('Maklumat peserta tidak sah.');
+                    return;
+                }
+
+                var name = ($('#updParticipantName').val() || '').trim();
+                var ic = ($('#updParticipantIC').val() || '').trim();
+                var matrik = ($('#updParticipantMatrik').val() || '').trim();
+                var phone = ($('#updParticipantPhone').val() || '').trim();
+                var email = ($('#updParticipantEmail').val() || '').trim();
+
+                if (!name) {
+                    alert('Nama perlu diisi.');
+                    return;
+                }
+
+                var updates = [];
+                var pasukanNew = parseInt($('#updParticipantPasukan').val(), 10) || 0;
+                var kategoriNew = $('#updParticipantKategori').val() ? parseInt($('#updParticipantKategori').val(), 10) : null;
+
+                function addIfChanged(fieldName, newVal, $field, meta) {
+                    var original = ($field.data('original') || '').toString();
+                    var current = (newVal === null || newVal === undefined) ? '' : newVal.toString();
+                    if (original !== current) {
+                        var payload = { field_name: fieldName, field_value: newVal };
+                        if (meta) {
+                            Object.keys(meta).forEach(function(k){ payload[k] = meta[k]; });
+                        }
+                        updates.push(payload);
+                    }
+                }
+
+                var selectedPasukan = $('#updParticipantPasukan option:selected');
+                var pasukanName = selectedPasukan.text() || '';
+                var pasukanSukanId = parseInt(selectedPasukan.data('sukan-id'), 10) || null;
+                var pasukanSukanName = selectedPasukan.data('sukan-name') || '';
+                var selectedKategori = $('#updParticipantKategori option:selected');
+                var kategoriName = selectedKategori.text() || '';
+
+                addIfChanged('pasukan_id', pasukanNew, $('#updParticipantPasukan'), {
+                    pasukan_name: pasukanName,
+                    sukan_id: pasukanSukanId,
+                    sukan_name: pasukanSukanName
+                });
+                if (type === 'atlet') {
+                    addIfChanged('kategori_id', kategoriNew, $('#updParticipantKategori'), {
+                        kategori_name: kategoriName
+                    });
+                }
+
+                addIfChanged('nama', name, $('#updParticipantName'));
+                addIfChanged('no_kad_pengenalan', ic, $('#updParticipantIC'));
+                if (type === 'atlet') {
+                    addIfChanged('no_matrik', matrik, $('#updParticipantMatrik'));
+                }
+                if (type === 'pengurus' || type === 'jurulatih') {
+                    addIfChanged('no_telefon', phone, $('#updParticipantPhone'));
+                    addIfChanged('emel', email, $('#updParticipantEmail'));
+                }
+
+                if (updates.length === 0) {
+                    $('#updateParticipantModal').modal('hide');
+                    return;
+                }
+
+                // Helper to update row UI without full reload
+                function applyUpdatesToRow($row, updatesArr, participantType) {
+                    updatesArr.forEach(function(u) {
+                        var field = u.field_name;
+                        var val = u.field_value || '';
+                        if (field === 'nama') $row.data('nama', val);
+                        if (field === 'no_kad_pengenalan') $row.data('ic', val);
+                        if (field === 'no_matrik') $row.data('matrik', val);
+                        if (field === 'no_telefon') $row.data('telefon', val);
+                        if (field === 'emel') $row.data('emel', val);
+                        if (field === 'pasukan_id') {
+                            $row.data('pasukan-id', val);
+                            if (typeof u.sukan_id !== 'undefined' && u.sukan_id !== null) {
+                                $row.data('sukan-id', u.sukan_id);
+                            }
+                            var $cells = $row.children('td');
+                            if (participantType === 'atlet') {
+                                if (u.sukan_name) { $cells.eq(4).text(u.sukan_name); }
+                                if (u.pasukan_name) { $cells.eq(5).text(u.pasukan_name); }
+                            } else {
+                                if (u.sukan_name) { $cells.eq(5).text(u.sukan_name); }
+                                if (u.pasukan_name) { $cells.eq(6).text(u.pasukan_name); }
+                            }
+                        }
+                        if (field === 'kategori_id') {
+                            $row.data('kategori-id', val);
+                            var $cells = $row.children('td');
+                            if (participantType === 'atlet' && u.kategori_name) {
+                                $cells.eq(6).text(u.kategori_name);
+                            }
+                        }
+                        var $cell = $row.find('.editable-cell[data-field="' + field + '"]');
+                        if ($cell.length) {
+                            updateCellDisplay($cell, val, field);
+                        }
+                    });
+                }
+
+                var needsFullReload = updates.some(function(u){
+                    return u.field_name === 'pasukan_id' || u.field_name === 'kategori_id';
+                });
+
+                var requests = updates.map(function(u) {
+                    return $.ajax({
+                        url: '<?php echo url('ajax/participant_update.php'); ?>',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            participant_id: pid,
+                            participant_type: type,
+                            field_name: u.field_name,
+                            field_value: u.field_value
+                        }),
+                        dataType: 'json'
+                    });
+                });
+
+                $.when.apply($, requests).done(function() {
+                    $('#updateParticipantModal').modal('hide');
+                    var $row = $('.details-row').find('[data-participant-id="' + pid + '"][data-participant-type="' + type + '"]').first();
+                    if (needsFullReload) {
+                        reloadFromServer();
+                    } else if ($row.length) {
+                        applyUpdatesToRow($row, updates, type);
+                    } else {
+                        reloadFromServer();
+                    }
+                }).fail(function(xhr) {
+                    var msg = 'Ralat mengemaskini peserta.';
+                    if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+                        msg = xhr.responseJSON.message;
+                    }
+                    alert(msg);
+                });
+            });
+
             // Handle delete participant
             $(document).on('click', '.delete-participant-btn', function(e) {
                 e.stopPropagation();

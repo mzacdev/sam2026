@@ -54,18 +54,18 @@ $add('', 'Dashboard', 'Dashboard');
 
 // Pengurusan group
 $add('', 'Pengurusan', 'Pengurusan');
-$add('pages/contingent.php', 'Kontingen', 'Pengurusan');
+$add('pages/contingent.php', 'Kontinjen', 'Pengurusan');
 $add('pages/sports.php', 'Sukan', 'Pengurusan');
 $add('pages/pasukan.php', 'Pasukan', 'Pengurusan');
 $add('pages/venues.php', 'Venue', 'Pengurusan');
 $add('pages/results.php', 'Keputusan', 'Pengurusan');
-$add('pages/contingent-user.php', 'Kontingen - User', 'Pengurusan');
+$add('pages/contingent-user.php', 'Kontinjen - User', 'Pengurusan');
 
 // Laporan group
 $add('', 'Laporan', 'Laporan');
 $add('pages/ringkasan.php', 'Ringkasan', 'Laporan');
 $add('pages/results.php', 'Keputusan', 'Laporan');
-$add('pages/contingent-admin.php', 'Kontingen - Admin', 'Laporan');
+$add('pages/contingent-admin.php', 'Kontinjen - Admin', 'Laporan');
 
 // Tetapan group
 $add('', 'Tetapan', 'Tetapan');

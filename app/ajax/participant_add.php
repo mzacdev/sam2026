@@ -1,7 +1,7 @@
 <?php
 /**
  * AJAX endpoint: Add new participant (atlet, pengurus, or jurulatih)
- * Roles: ADMIN, ORGANIZER, JUDGE
+ * Roles: ADMIN, ORGANIZER, VIEWER
  */
 ini_set('display_errors', '0');
 header('Content-Type: application/json; charset=utf-8');
@@ -38,11 +38,11 @@ if (!$auth->isLoggedIn()) {
 }
 
 $rbac = getRBAC();
-// Only ADMIN and ORGANIZER can add participants
+// Allow ADMIN, ORGANIZER, and VIEWER to add participants from contingent-admin.php
 $userRole = Session::get('user_role');
-if (!in_array($userRole, ['ADMIN', 'ORGANIZER'])) {
+if (!in_array($userRole, ['ADMIN', 'ORGANIZER', 'VIEWER'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN dan ORGANIZER dibenarkan untuk menambah peserta.']);
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN, ORGANIZER, atau VIEWER dibenarkan untuk menambah peserta.']);
     exit;
 }
 

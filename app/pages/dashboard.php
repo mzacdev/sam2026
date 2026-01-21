@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/database.php';
 
-$page_title = 'Papan Pemuka';
+$page_title = 'Dashboard';
 // gather summary statistics
 $summary = [
     'kontinjen' => 0,
@@ -185,7 +185,7 @@ ob_start();
     </style>
     <div class="row align-items-center mb-4">
         <div class="col">
-            <h1 class="h3 mb-0">Papan Pemuka</h1>
+            <h1 class="h3 mb-0">Dashboard</h1>
             <p class="text-muted small mb-0">Ringkasan pantas sistem dan aktiviti terkini</p>
         </div>
         <div class="col-auto">

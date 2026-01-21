@@ -140,7 +140,7 @@ ob_start();
                             <thead class="table-light">
                                 <tr>
                                     <th scope="col" style="width:3%;">#</th>
-                                    <th scope="col" style="width:23%;">Nama Kontingen</th>
+                                    <th scope="col" style="width:23%;">Nama Kontinjen</th>
                                     <th scope="col" style="width:10%;">Kod</th>
                                     <th scope="col" style="width:30%;">Pegawai</th>
                                     <th scope="col" style="width:10%;">Telefon</th>

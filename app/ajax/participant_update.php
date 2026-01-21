@@ -1,8 +1,8 @@
 <?php
 /**
  * AJAX endpoint: Update individual participant field
- * Roles: ADMIN, ORGANIZER, JUDGE
- * Updates nama, no_kad_pengenalan, and no_matrik (for athletes only) fields
+ * Roles: ADMIN, ORGANIZER, VIEWER
+ * Updates participant fields including pasukan_id/kategori_id (athletes)
  */
 ini_set('display_errors', '0');
 header('Content-Type: application/json; charset=utf-8');
@@ -39,11 +39,11 @@ if (!$auth->isLoggedIn()) {
 }
 
 $rbac = getRBAC();
-// Only ADMIN and ORGANIZER can edit participants
+// Allow ADMIN, ORGANIZER, and VIEWER to edit participants from contingent-admin.php
 $userRole = Session::get('user_role');
-if (!in_array($userRole, ['ADMIN', 'ORGANIZER'])) {
+if (!in_array($userRole, ['ADMIN', 'ORGANIZER', 'VIEWER'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN dan ORGANIZER dibenarkan untuk mengedit peserta.']);
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya ADMIN, ORGANIZER, atau VIEWER dibenarkan untuk mengedit peserta.']);
     exit;
 }
 
@@ -75,9 +75,9 @@ try {
     
     // Define allowed fields for each participant type
     $allowedFields = [
-        'atlet' => ['nama', 'no_kad_pengenalan', 'no_matrik'],
-        'pengurus' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel'],
-        'jurulatih' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel']
+        'atlet' => ['nama', 'no_kad_pengenalan', 'no_matrik', 'pasukan_id', 'kategori_id'],
+        'pengurus' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'pasukan_id'],
+        'jurulatih' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'pasukan_id']
     ];
     
     if (!in_array($field_name, $allowedFields[$participant_type])) {
@@ -97,7 +97,7 @@ try {
     
     // Check if participant exists and is not deleted
     $checkStmt = $db->prepare("
-        SELECT id 
+        SELECT * 
         FROM {$tableName} 
         WHERE id = :id AND deleted_at IS NULL
     ");
@@ -108,13 +108,75 @@ try {
         throw new Exception('Peserta tidak dijumpai atau telah dipadam.');
     }
     
+    // Validate pasukan/kategori changes
+    $targetPasukanId = $participant['pasukan_id'] ?? null;
+    $targetPasukanSukanId = null;
+    
+    if ($field_name === 'pasukan_id') {
+        $newPasukanId = (int)$field_value;
+        if ($newPasukanId <= 0) {
+            throw new Exception('Pasukan tidak sah.');
+        }
+        $pasukanStmt = $db->prepare("SELECT id, sukan_id, status, deleted_at FROM table_pasukan WHERE id = :id");
+        $pasukanStmt->execute([':id' => $newPasukanId]);
+        $pasukan = $pasukanStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$pasukan || $pasukan['deleted_at'] !== null || (isset($pasukan['status']) && (int)$pasukan['status'] !== 1)) {
+            throw new Exception('Pasukan tidak dijumpai atau tidak aktif.');
+        }
+        $targetPasukanId = $newPasukanId;
+        $targetPasukanSukanId = $pasukan['sukan_id'] ?? null;
+
+        // For atlet, clear kategori if mismatched sukan
+        if ($participant_type === 'atlet' && !empty($participant['kategori_id'])) {
+            $katStmt = $db->prepare("SELECT sukan_id FROM table_kategori WHERE id = :id AND deleted_at IS NULL AND status = 1");
+            $katStmt->execute([':id' => $participant['kategori_id']]);
+            $kat = $katStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$kat || (int)$kat['sukan_id'] !== (int)$targetPasukanSukanId) {
+                $participant['kategori_id'] = null; // clear later when updating pasukan_id
+            }
+        }
+    }
+    
+    if ($field_name === 'kategori_id') {
+        if ($participant_type !== 'atlet') {
+            throw new Exception('Kategori hanya terpakai untuk atlet.');
+        }
+        $newKategoriId = (int)$field_value;
+        if ($newKategoriId <= 0) {
+            throw new Exception('Kategori tidak sah.');
+        }
+        $katStmt = $db->prepare("SELECT id, sukan_id FROM table_kategori WHERE id = :id AND deleted_at IS NULL AND status = 1");
+        $katStmt->execute([':id' => $newKategoriId]);
+        $kat = $katStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$kat) {
+            throw new Exception('Kategori tidak dijumpai atau tidak aktif.');
+        }
+        if (!$targetPasukanId) {
+            $targetPasukanId = $participant['pasukan_id'] ?? null;
+        }
+        if (!$targetPasukanId) {
+            throw new Exception('Pasukan belum ditetapkan untuk peserta ini.');
+        }
+        $pasukanStmt = $db->prepare("SELECT sukan_id, status, deleted_at FROM table_pasukan WHERE id = :id");
+        $pasukanStmt->execute([':id' => $targetPasukanId]);
+        $pasukan = $pasukanStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$pasukan || $pasukan['deleted_at'] !== null || (int)$pasukan['status'] !== 1) {
+            throw new Exception('Pasukan tidak dijumpai atau tidak aktif.');
+        }
+        if ((int)$pasukan['sukan_id'] !== (int)$kat['sukan_id']) {
+            throw new Exception('Kategori tidak sepadan dengan sukan pasukan.');
+        }
+    }
+    
     // Prepare update query
     $fieldMap = [
         'nama' => 'nama',
         'no_kad_pengenalan' => 'no_kad_pengenalan',
         'no_matrik' => 'no_matrik',
         'no_telefon' => 'no_telefon',
-        'emel' => 'emel'
+        'emel' => 'emel',
+        'pasukan_id' => 'pasukan_id',
+        'kategori_id' => 'kategori_id'
     ];
     
     if (!isset($fieldMap[$field_name])) {
@@ -134,6 +196,21 @@ try {
         if (strlen($cleanIc) !== 12) {
             throw new Exception('No Kad Pengenalan mesti 12 digit.');
         }
+        $field_value = $cleanIc;
+    }
+    
+    if ($field_name === 'pasukan_id') {
+        if (!ctype_digit((string)$field_value) || (int)$field_value <= 0) {
+            throw new Exception('Pasukan tidak sah.');
+        }
+        $field_value = (int)$field_value;
+    }
+    
+    if ($field_name === 'kategori_id') {
+        if (!ctype_digit((string)$field_value) || (int)$field_value <= 0) {
+            throw new Exception('Kategori tidak sah.');
+        }
+        $field_value = (int)$field_value;
     }
     
     if ($field_name === 'no_matrik' && !empty($field_value)) {
@@ -160,20 +237,32 @@ try {
         }
     }
     
-    // Update the field
-    $updateStmt = $db->prepare("
-        UPDATE {$tableName} 
-        SET {$dbFieldName} = :value, updated_at = CURRENT_TIMESTAMP
-        WHERE id = :id AND deleted_at IS NULL
-    ");
-    
-    // For nullable fields, allow empty string to be stored as NULL
-    $valueToStore = ($field_value === '') ? null : $field_value;
-    
-    $updateStmt->execute([
-        ':value' => $valueToStore,
-        ':id' => $participant_id
-    ]);
+    // Update the field (handle clearing kategori when pasukan changes)
+    if ($field_name === 'pasukan_id' && $participant_type === 'atlet' && empty($participant['kategori_id'])) {
+        $updateStmt = $db->prepare("
+            UPDATE {$tableName} 
+            SET {$dbFieldName} = :value, kategori_id = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND deleted_at IS NULL
+        ");
+        $updateStmt->execute([
+            ':value' => $field_value,
+            ':id' => $participant_id
+        ]);
+    } else {
+        $updateStmt = $db->prepare("
+            UPDATE {$tableName} 
+            SET {$dbFieldName} = :value, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND deleted_at IS NULL
+        ");
+        
+        // For nullable fields, allow empty string to be stored as NULL
+        $valueToStore = ($field_value === '') ? null : $field_value;
+        
+        $updateStmt->execute([
+            ':value' => $valueToStore,
+            ':id' => $participant_id
+        ]);
+    }
     
     if ($updateStmt->rowCount() === 0) {
         throw new Exception('Gagal mengemaskini data peserta.');
