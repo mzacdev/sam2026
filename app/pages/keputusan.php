@@ -83,16 +83,16 @@ ob_start();
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover table-fixed" style="table-layout:fixed;">
                             <thead>
                                 <tr>
-                                    <th scope="col">#</th>
-                                    <th scope="col">Sukan</th>
-                                    <th scope="col">Kategori</th>
-                                    <th scope="col">Tarikh</th>
-                                    <th scope="col">Kedudukan</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Tindakan</th>
+                                    <th scope="col" style="width:3%">#</th>
+                                    <th scope="col" style="width:10%">Sukan</th>
+                                    <th scope="col" style="width:15%">Acara</th>
+                                    <th scope="col" style="width:40%">Nama</th>
+                                    <th scope="col" style="width:12%">#</th>
+                                    <th scope="col" style="width:10%">Status</th>
+                                    <th scope="col" style="width:10%">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody id="keputusanBody">
@@ -104,6 +104,7 @@ ob_start();
                                 </tr>
                             </tbody>
                         </table>
+                        <div id="keputusanPager" class="d-flex justify-content-between align-items-center mt-2"></div>
                     </div>
                 </div>
             </div>
@@ -172,6 +173,46 @@ ob_start();
     </div>
 </div>
 
+<!-- Full results modal (wide) -->
+<div class="modal fade" id="modalKeputusanFull" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalKeputusanFullTitle">Keputusan Penuh</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered table-nowrap" id="modalKeputusanFullTable" style="table-layout:fixed;">
+                                    <thead>
+                                            <tr>
+                                                <th style="width:3%">#</th>
+                                                <th style="width:15%">Sukan</th>
+                                                <th style="width:25%">Acara</th>
+                                                <th style="width:57%">Nama Peserta / Pasukan</th>
+                                            </tr>
+                                    </thead>
+                        <tbody>
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                    <div id="modalKeputusanPager" class="d-flex justify-content-between align-items-center mt-2"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Ensure modal table cells don't wrap and long names truncate */
+    .table-nowrap td, .table-nowrap th { white-space: nowrap; }
+    .modal .text-truncate { display: inline-block; vertical-align: middle; max-width: 360px; }
+    .modal .text-truncate.small { max-width: 260px; }
+</style>
+
 <script>
 (function(){
     const sportSel = document.getElementById('filterSport');
@@ -182,7 +223,7 @@ ob_start();
     const noRow = document.getElementById('noKeputusanRow');
     
     // Modal instance variable
-    let modalKeputusanInstance = null;
+    var modalKeputusanInstance = null;
     const formKeputusan = document.getElementById('formKeputusan');
     const keputusanSukan = document.getElementById('keputusanSukan');
     const keputusanKategori = document.getElementById('keputusanKategori');
@@ -191,9 +232,12 @@ ob_start();
     const keputusanStatus = document.getElementById('keputusanStatus');
     const keputusanId = document.getElementById('keputusanId');
     
-    let currentCategoryType = null;
-    let currentParticipants = [];
-    let participantCount = 0;
+    var currentCategoryType = null;
+    var currentParticipants = [];
+    var participantCount = 0;
+
+    // Keep latest full dataset from server to avoid duplicate queries
+    var latestKeputusanData = [];
     
     function fetchJSON(url){
         return fetch(url, { 
@@ -386,38 +430,115 @@ ob_start();
         });
     }
     
+    // Pagination state
+    var currentPage = 1;
+    var pageSize = 25; // default page size (requested)
+
+    // Small HTML escape helper used in JS rendering
+    function escapeHtml(str){
+        return (str||'').toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function updatePager(total){
+        const pager = document.getElementById('keputusanPager');
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if(currentPage > totalPages) currentPage = totalPages;
+
+        const start = (currentPage - 1) * pageSize + 1;
+        const end = Math.min(total, currentPage * pageSize);
+        pager.innerHTML = `
+            <div class="text-muted small">Menunjukkan ${start}–${end} daripada ${total}</div>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" id="pagerPrev" ${currentPage===1? 'disabled': ''}>Sebelum</button>
+                <button class="btn btn-outline-secondary" id="pagerNext" ${currentPage===totalPages? 'disabled': ''}>Seterusnya</button>
+            </div>
+        `;
+
+        pager.querySelector('#pagerPrev').addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; renderKeputusan(latestKeputusanData); } });
+        pager.querySelector('#pagerNext').addEventListener('click', ()=>{ if(currentPage<totalPages){ currentPage++; renderKeputusan(latestKeputusanData); } });
+    }
+
     function renderKeputusan(rows){
+        latestKeputusanData = Array.isArray(rows) ? rows : [];
+        const total = latestKeputusanData.length;
+
         keputusanBody.innerHTML = '';
-        if(!rows || rows.length === 0){
+        if(total === 0){
             noRow.style.display = '';
+            document.getElementById('keputusanPager').innerHTML = '';
             return;
         }
         noRow.style.display = 'none';
-        
-        rows.forEach((r, idx)=>{
+
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if(currentPage > totalPages) currentPage = totalPages;
+
+        const startIdx = (currentPage - 1) * pageSize;
+        const slice = latestKeputusanData.slice(startIdx, startIdx + pageSize);
+
+        slice.forEach((r, i)=>{
             const tr = document.createElement('tr');
-            
-            // Format standings for display
-            let standingsHtml = '';
+
+            // Row number (global index)
+            const globalIdx = startIdx + i + 1;
+
+            // Winner name and kontinjen short (prefer server-provided `kontingen_short_name`)
+            var winnerDisplay = '<span class="text-muted">-</span>';
+            var kontingenShort = '';
             if (r.standings && Array.isArray(r.standings) && r.standings.length > 0) {
-                const standingsList = r.standings.map(s => {
-                    const pos = s.position || '';
-                    const name = s.participant_name || s.participant_id || '-';
-                    return `${pos}. ${name}`;
-                }).join('<br>');
-                standingsHtml = `<div class="small">${standingsList}</div>`;
-            } else {
-                standingsHtml = '<span class="text-muted">-</span>';
+                const winner = r.standings[0];
+                const fullName = (winner.participant_name || winner.nama || winner.nama_pasukan || winner.participant || winner.participant_id || '').toString();
+
+                // Prefer kontingen_short_name returned by server
+                if (winner.kontingen_short_name && String(winner.kontingen_short_name).trim() !== '') {
+                    kontingenShort = String(winner.kontingen_short_name).trim();
+                } else {
+                    // Fallback: try to split 'Name - KOD' pattern
+                    const parts = fullName.split(' - ');
+                    if (parts.length > 1) {
+                        kontingenShort = parts[parts.length - 1];
+                    }
+                }
+
+                // Display winner name without kontingen suffix when possible
+                const nameParts = fullName.split(' - ');
+                if (nameParts.length > 1) {
+                    winnerDisplay = escapeHtml(nameParts.slice(0, nameParts.length - 1).join(' - '));
+                } else {
+                    winnerDisplay = escapeHtml(fullName || '');
+                }
             }
-            
+
+            // New column: button to open full results
+            const fullBtn = `<button class="btn btn-sm btn-outline-primary open-full-btn" data-id="${r.id}">Keputusan Penuh</button>`;
+
+            // Render top-3 winners inside Nama column with medal icons (🥇🥈🥉)
+            const winners = Array.isArray(r.standings) ? r.standings.slice(0,3) : [];
+            const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
+            const namaLines = [];
+            for (var p = 1; p <= 3; p++) {
+                const w = (r.standings || []).find(x => parseInt(x.position) === p) || winners[p-1] || null;
+                if (w && (w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan)) {
+                    const display = w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan || '';
+                    const pretty = escapeHtml(display.replace(/\s-\s/, ', '));
+                    namaLines.push(`<div><span class="me-2">${medalMap[p] || ''}</span>${pretty}</div>`);
+                }
+            }
+            const namaHtml = namaLines.length ? namaLines.join('') : '<span class="text-muted">-</span>';
+
             tr.innerHTML = `
-                <td>${idx+1}</td>
-                <td>${r.sukan || ''}</td>
-                <td>${r.kategori || ''}</td>
-                <td>${r.tarikh || ''}</td>
-                <td>${standingsHtml}</td>
-                <td><span class="badge bg-${r.status === 'completed' ? 'success' : r.status === 'ongoing' ? 'warning' : 'info'}">${r.status || ''}</span></td>
-                <td>
+                <td class="align-top text-center">${globalIdx}</td>
+                <td class="align-top">${escapeHtml(r.sukan || '')}</td>
+                <td class="align-top">${escapeHtml(r.kategori || r.acara || '')}</td>
+                <td class="align-top"><div class="text-truncate" style="max-width:100%">${namaHtml}</div></td>
+                <td class="align-top text-center">${fullBtn}</td>
+                <td class="align-top"><span class="badge bg-${r.status === 'completed' ? 'success' : r.status === 'ongoing' ? 'warning' : 'info'}">${escapeHtml(r.status || '')}</span></td>
+                <td class="align-top">
                     <button class="btn btn-sm btn-outline-primary me-1 btn-edit-keputusan" data-id="${r.id}">
                         <i class="fa fa-edit"></i>
                     </button>
@@ -425,8 +546,103 @@ ob_start();
                         <i class="fa fa-trash"></i>
                     </button>
                 </td>`;
+
             keputusanBody.appendChild(tr);
         });
+
+        // Attach click handlers for full result buttons
+        document.querySelectorAll('.open-full-btn').forEach(btn=>{
+            btn.addEventListener('click', function(){ openFullKeputusan(this.getAttribute('data-id')); });
+        });
+
+        updatePager(total);
+    }
+
+    // Modal paging state
+    var modalStandings = [];
+    var modalCurrentPage = 1;
+    const modalPageSize = 10; // default as requested
+    var currentModalSukan = '';
+    var currentModalAcara = '';
+
+    function renderModalStandingsPage(){
+        const modalEl = document.getElementById('modalKeputusanFull');
+        const tbody = modalEl.querySelector('table tbody');
+        const pager = document.getElementById('modalKeputusanPager');
+        tbody.innerHTML = '';
+
+        const total = modalStandings.length;
+        if(total === 0){
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Tiada keputusan untuk paparkan</td></tr>';
+            pager.innerHTML = '';
+            return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(total / modalPageSize));
+        if(modalCurrentPage > totalPages) modalCurrentPage = totalPages;
+
+        const start = (modalCurrentPage - 1) * modalPageSize;
+        const slice = modalStandings.slice(start, start + modalPageSize);
+
+        slice.forEach(s=>{
+            const tr = document.createElement('tr');
+            const pos = escapeHtml(s.position || '');
+
+            const rawName = (s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
+            const parts = rawName.split(' - ');
+            const baseName = parts.length > 1 ? parts.slice(0, parts.length - 1).join(' - ') : rawName;
+            const ks = (s.kontingen_short_name && String(s.kontingen_short_name).trim() !== '') ? String(s.kontingen_short_name).trim() : null;
+            const suffix = ks ? (', ' + escapeHtml(ks)) : (parts.length > 1 ? (', ' + escapeHtml(parts[parts.length - 1])) : '');
+            const name = escapeHtml(baseName) + suffix;
+
+            tr.innerHTML = `<td class="align-top text-center">${pos}</td>` +
+                           `<td class="align-top">${escapeHtml(currentModalSukan)}</td>` +
+                           `<td class="align-top">${escapeHtml(currentModalAcara)}</td>` +
+                           `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${name}">${name}</span></td>`;
+            tbody.appendChild(tr);
+        });
+
+        // pager
+        pager.innerHTML = `
+            <div class="text-muted small">Menunjukkan ${start+1}–${Math.min(total, start+modalPageSize)} daripada ${total}</div>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" id="modalPagerPrev" ${modalCurrentPage===1? 'disabled': ''}>Sebelum</button>
+                <button class="btn btn-outline-secondary" id="modalPagerNext" ${modalCurrentPage===totalPages? 'disabled': ''}>Seterusnya</button>
+            </div>
+        `;
+
+        pager.querySelector('#modalPagerPrev').addEventListener('click', ()=>{ if(modalCurrentPage>1){ modalCurrentPage--; renderModalStandingsPage(); } });
+        pager.querySelector('#modalPagerNext').addEventListener('click', ()=>{ if(modalCurrentPage<totalPages){ modalCurrentPage++; renderModalStandingsPage(); } });
+
+        // init tooltips inside modal
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            modalEl.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el=>{ try{ new bootstrap.Tooltip(el); }catch(e){} });
+        }
+    }
+
+    function openFullKeputusan(id){
+        if(!latestKeputusanData || latestKeputusanData.length === 0){ console.warn('No cached data available for full modal'); return; }
+        const rec = latestKeputusanData.find(r => String(r.id) === String(id));
+        if(!rec){ console.warn('Record not found in cached data for id', id); return; }
+
+        modalStandings = Array.isArray(rec.standings) ? rec.standings : [];
+        modalCurrentPage = 1;
+        currentModalSukan = rec.sukan || '';
+        currentModalAcara = rec.kategori || rec.acara || '';
+
+        // Set title
+        const titleEl = document.getElementById('modalKeputusanFullTitle');
+        titleEl.textContent = `Keputusan Penuh – ${currentModalSukan} – ${currentModalAcara}`;
+
+        renderModalStandingsPage();
+
+        const modalEl = document.getElementById('modalKeputusanFull');
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const modalInstance = new bootstrap.Modal(modalEl, {backdrop: true, keyboard: true});
+            modalInstance.show();
+        } else {
+            modalEl.classList.add('show'); modalEl.style.display = 'block'; document.body.classList.add('modal-open');
+        }
     }
     
     function loadKeputusan(){
@@ -667,7 +883,7 @@ ob_start();
                     opt.style.color = '';
                 } else {
                     // Check if this option is selected in another position
-                    let isSelectedElsewhere = false;
+                    var isSelectedElsewhere = false;
                     for (const [pos, val] of Object.entries(finalSelectedValues)) {
                         if (parseInt(pos) !== currentPosition && val === opt.value) {
                             isSelectedElsewhere = true;
@@ -747,7 +963,7 @@ ob_start();
         const standings = [];
         const selectedIds = [];
         
-        for (let i = 0; i < selects.length; i++) {
+        for (var i = 0; i < selects.length; i++) {
             const select = selects[i];
             const position = parseInt(select.getAttribute('data-position'));
             const participantId = select.value ? select.value.trim() : '';
@@ -953,6 +1169,119 @@ ob_start();
         });
     }
     
+    // Open full results modal (uses cached dataset) with paging and sorted by ranking
+    function openFullKeputusan(id){
+        if(!latestKeputusanData || latestKeputusanData.length === 0){
+            console.warn('No cached data available for full modal');
+            return;
+        }
+        const rec = latestKeputusanData.find(r => String(r.id) === String(id));
+        if(!rec){
+            console.warn('Record not found in cached data for id', id);
+            return;
+        }
+
+        const modalEl = document.getElementById('modalKeputusanFull');
+        const tbody = modalEl.querySelector('table tbody');
+        const pager = document.getElementById('modalKeputusanPager');
+        tbody.innerHTML = '';
+        pager.innerHTML = '';
+
+        const sukan = rec.sukan || '';
+        const acara = rec.kategori || rec.acara || '';
+
+        // Prepare standings: clone and sort by numeric position ascending
+        var standings = Array.isArray(rec.standings) ? rec.standings.slice() : [];
+        standings.sort((a,b)=>{
+            const pa = parseInt(a.position) || 0;
+            const pb = parseInt(b.position) || 0;
+            return pa - pb;
+        });
+
+        const total = standings.length;
+        const pageSizeModal = 10;
+        var modalPage = 1;
+
+        function renderPage(){
+            tbody.innerHTML = '';
+            if(total === 0){
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tiada keputusan untuk paparkan</td></tr>';
+                pager.innerHTML = '';
+                return;
+            }
+
+            const totalPages = Math.max(1, Math.ceil(total / pageSizeModal));
+            if(modalPage > totalPages) modalPage = totalPages;
+            const start = (modalPage - 1) * pageSizeModal;
+            const slice = standings.slice(start, start + pageSizeModal);
+
+                slice.forEach(s=>{
+                    const tr = document.createElement('tr');
+                    var posNum = parseInt(s.position) || 0;
+
+                    const displayRaw = (s.participant_display_name || s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
+                    const nameParts = displayRaw.split(' - ');
+                    const namePretty = displayRaw.replace(/\s-\s/, ', ');
+                    const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
+                    const medal = medalMap[posNum] ? `<span class="me-2">${medalMap[posNum]}</span>` : '';
+                    const nameDisplay = medal + escapeHtml(namePretty);
+
+                    tr.innerHTML = `<td class="align-top text-center">${escapeHtml(String(posNum))}</td>` +
+                                   `<td class="align-top">${escapeHtml(sukan)}</td>` +
+                                   `<td class="align-top">${escapeHtml(acara)}</td>` +
+                                `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
+                    tbody.appendChild(tr);
+                });
+
+            // pager
+            const showingStart = start + 1;
+            const showingEnd = Math.min(total, start + pageSizeModal);
+            pager.innerHTML = `
+                <div class="text-muted small">Menunjukkan ${showingStart}–${showingEnd} daripada ${total}</div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" id="modalPagerPrev" ${modalPage===1? 'disabled': ''}>Sebelum</button>
+                    <button class="btn btn-outline-secondary" id="modalPagerNext" ${modalPage===totalPages? 'disabled': ''}>Seterusnya</button>
+                </div>
+            `;
+
+            pager.querySelector('#modalPagerPrev').addEventListener('click', ()=>{ if(modalPage>1){ modalPage--; renderPage(); } });
+            pager.querySelector('#modalPagerNext').addEventListener('click', ()=>{ if(modalPage<totalPages){ modalPage++; renderPage(); } });
+
+            // init tooltips inside modal
+            if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+                modalEl.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el=>{ try{ new bootstrap.Tooltip(el); }catch(e){} });
+            }
+        }
+
+        // Set dynamic title
+        const titleEl = document.getElementById('modalKeputusanFullTitle');
+        titleEl.textContent = `Keputusan Penuh – ${sukan} – ${acara}`;
+
+        renderPage();
+
+        // Show modal
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const existing = modalEl.querySelectorAll('[data-bs-toggle="tooltip"]');
+            existing.forEach(el=>{ try{ const inst = bootstrap.Tooltip.getInstance(el); if(inst) inst.dispose(); }catch(e){} });
+            const modalInstance = new bootstrap.Modal(modalEl, {backdrop: true, keyboard: true});
+            modalInstance.show();
+        } else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+    }
+
+    // Simple HTML escape for JS-inserted strings
+    function escapeHtml(str){
+        return (str||'').toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     // Event listeners
     sportSel.addEventListener('change', function(){
         loadKategori(this.value);
@@ -1087,6 +1416,19 @@ ob_start();
 #standingsContainer .standings-select {
     min-width: 250px;
 }
+
+/* Table fixed layout helpers and truncation */
+.table-fixed th, .table-fixed td { overflow: hidden; }
+.table-fixed .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+
+/* Row alignment: data top-left, except first column (#) top-center */
+.table-fixed td { vertical-align: top; text-align: left; }
+.table-fixed th { vertical-align: top; }
+.table-fixed th:first-child, .table-fixed td:first-child { vertical-align: top; text-align: center; }
+
+/* Modal table nowrap enforcement and tooltip name truncation */
+#modalKeputusanFullTable th, #modalKeputusanFullTable td { white-space: nowrap; overflow: hidden; }
+#modalKeputusanFullTable .text-truncate { max-width: 100%; display: inline-block; vertical-align: middle; }
 </style>
 
 <?php
