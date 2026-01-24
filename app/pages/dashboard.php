@@ -75,6 +75,8 @@ try {
     // Medal ranking using Olympic/SEA Games rules: Gold, then Silver, then Bronze (ties share rank)
     $medalRows = [];
     try {
+        // Count medals for both team and individual winners. Participant IDs in standings
+        // may reference either table_pasukan.id (team) or table_pasukan_atlet.id (individual).
         $sqlMedal = "
             SELECT
                 base.kod_universiti,
@@ -92,7 +94,7 @@ try {
             ) base
             LEFT JOIN (
                 SELECT
-                    k.kod_universiti,
+                    COALESCE(kp.kod_universiti, ka.kod_universiti) AS kod_universiti,
                     SUM(CASE WHEN jt.position = 1 THEN 1 ELSE 0 END) AS emas,
                     SUM(CASE WHEN jt.position = 2 THEN 1 ELSE 0 END) AS perak,
                     SUM(CASE WHEN jt.position = 3 THEN 1 ELSE 0 END) AS gangsa
@@ -101,11 +103,15 @@ try {
                     position INT PATH '$.position',
                     participant_id VARCHAR(255) PATH '$.participant_id'
                 )) jt ON jt.position IN (1,2,3)
-                JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
-                JOIN table_kontinjen k ON k.id = p.kontinjen_id AND k.deleted_at IS NULL AND k.status = 1
-                JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
+                /* try to resolve participant as a team */
+                LEFT JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
+                LEFT JOIN table_kontinjen kp ON kp.id = p.kontinjen_id AND kp.deleted_at IS NULL AND kp.status = 1
+                /* try to resolve participant as an individual athlete (pa -> pasukan -> kontinjen) */
+                LEFT JOIN table_pasukan_atlet pa ON pa.id = jt.participant_id AND pa.deleted_at IS NULL
+                LEFT JOIN table_pasukan p2 ON p2.id = pa.pasukan_id AND p2.deleted_at IS NULL
+                LEFT JOIN table_kontinjen ka ON ka.id = p2.kontinjen_id AND ka.deleted_at IS NULL AND ka.status = 1
                 WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
-                GROUP BY k.kod_universiti
+                GROUP BY COALESCE(kp.kod_universiti, ka.kod_universiti)
             ) mc ON mc.kod_universiti = base.kod_universiti
             ORDER BY emas DESC, perak DESC, gangsa DESC, base.nama_pendek ASC
         ";
@@ -125,6 +131,61 @@ try {
     } catch (Exception $e) {
         error_log('[dashboard medal rank] ' . $e->getMessage());
         $medalRows = [];
+    }
+
+    // Optional debug helper: append diagnostic info when requested via ?debug_medal=1
+    $medalDebug = null;
+    if (isset($_GET['debug_medal']) && $_GET['debug_medal']) {
+        try {
+            $cntRow = $db->query("SELECT COUNT(*) AS c FROM table_results WHERE deleted_at IS NULL AND status = 'completed'")->fetch(PDO::FETCH_ASSOC);
+            $latestRow = $db->query("SELECT id, tarikh, status, created_at, COALESCE(CHAR_LENGTH(standings),0) AS standings_len FROM table_results WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            $sample = $db->query("SELECT id, status, created_at, SUBSTRING(standings,1,400) AS standings_sample FROM table_results WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 3")->fetchAll(PDO::FETCH_ASSOC);
+            $medalDebug = [
+                'completed_count' => (int)($cntRow['c'] ?? 0),
+                'latest' => $latestRow ?: null,
+                'recent_samples' => $sample ?: []
+            ];
+            error_log('[dashboard debug_medal] ' . json_encode($medalDebug));
+            // If debug requested, include sample of medal query results
+            if (!empty($medalDebug) && !empty($rows)) {
+                $medalDebug['medal_query_count'] = count($rows);
+                $medalDebug['medal_query_sample'] = array_slice($rows, 0, 12);
+            } else if (!empty($medalDebug)) {
+                $medalDebug['medal_query_count'] = 0;
+                $medalDebug['medal_query_sample'] = [];
+            }
+                    // Additional mapping diagnostics: resolve participant_id -> kod_universiti for latest result
+                    if (!empty($latestRow['id'])) {
+                        try {
+                            $mapSql = "
+                                SELECT tr.id AS result_id, jt.position, jt.participant_id,
+                                       kp.kod_universiti AS team_kod_universiti,
+                                       ka.kod_universiti AS atlet_kod_universiti
+                                FROM table_results tr
+                                JOIN JSON_TABLE(tr.standings, '$[*]' COLUMNS(
+                                    position INT PATH '$.position',
+                                    participant_id VARCHAR(255) PATH '$.participant_id'
+                                )) jt ON 1=1
+                                LEFT JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
+                                LEFT JOIN table_kontinjen kp ON kp.id = p.kontinjen_id AND kp.deleted_at IS NULL
+                                LEFT JOIN table_pasukan_atlet pa ON pa.id = jt.participant_id AND pa.deleted_at IS NULL
+                                LEFT JOIN table_pasukan p2 ON p2.id = pa.pasukan_id AND p2.deleted_at IS NULL
+                                LEFT JOIN table_kontinjen ka ON ka.id = p2.kontinjen_id AND ka.deleted_at IS NULL
+                                WHERE tr.id = :rid
+                                ORDER BY jt.position ASC
+                            ";
+                            $mStmt = $db->prepare($mapSql);
+                            $mStmt->execute([':rid' => $latestRow['id']]);
+                            $maps = $mStmt->fetchAll(PDO::FETCH_ASSOC);
+                            $medalDebug['latest_mapping'] = $maps;
+                        } catch (Exception $e) {
+                            $medalDebug['latest_mapping_error'] = $e->getMessage();
+                        }
+                    }
+        } catch (Exception $e) {
+            error_log('[dashboard debug_medal] ' . $e->getMessage());
+            $medalDebug = ['error' => $e->getMessage()];
+        }
     }
 
 } catch (Exception $e) {
@@ -318,11 +379,17 @@ ob_start();
             <?php else: ?>
                 <div class="text-muted small p-3">Tiada data pingat.</div>
             <?php endif; ?>
+            <?php if (!empty($medalDebug)): ?>
+                <div class="p-2 mt-2 bg-light small" style="border-radius:6px;">
+                    <strong>Debug Medal:</strong>
+                    <pre style="white-space:pre-wrap; word-break:break-word; font-size:0.78rem; margin:6px 0 0 0;"><?php echo htmlspecialchars(json_encode($medalDebug, JSON_PRETTY_PRINT), ENT_QUOTES, 'UTF-8'); ?></pre>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
 <div class="modal fade modal-top" id="medalDetailModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Penerima Pingat</h5>
@@ -330,18 +397,25 @@ ob_start();
             </div>
             <div class="modal-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div class="fw-semibold" id="medalDetailTitle"></div>
-                    <div class="badge bg-light text-dark" id="medalDetailMedal"></div>
+                    <div class="fw-semibold" id="medalDetailTitle">Penerima Pingat <span id="medalDetailBadge" class="badge" style="margin-left:.4rem;"></span> <span id="medalDetailName" style="margin-left:.6rem;"></span></div>
+                    <div>
+                        <select class="form-select form-select-sm" id="medalDetailPageSize" style="width:90px;">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Nama</th>
-                                <th>Kontinjen</th>
-                                <th>Sukan</th>
-                                <th>Acara</th>
+                                <th style="width:3%">#</th>
+                                <th style="width:40%">Nama</th>
+                                <th style="width:15%">Kontinjen</th>
+                                <th style="width:20%">Sukan</th>
+                                <th style="width:22%">Acara</th>
                             </tr>
                         </thead>
                         <tbody id="medalDetailBody">
@@ -351,17 +425,9 @@ ob_start();
                 </div>
                 <div class="d-flex justify-content-between align-items-center mt-2">
                     <div class="text-muted small" id="medalDetailSummary"></div>
-                    <div class="d-flex align-items-center gap-2">
-                        <select class="form-select form-select-sm" id="medalDetailPageSize" style="width:80px;">
-                            <option value="5">5</option>
-                            <option value="10" selected>10</option>
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                        </select>
-                        <nav aria-label="Medal pagination">
-                            <ul class="pagination pagination-sm mb-0" id="medalDetailPager"></ul>
-                        </nav>
-                    </div>
+                    <nav aria-label="Medal pagination">
+                        <ul class="pagination pagination-sm mb-0" id="medalDetailPager"></ul>
+                    </nav>
                 </div>
             </div>
         </div>
@@ -408,12 +474,12 @@ ob_start();
             var html = '';
             pageRows.forEach(function(r, idx){
                 html += '<tr>'+
-                    '<td>'+(start+idx+1)+'</td>'+
-                    '<td>'+(r.nama_pasukan || '-')+'</td>'+
-                    '<td>'+(r.nama_kontinjen || r.kod_universiti || '-')+'</td>'+
-                    '<td>'+(r.nama_sukan || '-')+'</td>'+
-                    '<td>'+(r.nama_kategori || '-')+'</td>'+
-                '</tr>';
+                        '<td>'+(start+idx+1)+'</td>'+
+                        '<td>'+(r.nama || r.nama_pasukan || '-')+'</td>'+
+                        '<td>'+(r.nama_kontinjen || r.kod_universiti || '-')+'</td>'+
+                        '<td>'+(r.nama_sukan || '-')+'</td>'+
+                        '<td>'+(r.nama_kategori || '-')+'</td>'+
+                    '</tr>';
             });
             $body.html(html);
             renderPager(medalRowsCache.length);
@@ -439,10 +505,18 @@ ob_start();
             var name = $tr.data('kontinjen') || kod;
             var medal = $(this).data('medal');
             if (!kod || !medal) return;
-            $('#medalDetailTitle').text(name);
-            $('#medalDetailMedal').text(medal.toUpperCase());
+            $('#medalDetailName').text(name);
+            // set single badge next to title indicating selected medal
+            var $badge = $('#medalDetailBadge');
+            $badge.text(medal.toUpperCase());
+            if (medal === 'emas') { $badge.css({'background':'#ffd700','color':'#000'}); }
+            else if (medal === 'perak') { $badge.css({'background':'#c0c0c0','color':'#000'}); }
+            else if (medal === 'gangsa') { $badge.css({'background':'#cd7f32','color':'#fff'}); }
             $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-muted">Memuatkan...</td></tr>');
             $('#medalDetailSummary').text('');
+            // reset pagination to defaults each time modal opens
+            pageSize = 10;
+            $('#medalDetailPageSize').val('10');
             medalRowsCache = []; currentPage = 1;
             $('#medalDetailModal').modal('show');
             $.ajax({
@@ -461,6 +535,14 @@ ob_start();
                 $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Ralat memuatkan data</td></tr>');
                 $('#medalDetailSummary').text('Ralat memuatkan data');
             });
+        
+        // Ensure body doesn't scroll when modal is open (extra guard)
+        $('#medalDetailModal').on('shown.bs.modal', function(){
+            try{ document.body.style.overflow = 'hidden'; }catch(e){}
+        });
+        $('#medalDetailModal').on('hidden.bs.modal', function(){
+            try{ document.body.style.overflow = ''; }catch(e){}
+        });
         });
     });
 })();
