@@ -60,7 +60,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $logoMain = asset('img/logos/logo-main.png');
 $favicon = asset('img/favicon.ico');
-$banner = asset('img/banners/sam2026-banner.jpg');
+  $bannerDir = __DIR__ . '/../assets/img/banners';
+$bannerFiles = [];
+if (is_dir($bannerDir)) {
+  $dh = opendir($bannerDir);
+  if ($dh) {
+    while (($f = readdir($dh)) !== false) {
+      if (in_array(strtolower(pathinfo($f, PATHINFO_EXTENSION)), ['jpg','jpeg','png','webp','gif'])) {
+                $bannerFiles[] = asset('img/banners/' . $f);
+      }
+    }
+    closedir($dh);
+  }
+}
+// fallback to single banner if none found
+if (empty($bannerFiles)) {
+  $bannerFiles = [ asset('img/banners/sam2026-banner.jpg') ];
+}
+$slidesJs = json_encode($bannerFiles);
 $siteTitle = defined('SITE_NAME') ? SITE_NAME : 'SAM 2026';
 // CSRF token
 if (empty($_SESSION['csrf_token'])) {
@@ -112,22 +129,41 @@ $csrfToken = $_SESSION['csrf_token'];
 
   <!-- Banner -->
   <div class="md:col-span-2 bg-white rounded-xl shadow overflow-hidden">
-    <div x-data="{
-      activeSlide: 0,
-      slides: ['<?= htmlspecialchars($banner) ?>'],
-      init() {
-        setInterval(() => { this.activeSlide = (this.activeSlide + 1) % this.slides.length; }, 4000);
-      }
-    }" class="relative h-[400px]">
+    <div x-data="carousel()" x-init="initCarousel(JSON.parse($el.getAttribute('data-slides')))" data-slides='<?= htmlspecialchars($slidesJs, ENT_QUOTES) ?>' @mouseenter="pause()" @mouseleave="play()" class="relative h-[420px]">
       <template x-for="(slide, index) in slides" :key="index">
-        <img :src="slide" class="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000" :class="activeSlide === index ? 'opacity-100 z-10' : 'opacity-0 z-0'">
+        <img x-bind:src="slide" class="absolute inset-0 w-full h-full object-cover transition-opacity duration-700" :class="active === index ? 'opacity-100 z-20' : 'opacity-0 z-0'" />
       </template>
-      <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
+
+      <!-- Prev/Next -->
+      <button @click="prev()" class="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 z-30 hover:bg-black/60">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </button>
+      <button @click="next()" class="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 z-30 hover:bg-black/60">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </button>
+
+      <!-- Dots -->
+      <div class="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex space-x-2 z-30">
         <template x-for="(slide, index) in slides" :key="index">
-          <div @click="activeSlide = index" :class="activeSlide === index ? 'bg-blue-600' : 'bg-gray-300'" class="w-3 h-3 rounded-full cursor-pointer"></div>
+          <div @click="go(index)" :class="active === index ? 'bg-white' : 'bg-white/50'" class="w-3 h-3 rounded-full cursor-pointer border"></div>
         </template>
       </div>
     </div>
+
+    <script>
+    function carousel(){
+      return {
+        slides: [], active: 0, timer: null, interval: 4000,
+        initCarousel(list){ this.slides = list || []; this.play(); },
+        play(){ var self=this; this.stop(); this.timer = setInterval(()=>{ self.active = (self.active+1) % (self.slides.length || 1); }, this.interval); },
+        pause(){ this.stop(); },
+        stop(){ if(this.timer) { clearInterval(this.timer); this.timer = null; } },
+        prev(){ this.active = (this.active - 1 + this.slides.length) % this.slides.length; },
+        next(){ this.active = (this.active + 1) % this.slides.length; },
+        go(i){ this.active = i % this.slides.length; }
+      };
+    }
+    </script>
 
     <section class="p-6 text-sm" x-data="{ tab: 'urusetia' }">
       <h2 class="text-lg font-semibold mb-4">Hubungi Kami</h2>
