@@ -163,6 +163,13 @@ require_once __DIR__ . '/../includes/layout.php';
                         </select>
                         <div class="form-text">Jika peranan dipilih <strong>CONTINGENT</strong>, pilihan ini wajib diisi.</div>
                     </div>
+                    <div class="mb-3" id="judgeCategoryWrapper" style="display: none;">
+                        <label class="form-label">Kategori yang Dibenarkan</label>
+                        <div class="form-text mb-2">Pilih kategori yang dibenarkan untuk hakim ini merekod keputusan</div>
+                        <div id="judgeCategoryList" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 1rem;">
+                            <div class="text-muted text-center py-3">Memuatkan kategori...</div>
+                        </div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -274,8 +281,13 @@ document.addEventListener('DOMContentLoaded', function(){ // wire search & page 
                         loadKontinjenOptions().then(()=>{
                             const sel = document.getElementById('userKontinjen'); if(sel){ sel.value = u.kontinjen_id || ''; }
                             applyRoleRequirement();
+                            // Load judge category assignments if user is a judge
+                            if (u.role === 'JUDGE') {
+                                // Load assignments first, then categories will render with them
+                                loadJudgeCategoryAssignments(u.id);
+                            }
                             // set modal title for edit then open modal for editing without resetting
-                            const titleEl = document.getElementById('userModalTitle'); if(titleEl) titleEl.textContent = 'Kemaskin Pengguna Baru';
+                            const titleEl = document.getElementById('userModalTitle'); if(titleEl) titleEl.textContent = 'Kemaskini Pengguna';
                             showAddUser(false);
                         });
                     } else {
@@ -319,14 +331,81 @@ document.addEventListener('DOMContentLoaded', function(){ // wire search & page 
                 body: body.toString()
             }).then(r=>r.json()).then(j=>{
                 if (j && j.success) {
-                    closeAddUserModal();
-                    loadUsers();
+                    const userId = document.getElementById('userId').value;
+                    const isEdit = !!userId;
+                    const successMessage = isEdit ? 'Pengguna berjaya dikemaskini' : 'Pengguna berjaya ditambah';
+                    
+                    // Save judge category assignments if user is a judge
+                    if (roleVal === 'JUDGE' && userId) {
+                        return saveJudgeCategoryAssignments(userId).then(() => {
+                            closeAddUserModal();
+                            loadUsers();
+                            // Show success message
+                            if (window.Swal) {
+                                Swal.fire({
+                                    text: successMessage,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+                            } else {
+                                alert(successMessage);
+                            }
+                        }).catch(() => {
+                            // Even if assignment save fails, user is saved, so continue
+                            closeAddUserModal();
+                            loadUsers();
+                            // Show success message
+                            if (window.Swal) {
+                                Swal.fire({
+                                    text: successMessage,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+                            } else {
+                                alert(successMessage);
+                            }
+                        });
+                    } else {
+                        closeAddUserModal();
+                        loadUsers();
+                        // Show success message
+                        if (window.Swal) {
+                            Swal.fire({
+                                text: successMessage,
+                                icon: 'success',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            alert(successMessage);
+                        }
+                    }
                 } else {
-                    alert((j && j.message) || 'Ralat menyimpan pengguna');
+                    const errorMessage = (j && j.message) || 'Ralat menyimpan pengguna';
+                    if (window.Swal) {
+                        Swal.fire({
+                            text: errorMessage,
+                            icon: 'error'
+                        });
+                    } else {
+                        alert(errorMessage);
+                    }
                 }
-            }).catch(()=>{ alert('Ralat sambungan.'); });
+            }).catch(()=>{ 
+                if (window.Swal) {
+                    Swal.fire({
+                        text: 'Ralat sambungan. Sila cuba lagi.',
+                        icon: 'error'
+                    });
+                } else {
+                    alert('Ralat sambungan.');
+                }
+            });
         });
     }
+    
 
     // role change: toggle kontinuen requirement (applies to global function defined below)
     const roleSel = document.getElementById('userRole');
@@ -375,7 +454,31 @@ function submitUser(){ alert('Simpan pengguna - belum diimplementasi'); }
 <script>
 // Global kontinjen helpers (must be global so modal/open flows can call them)
 let kontinjenLoaded = false;
-function applyRoleRequirement(){ const rEl = document.getElementById('userRole'); const r = rEl ? rEl.value : null; const wrapper = document.getElementById('kontinjenFieldWrapper'); const sel = document.getElementById('userKontinjen'); if(r === 'CONTINGENT'){ if(wrapper) wrapper.style.display='block'; if(sel) sel.setAttribute('required','required'); } else { if(sel) sel.removeAttribute('required'); if(wrapper) wrapper.style.display='none'; } }
+function applyRoleRequirement(){ 
+    const rEl = document.getElementById('userRole'); 
+    const r = rEl ? rEl.value : null; 
+    const wrapper = document.getElementById('kontinjenFieldWrapper'); 
+    const sel = document.getElementById('userKontinjen'); 
+    if(r === 'CONTINGENT'){ 
+        if(wrapper) wrapper.style.display='block'; 
+        if(sel) sel.setAttribute('required','required'); 
+    } else { 
+        if(sel) sel.removeAttribute('required'); 
+        if(wrapper) wrapper.style.display='none'; 
+    }
+    
+    // Show/hide judge category assignment section
+    const judgeWrapper = document.getElementById('judgeCategoryWrapper');
+    const currentUserRole = '<?php echo Session::get("user_role"); ?>';
+    const canAssignCategories = (currentUserRole === 'ADMIN' || currentUserRole === 'ORGANIZER');
+    
+    if (r === 'JUDGE' && canAssignCategories && judgeWrapper) {
+        judgeWrapper.style.display = 'block';
+        loadJudgeCategories();
+    } else if (judgeWrapper) {
+        judgeWrapper.style.display = 'none';
+    }
+}
 
 function loadKontinjenOptions(){
     return new Promise((resolve, reject)=>{
@@ -389,6 +492,139 @@ function loadKontinjenOptions(){
                 }
                 kontinjenLoaded = true; resolve();
             }).catch(err=>{ kontinjenLoaded = true; resolve(); });
+    });
+}
+
+// Judge category assignment functions
+let judgeCategoriesLoaded = false;
+let selectedJudgeCategories = [];
+
+function loadJudgeCategories() {
+    const container = document.getElementById('judgeCategoryList');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="text-muted text-center py-3">Memuatkan kategori...</div>';
+    
+    // Load available categories
+    fetch('<?php echo url('ajax/judge_category_assignments.php'); ?>?action=available', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(j => {
+        if (!j || !j.success || !Array.isArray(j.data)) {
+            container.innerHTML = '<div class="text-danger text-center py-3">Ralat memuatkan kategori</div>';
+            return;
+        }
+        
+        const categories = j.data;
+        if (categories.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center py-3">Tiada kategori tersedia</div>';
+            return;
+        }
+        
+        // Load current assignments if editing a judge
+        const userId = document.getElementById('userId').value;
+        if (userId) {
+            loadJudgeCategoryAssignments(userId).then(() => {
+                renderJudgeCategories(categories);
+            });
+        } else {
+            selectedJudgeCategories = [];
+            renderJudgeCategories(categories);
+        }
+    })
+    .catch(err => {
+        console.error('Failed to load judge categories', err);
+        container.innerHTML = '<div class="text-danger text-center py-3">Ralat memuatkan kategori</div>';
+    });
+}
+
+function loadJudgeCategoryAssignments(userId) {
+    return fetch('<?php echo url('ajax/judge_category_assignments.php'); ?>?action=list&user_id=' + encodeURIComponent(userId), {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(j => {
+        if (j && j.success && Array.isArray(j.data)) {
+            selectedJudgeCategories = j.data.map(a => parseInt(a.kategori_id));
+        } else {
+            selectedJudgeCategories = [];
+        }
+    })
+    .catch(err => {
+        console.error('Failed to load judge assignments', err);
+        selectedJudgeCategories = [];
+    });
+}
+
+function renderJudgeCategories(categories) {
+    const container = document.getElementById('judgeCategoryList');
+    if (!container) return;
+    
+    let html = '';
+    
+    categories.forEach(sport => {
+        html += `<div class="mb-3 pb-3 border-bottom">`;
+        html += `<strong>${escapeHtml(sport.nama_sukan || 'Sukan ' + sport.sukan_id)}</strong>`;
+        html += `<div class="mt-2 ms-3">`;
+        
+        if (sport.categories && sport.categories.length > 0) {
+            sport.categories.forEach(cat => {
+                const isChecked = selectedJudgeCategories.includes(parseInt(cat.id));
+                html += `<div class="form-check">`;
+                html += `<input class="form-check-input" type="checkbox" value="${cat.id}" id="judge_cat_${cat.id}" ${isChecked ? 'checked' : ''} onchange="updateJudgeCategorySelection(${cat.id}, this.checked)">`;
+                html += `<label class="form-check-label" for="judge_cat_${cat.id}">${escapeHtml(cat.nama_kategori || 'Kategori ' + cat.id)}</label>`;
+                html += `</div>`;
+            });
+        } else {
+            html += `<div class="text-muted small">Tiada kategori</div>`;
+        }
+        
+        html += `</div></div>`;
+    });
+    
+    container.innerHTML = html || '<div class="text-muted text-center py-3">Tiada kategori tersedia</div>';
+    judgeCategoriesLoaded = true;
+}
+
+function updateJudgeCategorySelection(kategoriId, isSelected) {
+    const id = parseInt(kategoriId);
+    if (isSelected) {
+        if (!selectedJudgeCategories.includes(id)) {
+            selectedJudgeCategories.push(id);
+        }
+    } else {
+        selectedJudgeCategories = selectedJudgeCategories.filter(cid => cid !== id);
+    }
+}
+
+function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+
+// Function to save judge category assignments
+function saveJudgeCategoryAssignments(userId) {
+    return fetch('<?php echo url('ajax/judge_category_assignments.php'); ?>?action=assign', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: parseInt(userId),
+            kategori_ids: selectedJudgeCategories
+        })
+    })
+    .then(r => r.json())
+    .then(j => {
+        if (!j || !j.success) {
+            console.warn('Failed to save judge category assignments:', j && j.message);
+        }
     });
 }
 </script>

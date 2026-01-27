@@ -17,10 +17,33 @@ $currentUserRole = Session::get('user_role') ?? '';
 // Fetch sports from database
 $sports = [];
 try {
-    $sportModel = new SportModel();
-    $result = $sportModel->getAll(['limit' => 1000, 'status' => 1]);
-    if ($result['success']) {
-        $sports = $result['data'];
+    $db = getDB();
+    
+    // If user is a judge, filter sports to only those with assigned categories
+    if ($currentUserRole === 'JUDGE') {
+        $userId = Session::get('user_id');
+        $stmt = $db->prepare("
+            SELECT DISTINCT s.id, s.nama_sukan, s.kod_sukan, s.status
+            FROM table_sukan s
+            INNER JOIN table_kategori k ON s.id = k.sukan_id
+            INNER JOIN judge_category_assignments jca ON k.id = jca.kategori_id
+            WHERE s.deleted_at IS NULL 
+            AND s.status = 1
+            AND k.deleted_at IS NULL
+            AND k.status = 1
+            AND jca.user_id = :user_id
+            AND jca.is_active = TRUE
+            ORDER BY s.nama_sukan ASC
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        $sports = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // For non-judges, show all sports
+        $sportModel = new SportModel();
+        $result = $sportModel->getAll(['limit' => 1000, 'status' => 1]);
+        if ($result['success']) {
+            $sports = $result['data'];
+        }
     }
 } catch (Exception $e) {
     error_log('[keputusan.php] DB error fetching sports: ' . $e->getMessage());

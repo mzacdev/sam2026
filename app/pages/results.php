@@ -6,6 +6,10 @@ require_once __DIR__ . '/../config.php';
 
 $page_title = 'Keputusan';
 
+// Get current user role for JavaScript
+$currentUserRole = Session::get('user_role');
+$currentUserId = Session::get('user_id');
+
 ob_start();
 ?>
 <div class="w-100 px-3">
@@ -16,7 +20,7 @@ ob_start();
                     <h2 class="mb-0">Keputusan</h2>
                     <p class="text-muted">Rekod keputusan pertandingan</p>
                 </div>
-                <button class="btn btn-primary">
+                <button class="btn btn-primary" id="btnRecordResult">
                     <i class="cil cil-plus me-1"></i> Rekod Keputusan
                 </button>
             </div>
@@ -94,6 +98,11 @@ ob_start();
                 const statusSel = document.getElementById('filterStatus');
                 const resultsBody = document.getElementById('resultsBody');
                 const noRow = document.getElementById('noResultsRow');
+                const btnRecordResult = document.getElementById('btnRecordResult');
+                
+                // Check if user is a judge (will be set after checking user role)
+                let isJudge = false;
+                let hasAssignedCategories = false;
 
                 function fetchJSON(url){
                     return fetch(url, { method: 'GET', credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
@@ -105,12 +114,58 @@ ob_start();
                         console.log('sport_list response', res);
                         if(!res){ console.warn('Empty response from sport_list'); }
                         if(res && res.success){
+                            const sports = res.data || [];
+                            
+                            // Check if user is judge (no sports means judge with no assignments)
+                            if (sports.length === 0) {
+                                // Check user role to determine if this is a judge restriction
+                                fetchJSON('<?php echo url("ajax/judge_category_assignments.php"); ?>?action=list&user_id=<?php echo htmlspecialchars($currentUserId ?? 0, ENT_QUOTES, 'UTF-8'); ?>').then(assignRes => {
+                                    if (assignRes && assignRes.success && assignRes.data && assignRes.data.length === 0) {
+                                        // Judge with no assignments
+                                        isJudge = true;
+                                        hasAssignedCategories = false;
+                                        sportSel.innerHTML = '<option value="">Tiada sukan ditugaskan</option>';
+                                        sportSel.disabled = true;
+                                        
+                                        // Show message and disable record button
+                                        if (btnRecordResult) {
+                                            btnRecordResult.disabled = true;
+                                            btnRecordResult.style.display = '';
+                                            btnRecordResult.title = 'Tiada kategori ditugaskan. Sila hubungi pentadbir.';
+                                        }
+                                        
+                                        // Show message in results area
+                                        resultsBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><i class="cil cil-info" style="font-size: 2rem;"></i><p class="mt-2">Tiada kategori ditugaskan. Sila hubungi pentadbir.</p></td></tr>';
+                                    } else {
+                                        // Not a judge or has assignments but no sports (shouldn't happen)
+                                        sportSel.innerHTML = '<option value="">Tiada sukan tersedia</option>';
+                                    }
+                                }).catch(() => {
+                                    // If check fails, assume not a judge restriction
+                                    sportSel.innerHTML = '<option value="">Tiada sukan tersedia</option>';
+                                });
+                                return;
+                            }
+                            
+                            // Has sports - enable button
+                            hasAssignedCategories = true;
+                            if (btnRecordResult) {
+                                btnRecordResult.disabled = false;
+                                btnRecordResult.style.display = '';
+                                btnRecordResult.title = '';
+                            }
+                            
                             res.data.forEach(s=>{
                                 const o = document.createElement('option'); o.value = s.id; o.textContent = s.nama_sukan;
                                 sportSel.appendChild(o);
                             });
                         } else {
                             console.warn('sport_list returned success=false or no data');
+                            // Even if no sports, show button (might be empty database)
+                            if (btnRecordResult) {
+                                btnRecordResult.disabled = false;
+                                btnRecordResult.style.display = '';
+                            }
                         }
                         // after sports loaded
                     }).catch(err=>{ console.error('Failed to fetch sport_list', err); });
@@ -142,7 +197,12 @@ ob_start();
                             });
                             kategoriSel.disabled = false;
                         } else {
-                            kategoriSel.innerHTML = '<option value="">Tiada kategori untuk sukan ini</option>';
+                            // Check if this is because judge has no assignments for this sport
+                            if (isJudge && !hasAssignedCategories) {
+                                kategoriSel.innerHTML = '<option value="">Tiada kategori ditugaskan untuk sukan ini</option>';
+                            } else {
+                                kategoriSel.innerHTML = '<option value="">Tiada kategori untuk sukan ini</option>';
+                            }
                             kategoriSel.disabled = true;
                         }
                     }).catch(err=>{ console.error('Failed to fetch kategori', err); kategoriSel.innerHTML = '<option value="">Ralat memuat kategori</option>'; kategoriSel.disabled = true; });
@@ -191,6 +251,14 @@ ob_start();
                 // event filter listener removed
                 dateInp.addEventListener('change', loadResults);
                 statusSel.addEventListener('change', loadResults);
+
+                // Add click handler for record result button
+                if (btnRecordResult) {
+                    btnRecordResult.addEventListener('click', function() {
+                        // Redirect to keputusan.php page for recording results
+                        window.location.href = '<?php echo url("pages/keputusan.php"); ?>';
+                    });
+                }
 
                 // init: load sports first so dependent events dropdown can populate
                 loadSports().then(()=> loadResults());

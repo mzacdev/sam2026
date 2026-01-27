@@ -16,11 +16,28 @@ set_exception_handler(function($e){
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/auth.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    Session::start();
+}
 
 try {
     $db = getDB();
     $where = [];
     $params = [];
+    
+    // Check if user is a judge and filter by assigned categories
+    $userRole = null;
+    $userId = null;
+    $isJudge = false;
+    
+    $auth = getAuth();
+    if ($auth && $auth->isLoggedIn()) {
+        $userRole = Session::get('user_role');
+        $userId = Session::get('user_id');
+        $isJudge = ($userRole === 'JUDGE');
+    }
     
     // Check if requesting a single record by ID
     if(!empty($_GET['id'])){
@@ -45,6 +62,35 @@ try {
         $params[':status'] = $_GET['status'];
     }
     $where[] = 'r.deleted_at IS NULL';
+    
+    // Filter by judge assignments if user is a judge
+    if ($isJudge && $userId) {
+        // For judges: only show results for categories assigned to them
+        // This automatically filters to only show sports with assigned categories
+        $where[] = 'EXISTS (
+            SELECT 1 FROM judge_category_assignments jca
+            INNER JOIN table_kategori k ON jca.kategori_id = k.id
+            WHERE jca.user_id = :judge_user_id
+            AND jca.kategori_id = r.kategori_id
+            AND jca.is_active = TRUE
+            AND k.deleted_at IS NULL
+            AND k.status = 1
+        )';
+        $params[':judge_user_id'] = $userId;
+        
+        // Additionally, ensure the sport itself has at least one assigned category
+        // This handles cases where kategori_id might be NULL or when filtering by sport
+        $where[] = 'EXISTS (
+            SELECT 1 FROM judge_category_assignments jca2
+            INNER JOIN table_kategori k2 ON jca2.kategori_id = k2.id
+            WHERE jca2.user_id = :judge_user_id2
+            AND k2.sukan_id = r.sukan_id
+            AND jca2.is_active = TRUE
+            AND k2.deleted_at IS NULL
+            AND k2.status = 1
+        )';
+        $params[':judge_user_id2'] = $userId;
+    }
     
     // Check if kategori_id column exists
     $checkColStmt = $db->query("SHOW COLUMNS FROM table_results LIKE 'kategori_id'");

@@ -92,6 +92,26 @@ try {
         throw new Exception('Kategori tidak sesuai dengan sukan yang dipilih');
     }
     
+    // Check if judge is allowed to record results for this category
+    if ($userRole === 'JUDGE') {
+        $checkAssignmentStmt = $db->prepare("
+            SELECT id FROM judge_category_assignments 
+            WHERE user_id = :user_id 
+            AND kategori_id = :kategori_id 
+            AND is_active = TRUE
+        ");
+        $checkAssignmentStmt->execute([
+            ':user_id' => $userId,
+            ':kategori_id' => $kategori_id
+        ]);
+        
+        if (!$checkAssignmentStmt->fetch()) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Anda tidak dibenarkan merekod keputusan untuk kategori ini']);
+            exit;
+        }
+    }
+    
     $penilaian = $category['penilaian'];
     if (empty($penilaian)) {
         $penilaian = 'berkumpulan'; // Default to team-based
