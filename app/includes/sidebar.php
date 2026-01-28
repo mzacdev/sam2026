@@ -47,6 +47,35 @@ if (!$contingentCode) {
 $displayNavItems = $nav_items;
 $useSections = isset($nav_sections) && is_array($nav_sections);
 
+// Add "Pertandingan" section when user has access to any Pertandingan pages
+if ($rbac && ($rbac->hasPageAccess('pages/setup-pertandingan.php') || $rbac->hasPageAccess('pages/setup-jadual.php'))) {
+    $exists = false;
+    if (isset($nav_sections) && is_array($nav_sections)) {
+        foreach ($nav_sections as $s) {
+            if (isset($s['title']) && $s['title'] === 'Pertandingan') { $exists = true; break; }
+        }
+    }
+    if (!$exists) {
+        $nav_sections = $nav_sections ?? [];
+        $nav_sections[] = [
+            'title' => 'Pertandingan',
+            'children' => [
+                [
+                    'title' => 'Setup Pertandingan',
+                    'url' => 'pages/setup-pertandingan.php',
+                    'icon' => 'cil-settings'
+                ],
+                [
+                    'title' => 'Setup Jadual',
+                    'url' => 'pages/setup-jadual.php',
+                    'icon' => 'cil-settings'
+                ]
+            ]
+        ];
+        $useSections = true;
+    }
+}
+
 if ($rbac) {
     if ($useSections) {
         foreach ($nav_sections as $sidx => $section) {

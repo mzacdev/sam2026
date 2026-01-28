@@ -192,18 +192,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
  	if ($event_id <= 0) { $errors[] = 'Event tidak ditemui.'; }
  	if ($bilangan <= 0) { $errors[] = 'Bilangan Kumpulan mesti lebih besar dari 0.'; }
 
- 	// parse group codes from client if provided
- 	$group_codes = [];
- 	if ($group_codes_json) {
- 		$decoded = json_decode($group_codes_json, true);
- 		if (is_array($decoded)) {
- 			$group_codes = $decoded;
- 		}
- 	}
+	// parse group codes from client if provided
+	$group_codes = [];
+	if ($group_codes_json) {
+		$decoded = json_decode($group_codes_json, true);
+		if (is_array($decoded)) {
+			$group_codes = $decoded;
+		}
+	}
 
- 	if (count($group_codes) > 0 && count($group_codes) !== $bilangan) {
- 		$errors[] = 'Bilangan kod kumpulan tidak sepadan.';
- 	}
+	// NOTE: do not enforce strict length match here because in EDIT mode client may send
+	// a different number of codes when resizing groups; we'll validate/adjust after
+	// fetching existing rounds.
 
  	if (!empty($errors)) {
  		echo json_encode(['success' => false, 'errors' => $errors]);
@@ -218,15 +218,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
  		$existingStmt->execute([':event_id' => $event_id]);
  		$existingRounds = $existingStmt->fetchAll(PDO::FETCH_ASSOC);
 
- 		// build qualification_rule JSON if provided
- 		$qualification_rule = null;
- 		if ($qualification_topn !== null && $qualification_topn > 0 && in_array($qualification_criteria, ['mata','score','masa'])) {
- 			$qualification_rule = json_encode([
- 				'type' => 'TOP_N',
- 				'value' => $qualification_topn,
- 				'criteria' => $qualification_criteria
- 			]);
- 		}
+		// If client provided group codes, prefer its length as desired bilangan (supports resize in edit)
+		if (!empty($group_codes)) {
+			$bilangan = count($group_codes);
+		}
+
+		// build qualification_rule JSON if provided (canonical format)
+		$qualification_rule = null;
+		if ($qualification_topn !== null && $qualification_topn > 0 && in_array($qualification_criteria, ['mata','score','masa'])) {
+			$qualification_rule = json_encode([
+				'top_n' => $qualification_topn,
+				'criteria' => $qualification_criteria
+			]);
+		}
 
  		// if client didn't send codes, generate here (fallback)
  		if (empty($group_codes)) {
@@ -245,32 +249,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
  			exit;
  		}
 
- 		// If existing rounds exist -> EDIT MODE: update existing rows (do NOT insert new rows)
- 		if (!empty($existingRounds)) {
- 			$existingCount = count($existingRounds);
- 			// require bilangan to match existing count to avoid accidental inserts/deletes
- 			if ($existingCount !== $bilangan) {
- 				echo json_encode(['success' => false, 'errors' => ['Bilangan Kumpulan mesti sama seperti struktur sedia ada (' . $existingCount . '). Untuk mengubah bilangan, hapus struktur sedia ada terlebih dahulu.']]);
- 				exit;
- 			}
+		// If existing rounds exist -> EDIT MODE: allow update/resize when safe
+		if (!empty($existingRounds)) {
+			$existingCount = count($existingRounds);
+			// detect sukan_id for event to check team assignments
+			$sukan_id_for_event = null;
+			$evstmt = $db->prepare('SELECT sukan_id FROM table_event WHERE id = :id AND deleted_at IS NULL');
+			$evstmt->execute([':id' => $event_id]);
+			$edev = $evstmt->fetch(PDO::FETCH_ASSOC);
+			if ($edev) $sukan_id_for_event = (int)$edev['sukan_id'];
 
- 			$db->beginTransaction();
- 			$upd = $db->prepare('UPDATE table_round SET group_code = :group_code, group_order = :group_order, qualification_rule = :qualification_rule, updated_at = NOW() WHERE id = :id');
- 			foreach ($existingRounds as $i => $row) {
- 				$code = $group_codes[$i];
- 				$group_order = $i + 1;
- 				$upd->execute([
- 					':group_code' => $code,
- 					':group_order' => $group_order,
- 					':qualification_rule' => $qualification_rule,
- 					':id' => (int)$row['id']
- 				]);
- 			}
- 			$db->commit();
+			$assignedCount = 0;
+			if ($sukan_id_for_event !== null) {
+				$ac = $db->prepare("SELECT COUNT(*) AS c FROM table_pasukan WHERE sukan_id = :sukan_id AND initial_group_code IS NOT NULL AND initial_group_code != '' AND deleted_at IS NULL");
+				$ac->execute([':sukan_id' => $sukan_id_for_event]);
+				$tmp = $ac->fetch(PDO::FETCH_ASSOC);
+				$assignedCount = $tmp ? (int)$tmp['c'] : 0;
+			}
 
- 			echo json_encode(['success' => true, 'mode' => 'update']);
- 			exit;
- 		} else {
+			// If the client requests a different count but some teams are already assigned, block it
+			if ($existingCount !== $bilangan && $assignedCount > 0) {
+				echo json_encode(['success' => false, 'errors' => ['Bilangan Kumpulan tidak boleh diubah kerana beberapa pasukan telah ditetapkan ke kumpulan. Kosongkan agihan pasukan terlebih dahulu.']]);
+				exit;
+			}
+
+			$db->beginTransaction();
+			try {
+				// if reducing, delete excess rounds ordered by group_order desc
+				if ($existingCount > $bilangan) {
+					$toDelete = [];
+					foreach ($existingRounds as $r) {
+						if ((int)$r['group_order'] > $bilangan) $toDelete[] = (int)$r['id'];
+					}
+					if (!empty($toDelete)) {
+						$del = $db->prepare('DELETE FROM table_round WHERE id = :id');
+						foreach ($toDelete as $did) { $del->execute([':id' => $did]); }
+					}
+				}
+
+				// update existing (remaining) rows and ensure order/code updated
+				$upd = $db->prepare('UPDATE table_round SET group_code = :group_code, group_order = :group_order, qualification_rule = :qualification_rule, updated_at = NOW() WHERE id = :id');
+				// rebuild mapping for remaining rows (only first min(existingCount, bilangan) rows)
+				$limit = min($existingCount, $bilangan);
+				for ($i = 0; $i < $limit; $i++) {
+					$row = $existingRounds[$i];
+					$code = $group_codes[$i];
+					$group_order = $i + 1;
+					$upd->execute([
+						':group_code' => $code,
+						':group_order' => $group_order,
+						':qualification_rule' => $qualification_rule,
+						':id' => (int)$row['id']
+					]);
+				}
+
+				// if increasing, insert additional rows
+				if ($existingCount < $bilangan) {
+					$insert = $db->prepare("INSERT INTO table_round (event_id, nama_round, group_code, group_order, round_order, qualification_rule, status, created_at) VALUES (:event_id, :nama_round, :group_code, :group_order, :round_order, :qualification_rule, :status, NOW())");
+					$nama_round = 'Peringkat Kumpulan';
+					$round_order = 1;
+					$status = 'pending';
+					for ($i = $existingCount; $i < $bilangan; $i++) {
+						$code = isset($group_codes[$i]) ? $group_codes[$i] : ($format === 'numeric' ? (string)($i + 1) : chr(65 + $i));
+						$group_order = $i + 1;
+						$insert->execute([
+							':event_id' => $event_id,
+							':nama_round' => $nama_round,
+							':group_code' => $code,
+							':group_order' => $group_order,
+							':round_order' => $round_order,
+							':qualification_rule' => $qualification_rule,
+							':status' => $status
+						]);
+					}
+				}
+
+				// commit and return final list of groups (ordered)
+				$db->commit();
+				$gstmt = $db->prepare("SELECT group_code FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
+				$gstmt->execute([':event_id' => $event_id]);
+				$finalGroups = $gstmt->fetchAll(PDO::FETCH_COLUMN, 0);
+				echo json_encode(['success' => true, 'mode' => 'update', 'groups' => $finalGroups]);
+				exit;
+			} catch (Exception $inner) {
+				if ($db && $db->inTransaction()) $db->rollBack();
+				throw $inner;
+			}
+		} else {
  			// CREATE MODE: ensure no rounds exist and insert
  			// ensure no existing group_code conflict for same event (should be none)
  			$chkCodes = $db->prepare("SELECT group_code FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL");
@@ -394,6 +459,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // --- End server-side save handler for TAB3 ---
 
+// --- Server-side: AJAX loader for TAB3 assignments ---
+if (isset($_GET['action']) && $_GET['action'] === 'load_assignments') {
+	header('Content-Type: application/json; charset=utf-8');
+	$event_id = isset($_SESSION['current_event_id']) ? (int)$_SESSION['current_event_id'] : 0;
+	if ($event_id <= 0) {
+		echo json_encode(['success' => false, 'error' => 'no_event']);
+		exit;
+	}
+	try {
+		$db = getDB();
+		// get sukan for event
+		$sstmt = $db->prepare('SELECT sukan_id FROM table_event WHERE id = :id AND deleted_at IS NULL');
+		$sstmt->execute([':id' => $event_id]);
+		$ev = $sstmt->fetch(PDO::FETCH_ASSOC);
+		if (!$ev) { echo json_encode(['success' => false, 'error' => 'event_not_found']); exit; }
+		$sukan_id = (int)$ev['sukan_id'];
+
+		// fetch all group codes (rounds) so empty groups are also shown
+		$gstmt = $db->prepare("SELECT group_code FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
+		$gstmt->execute([':event_id' => $event_id]);
+		$groupCodes = $gstmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+		$groups = [];
+		foreach ($groupCodes as $gc) {
+			$groups[trim((string)$gc)] = [];
+		}
+
+		// fetch assigned teams and merge into groups (include assigned codes not in rounds)
+		$ast = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, p.initial_group_code, k.kod_universiti, r.nama_pendek AS nama_kontinjen FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE p.sukan_id = :sukan_id AND p.initial_group_code IS NOT NULL AND p.initial_group_code != '' AND p.deleted_at IS NULL ORDER BY p.initial_group_code ASC, p.nama_pasukan ASC");
+		$ast->execute([':sukan_id' => $sukan_id]);
+		$assignedRows = $ast->fetchAll(PDO::FETCH_ASSOC);
+
+		foreach ($assignedRows as $row) {
+			$code = trim((string)$row['initial_group_code']);
+			if ($code === '') continue;
+			if (!isset($groups[$code])) $groups[$code] = [];
+			$groups[$code][] = [
+				'id' => (int)$row['id'],
+				'nama_pasukan' => $row['nama_pasukan'],
+				'kontinjen_id' => isset($row['kontinjen_id']) ? (int)$row['kontinjen_id'] : null,
+				'nama_kontinjen' => $row['nama_kontinjen'] ?? null,
+				'kod_universiti' => $row['kod_universiti'] ?? null,
+			];
+		}
+
+		// total teams for this sukan (for progress display)
+		$tc = $db->prepare('SELECT COUNT(*) AS c FROM table_pasukan WHERE sukan_id = :sukan_id AND deleted_at IS NULL');
+		$tc->execute([':sukan_id' => $sukan_id]);
+		$tcv = $tc->fetch(PDO::FETCH_ASSOC);
+		$total = $tcv ? (int)$tcv['c'] : 0;
+		$assignedCount = count($assignedRows);
+
+		// include a small sample preview to help client debug mismatches
+		$sample = array_slice($assignedRows, 0, 10);
+		$samplePreview = array_map(function($r){ return ['id'=>(int)$r['id'],'code'=>trim((string)$r['initial_group_code'])]; }, $sample);
+		echo json_encode(['success' => true, 'groups' => $groups, 'assigned_count' => $assignedCount, 'total_count' => $total, 'sample' => $samplePreview]);
+		exit;
+	} catch (Exception $e) {
+		error_log('[setup-pertandingan load_assignments] ' . $e->getMessage());
+		echo json_encode(['success' => false, 'error' => 'server_error']);
+		exit;
+	}
+}
+
 // Fetch sukan list for the Sukan select
 $sukan_list = [];
 try {
@@ -419,48 +548,25 @@ try {
 		$ev = $stmt->fetch(PDO::FETCH_ASSOC);
 		if ($ev) {
 			$event_sukan_id = (int)$ev['sukan_id'];
-			// fetch rounds (Peringkat Kumpulan)
-			$rstmt = $db->prepare("SELECT id, group_code, group_order FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
+			// fetch rounds (Peringkat Kumpulan) including qualification_rule
+			$rstmt = $db->prepare("SELECT id, group_code, group_order, qualification_rule, nama_round FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
 			$rstmt->execute([':event_id' => $event_id]);
 			$rounds = $rstmt->fetchAll(PDO::FETCH_ASSOC);
+			// fetch distinct round names for Nama Round dropdown
+			$rnStmt = $db->prepare("SELECT DISTINCT nama_round FROM table_round WHERE event_id = :event_id AND deleted_at IS NULL ORDER BY nama_round ASC");
+			$rnStmt->execute([':event_id' => $event_id]);
+			$round_names = $rnStmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
 			// fetch teams for this sukan (include initial_group_code and kontingen + university short name)
 			try {
-				$tstmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, p.initial_group_code, k.nama_kontinjen, k.kod_universiti, r.nama_pendek AS universiti_pendek FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE p.sukan_id = :sukan_id AND p.status = 1 AND p.deleted_at IS NULL ORDER BY p.nama_pasukan ASC");
+				// Fetch teams and resolve kontinjen name via table_ref_universiti.nama_pendek
+				// include teams that are assigned (initial_group_code IS NOT NULL) even if status != 1
+				$tstmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, p.initial_group_code, k.kod_universiti, r.nama_pendek AS nama_kontinjen FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE p.sukan_id = :sukan_id AND (p.status = 1 OR (p.initial_group_code IS NOT NULL AND p.initial_group_code != '')) AND p.deleted_at IS NULL ORDER BY p.nama_pasukan ASC");
 				$tstmt->execute([':sukan_id' => $event_sukan_id]);
 				$teams = $tstmt->fetchAll(PDO::FETCH_ASSOC);
 			} catch (Exception $e) {
-				// If the join fails due to column name differences in table_kontinjen, attempt to detect the correct column and retry
-				error_log('[setup-pertandingan] teams query failed, attempting fallback: ' . $e->getMessage());
-				try {
-					$cols = [];
-					$cstmt = $db->query("SHOW COLUMNS FROM table_kontinjen");
-					$cols = $cstmt->fetchAll(PDO::FETCH_COLUMN, 0);
-					$kontinjenNameCol = null;
-					$candidates = ['nama_kontinjen', 'nama_kontingen', 'nama', 'nama_kontinjen_full'];
-					foreach ($candidates as $cand) {
-						if (in_array($cand, $cols)) { $kontinjenNameCol = $cand; break; }
-					}
-					if (!$kontinjenNameCol && count($cols) > 0) {
-						// fallback to first non-id column
-						foreach ($cols as $col) {
-							if (!in_array($col, ['id','kod_universiti','created_at','updated_at','deleted_at'])) { $kontinjenNameCol = $col; break; }
-						}
-					}
-					if ($kontinjenNameCol) {
-						$sql = "SELECT p.id, p.nama_pasukan, p.kontinjen_id, p.initial_group_code, k." . $kontinjenNameCol . " AS nama_kontinjen, k.kod_universiti, r.nama_pendek AS universiti_pendek FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE p.sukan_id = :sukan_id AND p.status = 1 AND p.deleted_at IS NULL ORDER BY p.nama_pasukan ASC";
-						$tstmt = $db->prepare($sql);
-						$tstmt->execute([':sukan_id' => $event_sukan_id]);
-						$teams = $tstmt->fetchAll(PDO::FETCH_ASSOC);
-						error_log('[setup-pertandingan] teams fallback used column: ' . $kontinjenNameCol . ' returned=' . count($teams));
-					} else {
-						error_log('[setup-pertandingan] cannot determine kontingen name column; aborting teams fetch.');
-						$teams = [];
-					}
-				} catch (Exception $e2) {
-					error_log('[setup-pertandingan] teams fallback failed: ' . $e2->getMessage());
-					$teams = [];
-				}
+				error_log('[setup-pertandingan] teams query failed: ' . $e->getMessage());
+				$teams = [];
 			}
 			// server-side debug logs when debug=1 or force_event present
 			if ((isset($_GET['debug']) && $_GET['debug'] === '1') || isset($_GET['force_event'])) {
@@ -474,18 +580,80 @@ try {
 			}
 
 			// fetch kontingen list for optional filter
-			$kstmt = $db->prepare('SELECT id, nama_kontinjen FROM table_kontinjen WHERE deleted_at IS NULL ORDER BY nama_kontinjen ASC');
+			// fetch kontinjen list but resolve display name from table_ref_universiti.nama_pendek
+			$kstmt = $db->prepare('SELECT k.id, COALESCE(r.nama_pendek, "") AS nama_kontinjen, k.kod_universiti FROM table_kontinjen k LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE k.deleted_at IS NULL ORDER BY nama_kontinjen ASC');
 			$kstmt->execute();
 			$kontinjen_list = $kstmt->fetchAll(PDO::FETCH_ASSOC);
+			// build kontinjen assigned status from teams already fetched
+			$kontinjen_assigned = [];
+			foreach ($kontinjen_list as $k) { $kontinjen_assigned[(int)$k['id']] = 0; }
+			foreach ($teams as $t) {
+				$kid = isset($t['kontinjen_id']) ? (int)$t['kontinjen_id'] : 0;
+				$assigned = isset($t['initial_group_code']) && trim((string)$t['initial_group_code']) !== '';
+				if ($kid && $assigned) {
+					if (!isset($kontinjen_assigned[$kid])) $kontinjen_assigned[$kid] = 0;
+					$kontinjen_assigned[$kid]++;
+				}
+			}
 		}
 	}
 } catch (Exception $e) {
 	error_log('[setup-pertandingan] fetch event/rounds/teams error: ' . $e->getMessage());
 }
 
+// Ensure variables exist
+$round_names = isset($round_names) ? $round_names : [];
+$qualification_topn = null;
+$qualification_criteria = null;
+$detected_format = 'alphabetical';
+$group_assignments_exist = false;
+try {
+	// detect group format from existing rounds
+	$codes = array_filter(array_map(function($r){ return isset($r['group_code']) ? (string)$r['group_code'] : ''; }, $rounds));
+	if (!empty($codes)) {
+		$all_numeric = true;
+		foreach ($codes as $c) {
+			if ($c === '') continue;
+			if (!ctype_digit($c)) { $all_numeric = false; break; }
+		}
+		$detected_format = $all_numeric ? 'numeric' : 'alphabetical';
+	}
+
+	// decode qualification_rule from first round that has it
+	foreach ($rounds as $r) {
+		if (!empty($r['qualification_rule'])) {
+			$qr = json_decode($r['qualification_rule'], true);
+			if (is_array($qr)) {
+				if (isset($qr['top_n'])) { $qualification_topn = (int)$qr['top_n']; }
+				if (isset($qr['criteria'])) { $qualification_criteria = $qr['criteria']; }
+				if ($qualification_topn === null && isset($qr['value'])) { $qualification_topn = (int)$qr['value']; }
+				if ($qualification_criteria === null && isset($qr['criteria'])) { $qualification_criteria = $qr['criteria']; }
+				break;
+			}
+		}
+	}
+
+	// detect if any pasukan already have an assigned initial_group_code for this event's sukan
+	if ($event_sukan_id !== null) {
+		$aStmt = $db->prepare("SELECT COUNT(*) AS c FROM table_pasukan WHERE sukan_id = :sukan_id AND initial_group_code IS NOT NULL AND initial_group_code != '' AND deleted_at IS NULL");
+		$aStmt->execute([':sukan_id' => $event_sukan_id]);
+		$ac = $aStmt->fetch(PDO::FETCH_ASSOC);
+		$group_assignments_exist = ($ac && (int)$ac['c'] > 0);
+	}
+} catch (Exception $e) {
+	error_log('[setup-pertandingan] TAB2 detection error: ' . $e->getMessage());
+}
+
+$edit_mode = !empty($rounds);
+
 ob_start();
 ?>
-<div class="container-fluid px-3">
+<div class="w-100 px-3">
+	<style>
+		.row-assigned { background-color: #eafaf1; }
+		.status-icon { color: #198754; font-weight: 600; font-size: 1rem; display:inline-block; }
+		.team-status { text-align: center; vertical-align: middle; }
+	</style>
 	<?php if (isset($_GET['debug']) && $_GET['debug'] === '1'): ?>
 		<?php
 			$dbg_db = null; $dbg_user = null;
@@ -588,39 +756,48 @@ ob_start();
 						<input type="hidden" name="action" value="save_tab2">
 						<div class="row">
 							<div class="col-md-6">
-								<h5>Struktur Kumpulan</h5>
+								<h5>Struktur Kumpulan <?php if ($edit_mode): ?><span class="badge bg-info ms-2">EDIT MODE</span><?php endif; ?></h5>
 								<div class="mb-3">
 									<label class="form-label">Nama Round</label>
-									<select class="form-select" id="nama_round" name="nama_round" disabled>
-										<option>Peringkat Kumpulan</option>
+									<select class="form-select" id="nama_round" name="nama_round" <?php echo $edit_mode ? '' : 'disabled'; ?> >
+										<?php if (empty($round_names)): ?>
+											<option selected>Peringkat Kumpulan</option>
+										<?php else: ?>
+											<?php foreach ($round_names as $rn): ?>
+												<option value="<?php echo htmlspecialchars($rn, ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($rn === 'Peringkat Kumpulan') ? 'selected' : ''; ?>><?php echo htmlspecialchars($rn, ENT_QUOTES, 'UTF-8'); ?></option>
+											<?php endforeach; ?>
+										<?php endif; ?>
 									</select>
 								</div>
 
 								<div class="mb-3">
 									<label class="form-label">Bilangan Kumpulan <span class="text-danger">*</span></label>
-									<input id="bilangan_kumpulan" name="bilangan_kumpulan" type="number" min="1" class="form-control" required value="4">
+									<input id="bilangan_kumpulan" name="bilangan_kumpulan" type="number" min="1" class="form-control" required value="<?php echo $edit_mode ? (int)count($rounds) : 4; ?>" <?php echo ($edit_mode && $group_assignments_exist) ? 'readonly' : ''; ?>>
+									<?php if ($edit_mode && $group_assignments_exist): ?>
+										<div class="form-text text-warning small">Bilangan kumpulan tidak boleh diubah kerana beberapa pasukan telah ditetapkan ke kumpulan. Untuk menukar bilangan, kosongkan assignment pasukan terlebih dahulu.</div>
+									<?php endif; ?>
 								</div>
 
 								<div class="mb-3">
 									<label class="form-label">Format Kumpulan</label>
-									<select id="format_kumpulan" name="format_kumpulan" class="form-select">
-										<option value="alphabetical">Alphabetical (A, B, C)</option>
-										<option value="numeric">Numeric (1, 2, 3)</option>
+									<select id="format_kumpulan" name="format_kumpulan" class="form-select" <?php echo $edit_mode ? 'disabled' : ''; ?> >
+										<option value="alphabetical" <?php echo ($detected_format === 'alphabetical') ? 'selected' : ''; ?>>Alphabetical (A, B, C)</option>
+										<option value="numeric" <?php echo ($detected_format === 'numeric') ? 'selected' : ''; ?>>Numeric (1, 2, 3)</option>
 									</select>
 								</div>
 
 								<h6>Peraturan Kelayakan (optional)</h6>
 								<div class="mb-3">
 									<label class="form-label">Top N Lulus</label>
-									<input id="qualification_topn" name="qualification_topn" type="number" min="1" class="form-control">
+									<input id="qualification_topn" name="qualification_topn" type="number" min="1" class="form-control" value="<?php echo $qualification_topn !== null ? (int)$qualification_topn : ''; ?>">
 								</div>
 								<div class="mb-3">
 									<label class="form-label">Kriteria</label>
 									<select id="qualification_criteria" name="qualification_criteria" class="form-select">
 										<option value="">-- Tiada --</option>
-										<option value="mata">mata</option>
-										<option value="score">score</option>
-										<option value="masa">masa</option>
+										<option value="mata" <?php echo ($qualification_criteria === 'mata') ? 'selected' : ''; ?>>mata</option>
+										<option value="score" <?php echo ($qualification_criteria === 'score') ? 'selected' : ''; ?>>score</option>
+										<option value="masa" <?php echo ($qualification_criteria === 'masa') ? 'selected' : ''; ?>>masa</option>
 									</select>
 								</div>
 
@@ -648,49 +825,64 @@ ob_start();
 					<div class="row">
 						<div class="col-md-6">
 							<h5>Senarai Pasukan</h5>
-							<div class="small text-muted mb-2">Debug: event_id=<?php echo (int)$event_id; ?> sukan_id=<?php echo htmlspecialchars($event_sukan_id); ?> | teams=<?php echo (int)count($teams); ?> <?php if (!empty($teams)) echo ' sample_ids=' . implode(',', array_map(function($t){return (int)$t['id'];}, array_slice($teams,0,5))); ?></div>
+							<?php $sukan_display = ($event_sukan_id !== null && $event_sukan_id !== '') ? htmlspecialchars((string)$event_sukan_id, ENT_QUOTES, 'UTF-8') : 'n/a'; ?>
 							<div class="mb-2">
 								<div class="d-flex gap-2 mb-2">
 									<input id="search-team" class="form-control" placeholder="Cari nama pasukan">
 								</div>
-								<div id="kontinjen-filters" class="d-flex flex-wrap gap-2">
-									<button type="button" class="btn btn-sm btn-outline-secondary active" data-kontinjen-id="">Semua Kontinjen</button>
-									<?php foreach ($kontinjen_list as $k): ?>
-										<button type="button" class="btn btn-sm btn-outline-secondary" data-kontinjen-id="<?php echo (int)$k['id']; ?>"><?php echo htmlspecialchars($k['nama_kontinjen'], ENT_QUOTES, 'UTF-8'); ?></button>
-									<?php endforeach; ?>
-								</div>
 							</div>
-							<div style="max-height:420px;overflow:auto;">
+
+							<div id="assign-progress" class="small text-muted mb-2"></div>
+							<div id="assign-notice" class="alert alert-info small d-none">Sebahagian pasukan telah diagihkan. Anda boleh sambung pengagihan.</div>
+
+									<!-- Kontinjen summary removed per UX request -->
+							<?php $teams_empty = empty($teams); ?>
+							<div>
 								<table class="table table-sm" id="teams-table">
-									<thead><tr><th><input type="checkbox" id="select-all-teams"></th><th>Nama Pasukan</th><th>Kontinjen</th></tr></thead>
+									<thead>
+										<tr>
+											<th><input type="checkbox" id="select-all-teams"></th>
+											<th>Nama Pasukan</th>
+											<th>Kontinjen</th>
+											<th style="width:80px; text-align:center;">Status</th>
+										</tr>
+									</thead>
 									<tbody>
 										<?php foreach ($teams as $t): ?>
-											<?php $assigned = isset($t['initial_group_code']) ? $t['initial_group_code'] : ''; ?>
-											<tr data-team-id="<?php echo (int)$t['id']; ?>" data-kontinjen-id="<?php echo (int)$t['kontinjen_id']; ?>" data-assigned-group="<?php echo htmlspecialchars($assigned, ENT_QUOTES, 'UTF-8'); ?>">
+											<?php $assigned = isset($t['initial_group_code']) ? trim((string)$t['initial_group_code']) : ''; ?>
+											<tr data-team-id="<?php echo (int)$t['id']; ?>" data-kontinjen-id="<?php echo (int)$t['kontinjen_id']; ?>" data-assigned-group="<?php echo htmlspecialchars($assigned, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $assigned !== '' ? 'class="row-assigned"' : ''; ?>>
 												<td><input type="checkbox" class="team-checkbox"></td>
 												<td class="team-name"><?php echo htmlspecialchars($t['nama_pasukan'], ENT_QUOTES, 'UTF-8'); ?></td>
 												<td><?php echo htmlspecialchars($t['universiti_pendek'] ?? $t['kod_universiti'] ?? $t['nama_kontinjen'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+												<td class="team-status" title="<?php echo $assigned !== '' ? 'Pasukan telah berjaya diagihkan ke kumpulan' : ''; ?>">
+													<?php if ($assigned !== ''): ?>
+														<span class="status-icon" role="img" aria-label="assigned">✔</span>
+													<?php endif; ?>
+												</td>
 											</tr>
 										<?php endforeach; ?>
 									</tbody>
 								</table>
-								<div id="teams-empty-msg" class="small text-muted text-center mt-2 d-none">Tiada pasukan ditemui.</div>
+								<div id="teams-empty-msg" class="small text-muted text-center mt-2 <?php echo $teams_empty ? '' : 'd-none'; ?>">Tiada pasukan ditemui.</div>
 							</div>
-							<div class="mt-2 d-flex gap-2 align-items-center">
-								<label class="form-label mb-0 pe-2">Assign ke Kumpulan</label>
-								<select id="assign-group-select" class="form-select" style="max-width:200px;">
-									<option value="">-- Pilih Kumpulan --</option>
-									<?php foreach ($rounds as $r): ?>
-										<option value="<?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?>">Group <?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?></option>
-									<?php endforeach; ?>
-								</select>
-								<button id="assign-btn" class="btn btn-secondary" <?php echo empty($rounds) ? 'disabled' : ''; ?>>Assign</button>
+							<!-- assign controls: moved below team table as requested -->
+							<div class="mt-2">
+								<label class="form-label">Pilih Kumpulan</label>
+								<div class="d-flex gap-2 mb-2">
+									<select id="assign-group-select" class="form-select" style="flex:1;">
+										<option value="">-- Pilih Kumpulan --</option>
+										<?php foreach ($rounds as $r): ?>
+											<option value="<?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?>">Kumpulan <?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?></option>
+										<?php endforeach; ?>
+									</select>
+									<button id="assign-btn" class="btn btn-primary" <?php echo empty($rounds) ? 'disabled' : ''; ?>>Assign ke Kumpulan</button>
+								</div>
 							</div>
 						</div>
 
 						<div class="col-md-6">
 							<h5>Kumpulan</h5>
-							<div id="groups-container" class="d-flex flex-wrap gap-2">
+							<div id="groups-container">
 								<?php
 									// build lookup of teams by initial_group_code
 									$teamsByGroup = [];
@@ -701,24 +893,30 @@ ob_start();
 										$teamsByGroup[$g][] = $t;
 									}
 								?>
-								<?php foreach ($rounds as $r): ?>
-									<?php $gcode = htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?>
-									<div class="card" style="width:200px;">
-										<div class="card-body p-2">
-											<h6 class="card-title mb-2">Group <?php echo $gcode; ?></h6>
-											<ul class="list-group list-group-flush group-list" data-group-code="<?php echo $gcode; ?>">
-												<?php if (isset($teamsByGroup[$r['group_code']])): foreach ($teamsByGroup[$r['group_code']] as $pt): ?>
-													<li class="list-group-item p-1" data-team-id="<?php echo (int)$pt['id']; ?>"><?php echo htmlspecialchars($pt['nama_pasukan'], ENT_QUOTES, 'UTF-8'); ?></li>
-												<?php endforeach; endif; ?>
-											</ul>
-										</div>
-									</div>
-								<?php endforeach; ?>
+								<table class="table table-sm table-bordered" id="groups-table">
+									<thead><tr><th style="width:120px">Kumpulan</th><th>Anggota Pasukan</th></tr></thead>
+									<tbody>
+										<?php foreach ($rounds as $r): ?>
+											<?php $gcode = htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?>
+											<tr data-group-code="<?php echo $gcode; ?>">
+												<td class="align-top">Kumpulan <?php echo $gcode; ?></td>
+												<td>
+													<ul class="list-group list-group-flush group-list" data-group-code="<?php echo $gcode; ?>">
+														<?php if (isset($teamsByGroup[$r['group_code']])): foreach ($teamsByGroup[$r['group_code']] as $pt): ?>
+															<li class="list-group-item p-1" data-team-id="<?php echo (int)$pt['id']; ?>"><?php echo htmlspecialchars($pt['nama_pasukan'], ENT_QUOTES, 'UTF-8'); ?></li>
+														<?php endforeach; endif; ?>
+													</ul>
+												</td>
+											</tr>
+										<?php endforeach; ?>
+									</tbody>
+								</table>
 							</div>
 							<div class="mt-3">
 								<div id="tab3-warning" class="text-danger small mb-2 <?php echo empty($rounds) ? '' : 'd-none'; ?>">
 									<?php if (empty($rounds)): ?>Tiada kumpulan dicipta untuk event ini. Sila lengkapkan Struktur Kumpulan (Tab 2) terlebih dahulu.<?php endif; ?>
 								</div>
+                                
 								<button id="save-assignment" class="btn btn-primary" <?php echo empty($rounds) ? 'disabled' : ''; ?>>Simpan Agihan Pasukan</button>
 							</div>
 						</div>
@@ -734,21 +932,46 @@ ob_start();
 	// TAB3: Assign teams to groups
 	const teamsTable = document.getElementById('teams-table');
 	const searchInput = document.getElementById('search-team');
-	const filterKont = document.getElementById('filter-kontinjen');
+	const filterKont = document.getElementById('kontinjen-filters');
 	const selectAll = document.getElementById('select-all-teams');
 	const assignSelect = document.getElementById('assign-group-select');
 	const assignBtn = document.getElementById('assign-btn');
 	const groupsContainer = document.getElementById('groups-container');
 	const saveBtn = document.getElementById('save-assignment');
 
+	// helper: mark/unmark a team row as assigned (adds class + status icon + tooltip)
+	function setTeamRowAssigned(tr, assigned) {
+		try {
+			if (!tr) return;
+			const statusTd = tr.querySelector('.team-status');
+			if (!statusTd) return;
+			if (assigned && assigned.toString().trim() !== '') {
+				tr.classList.add('row-assigned');
+				statusTd.innerHTML = '<span class="status-icon" role="img" aria-label="assigned" title="Pasukan telah berjaya diagihkan ke kumpulan">✔</span>';
+				statusTd.setAttribute('title', 'Pasukan telah berjaya diagihkan ke kumpulan');
+			} else {
+				tr.classList.remove('row-assigned');
+				statusTd.innerHTML = '';
+				statusTd.removeAttribute('title');
+			}
+		} catch (e) { console.error('setTeamRowAssigned error', e); }
+	}
+
 	function getCheckedTeamRows() {
 		return Array.from(document.querySelectorAll('.team-checkbox')).filter(c => c.checked).map(c => c.closest('tr'));
 	}
 
+		function updateSaveButtonState() {
+			const rows = getCheckedTeamRows();
+			const group = assignSelect ? assignSelect.value : null;
+			// enable save if there are any staged assignments OR (selected rows + chosen group)
+			const staged = Array.from(document.querySelectorAll('#teams-table tbody tr')).some(tr => (tr.getAttribute('data-assigned-group') || '').trim() !== '');
+			if (saveBtn) saveBtn.disabled = !(staged || (rows.length > 0 && group));
+			if (assignBtn) assignBtn.disabled = !(rows.length > 0 && group);
+		}
+
 	function renderAssigned() {
-		// clear groups
-		document.querySelectorAll('.group-list').forEach(ul => ul.innerHTML = '');
-		// find all rows and check for assigned data attribute
+		// find all rows and check for assigned data attribute; append to group lists only if not already present
 		document.querySelectorAll('#teams-table tbody tr').forEach(tr => {
 			const assigned = tr.getAttribute('data-assigned-group');
 			const tid = tr.getAttribute('data-team-id');
@@ -756,14 +979,40 @@ ob_start();
 			if (assigned) {
 				const ul = document.querySelector('.group-list[data-group-code="' + assigned + '"]');
 				if (ul) {
-					const li = document.createElement('li');
-					li.className = 'list-group-item p-1';
-					li.textContent = name;
-					li.setAttribute('data-team-id', tid);
-					ul.appendChild(li);
+					// avoid duplicate entries
+					if (!ul.querySelector('li[data-team-id="' + tid + '"]')) {
+						const li = document.createElement('li');
+						li.className = 'list-group-item p-1';
+						li.textContent = name;
+						li.setAttribute('data-team-id', tid);
+						ul.appendChild(li);
+					}
 				}
 			}
 		});
+
+		// update per-row status icons/highlight based on data-assigned-group attribute
+		document.querySelectorAll('#teams-table tbody tr').forEach(tr => {
+			const assigned = (tr.getAttribute('data-assigned-group') || '').toString().trim();
+			setTeamRowAssigned(tr, assigned);
+		});
+
+		// update progress indicator
+		try {
+			const total = document.getElementById('assign-progress')?.getAttribute('data-total') || null;
+			const assigned = Array.from(document.querySelectorAll('#teams-table tbody tr')).filter(tr => (tr.getAttribute('data-assigned-group') || '').trim() !== '').length;
+			const progEl = document.getElementById('assign-progress');
+			if (progEl) {
+				if (total !== null && total !== '') {
+					progEl.textContent = assigned + ' / ' + total + ' pasukan telah diagihkan.';
+				} else {
+					progEl.textContent = assigned + ' pasukan telah diagihkan.';
+				}
+			}
+		} catch (e) { console.error('renderAssigned progress update', e); }
+
+			// refresh kontinjen status table
+			if (typeof updateKontinjenStatus === 'function') updateKontinjenStatus();
 	}
 
 	// search/filter (more robust)
@@ -796,6 +1045,13 @@ ob_start();
 		searchInput.addEventListener('input', doTeamSearch);
 		searchInput.addEventListener('keyup', doTeamSearch);
 	}
+
+		// observe changes to checkboxes and group select to toggle Save button
+		document.addEventListener('change', function (ev) {
+			if (ev.target && (ev.target.matches('.team-checkbox') || ev.target.id === 'assign-group-select')) {
+				updateSaveButtonState();
+			}
+		});
 	if (filterKont) {
 		// delegated click: toggle active kontinjen button and re-run search
 		filterKont.addEventListener('click', function (ev) {
@@ -809,35 +1065,59 @@ ob_start();
 	}
 
 	if (selectAll) {
-		selectAll.addEventListener('change', function () {
-			const checked = this.checked;
-			document.querySelectorAll('.team-checkbox').forEach(cb => { cb.checked = checked; });
-		});
+			selectAll.addEventListener('change', function () {
+				const checked = this.checked;
+				document.querySelectorAll('.team-checkbox').forEach(cb => { cb.checked = checked; });
+				updateSaveButtonState();
+			});
 	}
 
+	// assignBtn removed; assignments are performed via 'Simpan Agihan Pasukan' which
+	// now supports assigning selected rows when a Kumpulan is chosen in the dropdown.
+
+	// Handle assign button: apply chosen group to selected rows client-side
 	if (assignBtn) {
-		assignBtn.addEventListener('click', function () {
-			const group = assignSelect.value;
-			if (!group) { Swal.fire({ icon: 'warning', title: 'Pilih kumpulan', text: 'Sila pilih kumpulan untuk assign.' }); return; }
+		assignBtn.addEventListener('click', function (ev) {
+			ev && ev.preventDefault();
+			const chosen = assignSelect ? (assignSelect.value || '') : '';
 			const rows = getCheckedTeamRows();
-			if (rows.length === 0) { Swal.fire({ icon: 'warning', title: 'Tiada pasukan', text: 'Sila pilih sekurang-kurangnya satu pasukan.' }); return; }
-			rows.forEach(tr => {
-				tr.setAttribute('data-assigned-group', group);
-				tr.querySelector('.team-checkbox').checked = false; // uncheck after assigning
+			if (!chosen) { Swal.fire({ icon: 'warning', title: 'Pilih Kumpulan', text: 'Sila pilih kumpulan terlebih dahulu.' }); return; }
+			if (!rows || rows.length === 0) { Swal.fire({ icon: 'warning', title: 'Tiada Pasukan Terpilih', text: 'Sila tandakan sekurang-kurangnya satu pasukan.' }); return; }
+			// apply assignment visually
+			rows.forEach(r => {
+				const tid = r.getAttribute('data-team-id');
+				const name = r.querySelector('.team-name')?.textContent || '';
+				// mark data attribute
+				r.setAttribute('data-assigned-group', chosen);
+				setTeamRowAssigned(r, chosen);
+				// append to group list if present and not duplicate
+				const ul = document.querySelector('.group-list[data-group-code="' + chosen + '"]');
+				if (ul && !ul.querySelector('li[data-team-id="' + tid + '"]')) {
+					const li = document.createElement('li'); li.className = 'list-group-item p-1'; li.setAttribute('data-team-id', tid); li.textContent = name;
+					ul.appendChild(li);
+				}
+				// uncheck the row to indicate staged change
+				const cb = r.querySelector('.team-checkbox'); if (cb) cb.checked = false;
 			});
-			if (selectAll) selectAll.checked = false;
 			renderAssigned();
+			updateSaveButtonState();
 		});
 	}
 
 	if (saveBtn) {
 		saveBtn.addEventListener('click', async function () {
-			// collect assignments
+			// collect assignments from staged rows
 			const assignments = {};
 			document.querySelectorAll('#teams-table tbody tr').forEach(tr => {
 				const gid = tr.getAttribute('data-assigned-group');
 				if (gid) assignments[tr.getAttribute('data-team-id')] = gid;
 			});
+			// Also include any selected rows combined with chosen group (if provided)
+			const selRows = getCheckedTeamRows();
+			const chosen = assignSelect ? (assignSelect.value || '') : '';
+			if (selRows.length > 0 && chosen) {
+				selRows.forEach(r => { assignments[r.getAttribute('data-team-id')] = chosen; });
+			}
 			const keys = Object.keys(assignments);
 			if (keys.length === 0) { Swal.fire({ icon: 'warning', title: 'Tiada pasukan', text: 'Sila assign sekurang-kurangnya satu pasukan.' }); return; }
 
@@ -850,6 +1130,20 @@ ob_start();
 				const res = await fetch('', { method: 'POST', body: fd });
 				const json = await res.json();
 				if (json.success) {
+					// update DOM: set each affected row's data-assigned-group and refresh groups/statuses
+					try {
+						Object.keys(assignments).forEach(tid => {
+							const tr = document.querySelector('#teams-table tbody tr[data-team-id="' + tid + '"]');
+							if (tr) {
+								const code = assignments[tid] || '';
+								tr.setAttribute('data-assigned-group', code);
+								setTeamRowAssigned(tr, code);
+							}
+						});
+						// rebuild groups list from current rows
+						renderAssigned();
+						updateSaveButtonState();
+					} catch (e) { console.error('post-save DOM update error', e); }
 					Swal.fire({ icon: 'success', title: 'Berjaya', text: 'Agihan Pasukan disimpan.' });
 				} else {
 					const msg = (json.errors || ['Gagal menyimpan']).join('<br>');
@@ -865,7 +1159,161 @@ ob_start();
 	}
 
 	// initial render of any existing assignments (if teams have initial_group_code attribute rendered, we could map)
-	renderAssigned();
+		// initial render of any existing assignments based on server-rendered attributes
+		renderAssigned();
+		// now fetch authoritative assignments from server and re-hydrate UI
+		async function loadAssignmentsFromServer() {
+			try {
+				console.debug('[setup-pertandingan] loading assignments from server');
+				const res = await fetch('?action=load_assignments', { credentials: 'same-origin' });
+				console.debug('[setup-pertandingan] load_assignments HTTP status', res.status);
+				let json = await res.json();
+				console.debug('[setup-pertandingan] load_assignments response', json);
+				// defensive: sometimes previous POST handlers respond; if response looks like save_tab2 (has 'mode' or groups is an array of codes), retry with cache-bust
+				if (json && (json.mode || (Array.isArray(json.groups) && json.groups.length && typeof json.groups[0] === 'string'))) {
+					console.warn('[setup-pertandingan] unexpected response for load_assignments, retrying with cache-bust');
+					const res2 = await fetch('?action=load_assignments&t=' + Date.now(), { credentials: 'same-origin' });
+					json = await res2.json();
+					console.debug('[setup-pertandingan] load_assignments retry response', json);
+				}
+				if (!json || !json.success) return;
+				const groups = json.groups || {};
+				// clear existing group lists
+				document.querySelectorAll('.group-list').forEach(ul => ul.innerHTML = '');
+				// mark all rows as unassigned first
+				document.querySelectorAll('#teams-table tbody tr').forEach(tr => {
+					tr.setAttribute('data-assigned-group', '');
+					const cb = tr.querySelector('.team-checkbox'); if (cb) cb.checked = false;
+					setTeamRowAssigned(tr, '');
+				});
+				// helper to find group-list ul by matching trimmed/lowercased code
+				function findGroupUl(code) {
+					const wanted = (code || '').toString().trim().toLowerCase();
+					const uls = Array.from(document.querySelectorAll('.group-list'));
+					for (let ul of uls) {
+						const val = (ul.getAttribute('data-group-code') || '').toString().trim().toLowerCase();
+						if (val === wanted) return ul;
+					}
+					return null;
+				}
+
+				// Rebuild groups container entirely from server payload to ensure assignments display
+				try {
+					const groupsContainerEl = document.getElementById('groups-container');
+					if (groupsContainerEl) {
+						groupsContainerEl.innerHTML = '';
+						const table = document.createElement('table');
+						table.className = 'table table-sm table-bordered';
+						table.id = 'groups-table';
+						const thead = document.createElement('thead');
+						thead.innerHTML = '<tr><th style="width:120px">Kumpulan</th><th>Anggota Pasukan</th></tr>';
+						table.appendChild(thead);
+						const tbody = document.createElement('tbody');
+						Object.keys(groups).forEach(code => {
+							const tr = document.createElement('tr'); tr.setAttribute('data-group-code', code);
+							const td1 = document.createElement('td'); td1.className = 'align-top'; td1.textContent = 'Kumpulan ' + code;
+							const td2 = document.createElement('td');
+							const ul = document.createElement('ul'); ul.className = 'list-group list-group-flush group-list'; ul.setAttribute('data-group-code', code);
+							// append members
+							const members = groups[code] || [];
+							members.forEach(m => {
+								const li = document.createElement('li');
+								li.className = 'list-group-item p-1';
+								li.setAttribute('data-team-id', m.id);
+								li.textContent = m.nama_pasukan;
+								ul.appendChild(li);
+								// mark left row if present
+								const trLeft = document.querySelector('#teams-table tbody tr[data-team-id="' + m.id + '"]');
+								if (trLeft) {
+									trLeft.setAttribute('data-assigned-group', code);
+									const cb = trLeft.querySelector('.team-checkbox'); if (cb) cb.checked = true;
+									setTeamRowAssigned(trLeft, code);
+								}
+							});
+							td2.appendChild(ul);
+							tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+						});
+						table.appendChild(tbody);
+						groupsContainerEl.appendChild(table);
+							// ensure container and list items are visible (defensive)
+							groupsContainerEl.style.display = '';
+							groupsContainerEl.style.overflow = 'visible';
+							Array.from(groupsContainerEl.querySelectorAll('.group-list li')).forEach(li => {
+								li.classList.remove('d-none');
+								li.style.display = 'list-item';
+								li.style.color = '#212529';
+							});
+							console.debug('[setup-pertandingan] groups rebuilt, groups count=', Object.keys(groups).length, 'list-items=', groupsContainerEl.querySelectorAll('.group-list li').length);
+					}
+				} catch (e) { console.error('rebuild groups container error', e); }
+
+				// set progress total attribute and show notice
+				const progEl = document.getElementById('assign-progress');
+				if (progEl) {
+					progEl.setAttribute('data-total', json.total_count || '');
+					progEl.textContent = (json.assigned_count || 0) + ' / ' + (json.total_count || 0) + ' pasukan telah diagihkan.';
+				}
+				const notice = document.getElementById('assign-notice');
+				if (notice) {
+					if ((json.assigned_count || 0) > 0) {
+						notice.classList.remove('d-none');
+					} else {
+						notice.classList.add('d-none');
+					}
+				}
+
+				// update kontinjen status and save button state
+				if (typeof updateKontinjenStatus === 'function') updateKontinjenStatus();
+				if (typeof updateSaveButtonState === 'function') updateSaveButtonState();
+				// refresh renderAssigned to update progress text
+				renderAssigned();
+			} catch (e) { console.error('loadAssignmentsFromServer error', e); }
+		}
+		// Load assignments when TAB3 is shown, or immediately if TAB3 is already active
+		function attachTab3Loader() {
+			// listen for Bootstrap tab shown event
+			document.addEventListener('shown.bs.tab', function (ev) {
+				try {
+					const target = ev.target || ev.relatedTarget;
+					if (!target) return;
+					const t = target.getAttribute('data-bs-target') || target.getAttribute('href');
+					if (t === '#tab-3') {
+						loadAssignmentsFromServer();
+					}
+				} catch (e) { console.error('tab show handler error', e); }
+			});
+			// if tab-3 already active on page load, load now
+			const tab3Pane = document.getElementById('tab-3');
+			if (tab3Pane && tab3Pane.classList.contains('show') && tab3Pane.classList.contains('active')) {
+				loadAssignmentsFromServer();
+			}
+		}
+		attachTab3Loader();
+		// also ensure kontinjen status matches initial state
+		function updateKontinjenStatus() {
+			try {
+				const kontRows = document.querySelectorAll('#kontinjen-table tbody tr');
+				kontRows.forEach(ktr => {
+					const kid = ktr.getAttribute('data-kontinjen-id');
+					const assigned = Array.from(document.querySelectorAll('#teams-table tbody tr')).some(tr => {
+						return tr.getAttribute('data-kontinjen-id') === kid && (tr.getAttribute('data-assigned-group') || '').trim() !== '';
+					});
+					const action = ktr.querySelector('.kont-action');
+					if (assigned) {
+						ktr.classList.add('table-success');
+						if (action) action.textContent = '✔️';
+						ktr.querySelector('td:nth-child(2)').textContent = 'Assigned';
+					} else {
+						ktr.classList.remove('table-success');
+						if (action) action.textContent = '❌';
+						ktr.querySelector('td:nth-child(2)').textContent = 'Belum';
+					}
+				});
+			} catch (e) { console.error('updateKontinjenStatus error', e); }
+		}
+		updateKontinjenStatus();
+		// ensure Save button enabled state reflects initial data
+		if (typeof updateSaveButtonState === 'function') updateSaveButtonState();
 	})();
 
 	(() => {
@@ -1009,7 +1457,11 @@ ob_start();
 
 		// existing rounds passed from server
 		const existingRounds = <?php echo json_encode($rounds ?: []); ?> || [];
-		const editMode = Array.isArray(existingRounds) && existingRounds.length > 0;
+		const editMode = <?php echo $edit_mode ? 'true' : 'false'; ?> || (Array.isArray(existingRounds) && existingRounds.length > 0);
+		const detectedFormat = <?php echo json_encode($detected_format); ?> || 'alphabetical';
+		const groupAssignmentsExist = <?php echo $group_assignments_exist ? 'true' : 'false'; ?>;
+		const serverQualificationTopn = <?php echo json_encode($qualification_topn); ?>;
+		const serverQualificationCriteria = <?php echo json_encode($qualification_criteria); ?>;
 
 		function generateCodes(n, format) {
 			const codes = [];
@@ -1026,19 +1478,35 @@ ob_start();
 			previewTbody.innerHTML = '';
 			// If editing, render existing rounds from server to reflect DB state
 			if (editMode) {
-				const seen = new Set();
-				existingRounds.forEach((r, idx) => {
-					const code = String(r.group_code || '');
-					if (seen.has(code)) return; // avoid duplicate preview rows
-					seen.add(code);
-					const tr = document.createElement('tr');
-					const td1 = document.createElement('td'); td1.textContent = code;
-					const td2 = document.createElement('td'); td2.textContent = 'Peringkat Kumpulan';
-					const td3 = document.createElement('td'); td3.textContent = (r.group_order || (idx + 1)).toString();
-					tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
-					previewTbody.appendChild(tr);
-				});
-				return existingRounds.map(r => r.group_code);
+				const desiredN = Math.max(1, parseInt(bilInput.value || existingRounds.length));
+				const format = formatSelect ? formatSelect.value : detectedFormat;
+				if (desiredN !== existingRounds.length) {
+					// user changed the number in edit mode: generate new codes based on desired count
+					const codes = generateCodes(desiredN, format);
+					codes.forEach((c, idx) => {
+						const tr = document.createElement('tr');
+						const td1 = document.createElement('td'); td1.textContent = c;
+						const td2 = document.createElement('td'); td2.textContent = 'Peringkat Kumpulan';
+						const td3 = document.createElement('td'); td3.textContent = (idx + 1).toString();
+						tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+						previewTbody.appendChild(tr);
+					});
+					return codes;
+				} else {
+					const seen = new Set();
+					existingRounds.forEach((r, idx) => {
+						const code = String(r.group_code || '');
+						if (seen.has(code)) return; // avoid duplicate preview rows
+						seen.add(code);
+						const tr = document.createElement('tr');
+						const td1 = document.createElement('td'); td1.textContent = code;
+						const td2 = document.createElement('td'); td2.textContent = 'Peringkat Kumpulan';
+						const td3 = document.createElement('td'); td3.textContent = (r.group_order || (idx + 1)).toString();
+						tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+						previewTbody.appendChild(tr);
+					});
+					return existingRounds.map(r => r.group_code);
+				}
 			}
 
 			const n = Math.max(1, parseInt(bilInput.value || '0'));
@@ -1058,10 +1526,15 @@ ob_start();
 		// initial render if elements exist
 		if (bilInput && formatSelect && previewTbody) {
 			if (editMode) {
-				// populate bilangan and disable changes that would imply insert/delete
+				// populate bilangan and set readonly only if assignments exist
 				bilInput.value = existingRounds.length;
-				bilInput.setAttribute('readonly', 'readonly');
+				if (groupAssignmentsExist) bilInput.setAttribute('readonly', 'readonly');
+				// set format based on detected format from DB
+				formatSelect.value = detectedFormat;
 				formatSelect.disabled = true;
+				// populate qualification inputs from server
+				if (serverQualificationTopn) document.getElementById('qualification_topn').value = serverQualificationTopn;
+				if (serverQualificationCriteria) document.getElementById('qualification_criteria').value = serverQualificationCriteria;
 				// change button text
 				const btn = document.getElementById('save-groups');
 				if (btn) btn.textContent = 'Kemaskini Group';
@@ -1096,6 +1569,26 @@ ob_start();
 					return;
 				}
 
+				// if editing and group count changed, enforce checks
+				if (editMode && existingRounds.length !== n) {
+					if (groupAssignmentsExist) {
+						Swal.fire({ icon: 'warning', title: 'Tidak dibenarkan', text: 'Bilangan kumpulan tidak boleh diubah kerana terdapat pasukan yang telah ditetapkan ke kumpulan.' });
+						return;
+					}
+					// if reducing groups, ask for confirmation about deleting groups
+					if (existingRounds.length > n) {
+						const conf = await Swal.fire({
+							title: 'Anda pasti?',
+							html: 'Mengurangkan bilangan kumpulan akan <strong>memadam</strong> kumpulan berlebihan. Ini mungkin menyebabkan kehilangan struktur. Teruskan?',
+							icon: 'warning',
+							showCancelButton: true,
+							confirmButtonText: 'Ya, padam',
+							cancelButtonText: 'Batal'
+						});
+						if (!conf.isConfirmed) return;
+					}
+				}
+
 				const codes = renderPreview();
 				const fd = new FormData(form2);
 				fd.append('group_codes', JSON.stringify(codes));
@@ -1122,15 +1615,42 @@ ob_start();
 							if (json.mode === 'create') {
 								window.location.reload();
 							} else {
-								// update assign-group-select and groups container
+								// update assign-group-select and groups container using returned groups if provided
 								const assignSelect = document.getElementById('assign-group-select');
-								const groupsContainer = document.getElementById('groups-container');
 								if (assignSelect) {
-									assignSelect.innerHTML = '<option value="">-- Assign to Group --</option>';
-									(json.groups || codes).forEach(c => {
-										const opt = document.createElement('option'); opt.value = c; opt.textContent = c; assignSelect.appendChild(opt);
-									});
+									assignSelect.innerHTML = '<option value="">-- Pilih Kumpulan --</option>';
+										const newGroups = json.groups || codes;
+										newGroups.forEach(c => {
+											const opt = document.createElement('option'); opt.value = c; opt.textContent = 'Kumpulan ' + c; assignSelect.appendChild(opt);
+										});
 								}
+								// update preview
+								if (typeof renderPreview === 'function') renderPreview();
+								// rebuild Tab3 groups container as a full-width table so it reflects DB state immediately
+								try {
+									const gContainer = document.getElementById('groups-container');
+									if (gContainer) {
+										const groups = json.groups || codes;
+										gContainer.innerHTML = '';
+										const table = document.createElement('table');
+										table.className = 'table table-sm table-bordered';
+										table.id = 'groups-table';
+										const thead = document.createElement('thead');
+										thead.innerHTML = '<tr><th style="width:120px;">Group</th><th>Anggota Pasukan</th></tr>';
+										table.appendChild(thead);
+										const tbody = document.createElement('tbody');
+										groups.forEach(gcode => {
+											const tr = document.createElement('tr'); tr.setAttribute('data-group-code', gcode);
+												const td1 = document.createElement('td'); td1.className = 'align-top'; td1.textContent = 'Kumpulan ' + gcode;
+											const td2 = document.createElement('td');
+											const ul = document.createElement('ul'); ul.className = 'list-group list-group-flush group-list'; ul.setAttribute('data-group-code', gcode);
+											td2.appendChild(ul);
+											tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+										});
+										table.appendChild(tbody);
+										gContainer.appendChild(table);
+									}
+								} catch (e) { console.error('Failed to rebuild groups container', e); }
 							}
 						});
 					} else {

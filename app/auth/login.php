@@ -73,9 +73,9 @@ if (is_dir($bannerDir)) {
     closedir($dh);
   }
 }
-// fallback to single banner if none found
+// fallback to single banner if none found (use fallback subfolder)
 if (empty($bannerFiles)) {
-  $bannerFiles = [ asset('img/banners/sam2026-banner.jpg') ];
+  $bannerFiles = [ asset('img/banners/fallback/sam2026-banner.jpg') ];
 }
 $slidesJs = json_encode($bannerFiles);
 $siteTitle = defined('SITE_NAME') ? SITE_NAME : 'SAM 2026';

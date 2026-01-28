@@ -64,7 +64,7 @@ $userEmail = $currentUser['email'] ?? '';
 </head>
 <body>
 
-<div class="main-wrapper">
+<div class="main-wrapper d-flex flex-column min-vh-100">
 
     <!-- Header Section Start -->
     <div class="header-section">

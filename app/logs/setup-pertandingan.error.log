@@ -1,0 +1,697 @@
+[25-Jan-2026 07:58:26 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 07:58:52 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 07:58:53 UTC] [setup-pertandingan] debug: forced current_event_id=1
+[25-Jan-2026 07:58:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 07:58:53 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:53 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 07:58:53 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:53 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:53 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:53 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:54 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:58:55 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:59:04 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 07:59:04 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 07:59:04 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:59:06 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 07:59:06 UTC] [setup-pertandingan] debug: forced current_event_id=1
+[25-Jan-2026 07:59:06 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 07:59:06 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 07:59:14 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 07:59:15 UTC] [setup-pertandingan] debug: forced current_event_id=1
+[25-Jan-2026 07:59:15 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 07:59:15 UTC] RBAC Error (hasPageAccess): SQLSTATE[HY093]: Invalid parameter number: mixed named and positional parameters
+[25-Jan-2026 08:05:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 08:05:05 UTC] [setup-pertandingan] debug: forced current_event_id=1
+[25-Jan-2026 08:05:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:08:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:08:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:08:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:08:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:08:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:08:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:08:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:08:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:11:48 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:11:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:11:49 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:11:49 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:11:49 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:12:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:12:00 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:12:01 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:12:02 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:12:12 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:12:12 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:13:59 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:13:59 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:24:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:24:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:24:10 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:24:10 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:24:10 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:29:01 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:29:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:29:03 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:29:03 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:29:14 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:29:14 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:33:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:33:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:33:49 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:33:49 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:33:49 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:33:57 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:33:57 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:33:59 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:33:59 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:34:13 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:34:13 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:39:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:39:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:39:12 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:39:12 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:39:12 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:39:30 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:39:30 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:39:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:39:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:39:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:39:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:44:39 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:44:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:44:40 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:44:40 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:44:40 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:44:51 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:44:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:44:53 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:44:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:45:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:45:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:50:55 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:50:55 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:50:56 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:50:56 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:50:56 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:53:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:53:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:53:10 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:53:10 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:53:10 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:53:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:53:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:53:20 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:53:20 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:53:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:53:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:57:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:57:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:57:33 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 09:57:33 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 09:57:33 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 09:57:43 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:57:43 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:57:44 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:57:44 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 09:57:48 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 09:57:48 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:01:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:01:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:01:37 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:01:37 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:01:37 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:01:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:01:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:01:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:01:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:01:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:01:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:06:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:06:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:06:18 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:06:19 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:06:19 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:06:26 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:06:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:06:29 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:06:29 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:06:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:06:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:09:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:09:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:09:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:09:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:09:56 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:09:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:09:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:08 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:08 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:17 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:18 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:18 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:10:18 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:27 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:29 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:29 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:10:29 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:10:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:44 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:44 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:10:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:10:56 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:21:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:21:43 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:21:43 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:21:43 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:21:43 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:22:04 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:22:04 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:22:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:22:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:22:13 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:22:13 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:22:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:22:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:22:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:22:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:29:31 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:29:31 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:29:31 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:29:31 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:29:32 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:29:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:29:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:29:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:29:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:29:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:29:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:32:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:32:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:32:58 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:32:58 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:32:58 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:33:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:33:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:33:13 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:33:13 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:33:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:33:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:38:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:38:20 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:38:20 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 10:38:20 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 10:38:20 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 10:38:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:38:39 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:38:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:38:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 10:38:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 10:38:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:02:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:02:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:02:47 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:02:48 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:02:48 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:03:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:03:00 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:03:03 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:03:03 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:03:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:03:08 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:14 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:35 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:35 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:10:57 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:10:57 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:10:57 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:10:57 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:11:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:11:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:11:01 UTC] [setup-pertandingan load_assignments] SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:11:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:11:06 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:11:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:11:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:11:12 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:11:12 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:22:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:22:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:22:28 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:22:28 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:22:28 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:22:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:22:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:22:37 UTC] [setup-pertandingan load_assignments] SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:22:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:22:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:22:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:22:50 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:22:53 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:22:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:25:06 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:25:06 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:25:08 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:25:09 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:25:09 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:25:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:25:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:25:11 UTC] [setup-pertandingan load_assignments] SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:25:22 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:25:22 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:25:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:25:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:25:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:25:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:31:55 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:31:55 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:31:56 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:31:56 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:31:56 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:32:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:32:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:32:05 UTC] [setup-pertandingan load_assignments] SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:32:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:32:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:32:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:32:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:32:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:32:24 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:35:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:35:22 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:35:22 UTC] [setup-pertandingan] teams query failed, attempting fallback: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:35:22 UTC] [setup-pertandingan] teams fallback used column: nama_pegawai_untuk_dihubungi returned=11
+[25-Jan-2026 11:35:22 UTC] [setup-pertandingan] fetch event/rounds/teams error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'nama_kontinjen' in 'field list'
+[25-Jan-2026 11:35:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:35:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:35:26 UTC] [setup-pertandingan load_assignments] SQLSTATE[42S22]: Column not found: 1054 Unknown column 'k.nama_kontinjen' in 'field list'
+[25-Jan-2026 11:36:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:36:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:36:51 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:36:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:36:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:36:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:59:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:59:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 11:59:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 11:59:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:00:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:00:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:00:06 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:00:06 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:00:10 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:00:10 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:06 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:16 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:17 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:21 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:27 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:29 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:06:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:06:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:22:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:04 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:04 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:06 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:06 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:20 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:20 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:22 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:22 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:26 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:30 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:30 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:23:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:23:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:25:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:25:37 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:25:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:25:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:25:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:25:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:25:48 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:25:48 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:25:53 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:25:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:22 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:26 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:35 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:39 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:39 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:27:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:27:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:28:31 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:28:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:28:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:28:37 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:28:44 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:28:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:28:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:28:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:28:50 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:28:50 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:29:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:29:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:01 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:03 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:03 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:12 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:12 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:23 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:23 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:26 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:33:29 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:33:29 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:34:02 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:34:02 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:36:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:36:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:36:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:36:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:36:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:36:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:36:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:36:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:36:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:36:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:37:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:37:00 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:39:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:39:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:39:52 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:39:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:39:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:40:00 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:40:04 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:40:04 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:40:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:40:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:40:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:40:21 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:40:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:40:37 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:41:51 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:41:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:41:52 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:41:52 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:41:53 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:41:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:41:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:41:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:41:55 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:41:56 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:42:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:42:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:42:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:42:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:42:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:42:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:42:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:42:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:42:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:42:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:20 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:21 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:21 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:34 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:35 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:46:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:46:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:52:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:52:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:53:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:53:56 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:53:57 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:53:57 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:54:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:54:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:54:13 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:54:13 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:54:16 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:54:16 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:54:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:54:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:58:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:58:10 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:58:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:58:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:58:27 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:58:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:58:31 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:58:31 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 12:58:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 12:58:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:22:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:22:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:23:10 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:23:37 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:16 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:16 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:40 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:40 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:24:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:24:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:33:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:33:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:33:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:33:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:33:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:33:28 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:33:29 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:33:29 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:33:30 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:33:30 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:35 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:35 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:39 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:39 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:41:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:41:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:45:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:45:24 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:45:31 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:45:31 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:45:59 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:45:59 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:24 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:48 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:48 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:52:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:52:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:55:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:55:24 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:55:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:55:25 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:55:30 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:55:30 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:55:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:55:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:57:00 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:57:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 13:57:26 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 13:57:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:07:18 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:07:18 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:08:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:08:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:41:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:41:58 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:41:58 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:42:04 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:42:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:43:20 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:43:20 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:44:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:44:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:47:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:47:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:47:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:47:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:47:42 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:47:42 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:50:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:50:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:55:01 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:55:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:55:44 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:55:44 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:55:45 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:55:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:55:50 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:55:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:55:59 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:55:59 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:56:01 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:56:01 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:56:05 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:56:05 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 14:56:07 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 14:56:07 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:00:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:00:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:00:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:00:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:00:50 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:00:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:00:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:00:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:00:56 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:00:56 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:01:31 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:01:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:01:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:01:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:43 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:43 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:49 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:49 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:51 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:55 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:55 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:02:57 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:02:57 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:29:36 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:29:36 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:36:53 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:36:53 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 15:49:24 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 15:49:24 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:11 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:11 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:21 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:22 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:38 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:38 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:46 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:47 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:52 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:52 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:12:54 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:12:54 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:25:51 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:25:51 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:02 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:02 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:08 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:15 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:15 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:20 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:20 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:23 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:23 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:25 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:26 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:26:28 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:26:29 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:36:27 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:36:27 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:36:34 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:36:35 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:36:41 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:36:41 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:37:09 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:37:09 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:37:16 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:37:17 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:37:19 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:37:19 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:37:33 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:37:33 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 16:37:35 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 16:37:35 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 17:30:55 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 17:30:55 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[25-Jan-2026 17:30:59 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[25-Jan-2026 17:30:59 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php

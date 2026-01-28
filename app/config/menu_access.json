@@ -20,6 +20,14 @@
       "ADMIN",
       "ORGANIZER"
     ],
+    "pages/setup-pertandingan.php": [
+      "ADMIN",
+      "CONTINGENT"
+    ],
+    "pages/setup-jadual.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
     "pages/contingent-user.php": [
       "CONTINGENT"
     ],

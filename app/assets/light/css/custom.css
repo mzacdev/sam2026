@@ -45,3 +45,37 @@
 }
 
 /* header-locale-img and overlay styles removed (selection UI disabled) */
+
+/* Enforce sticky footer layout as a robust fallback */
+html, body {
+	height: 100%;
+}
+.main-wrapper {
+	display: flex !important;
+	flex-direction: column !important;
+	min-height: 100vh !important;
+}
+.content-body {
+	flex: 1 1 auto !important;
+}
+.footer-section {
+	margin-top: auto !important;
+}
+
+/* When JS determines content is shorter than viewport, pin footer */
+/* When JS pins the footer, it will set inline left/width to match content.
+   Avoid forcing full-viewport width here to prevent overlapping the sidebar. */
+body.sticky-footer-fixed .footer-section {
+	position: fixed !important;
+	bottom: 0; z-index: 9999;
+	left: auto !important; right: auto !important; width: auto !important;
+}
+/* JS will set exact padding-bottom on the content-body to match footer height. */
+body.sticky-footer-fixed .content-body { padding-bottom: 0; }
+
+/* Hide footer on all pages as requested */
+.footer-section {
+	display: none !important;
+}
+.content-body { padding-bottom: 0 !important; }
+

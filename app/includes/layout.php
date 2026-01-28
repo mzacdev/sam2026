@@ -33,11 +33,12 @@ require_once __DIR__ . '/sidebar.php';
 ?>
 
 <!-- Content Body Start -->
-<div class="content-body">
+<div class="content-body flex-grow-1">
     <div class="container-fluid">
         <?php echo $content; ?>
+        <?php require_once __DIR__ . '/footer.php'; ?>
     </div>
 </div>
 <!-- Content Body End -->
 
-<?php require_once __DIR__ . '/footer.php'; ?>
+</div>

@@ -52,8 +52,10 @@ class RBAC {
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER'],
         'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
-        // Setup Pertandingan - restricted to ADMIN, ORGANIZER, JUDGE
-        'pages/setup-pertandingan.php' => ['ADMIN', 'ORGANIZER', 'JUDGE'],
+        // Setup Pertandingan - restricted to ADMIN and CONTINGENT only
+        'pages/setup-pertandingan.php' => ['ADMIN', 'CONTINGENT'],
+        // Setup Jadual - new page for schedule setup (ADMIN, ORGANIZER)
+        'pages/setup-jadual.php' => ['ADMIN', 'ORGANIZER'],
         'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
         'pages/checklist.php' => ['ADMIN'],
         'pages/matrix-access.php' => ['ADMIN'],
@@ -163,6 +165,16 @@ class RBAC {
         if (!$this->auth->isLoggedIn()) {
             return false;
         }
+
+        // ADMIN shortcut: administrators have full access
+        try {
+            $roleCheck = Session::get('user_role');
+            if ($roleCheck && strtoupper($roleCheck) === 'ADMIN') {
+                return true;
+            }
+        } catch (Exception $e) {
+            // ignore session read errors
+        }
         
         // Use database if available
         if ($this->useDatabase) {
@@ -214,10 +226,12 @@ class RBAC {
         
         // Fallback to static configuration
         $userRole = Session::get('user_role');
+        $userRoleNorm = $userRole ? strtoupper($userRole) : null;
 
-        // If page is in pageAccessRules, check if user's role is allowed
+        // If page is in pageAccessRules, check if user's role is allowed (case-insensitive)
         if (isset($this->pageAccessRules[$pagePath])) {
-            return in_array($userRole, $this->pageAccessRules[$pagePath]);
+            $allowed = array_map('strtoupper', $this->pageAccessRules[$pagePath]);
+            return in_array($userRoleNorm, $allowed, true);
         }
         
         // If page is not in pageAccessRules but is not public, require any authenticated user
