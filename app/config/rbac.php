@@ -57,7 +57,6 @@ class RBAC {
         // Setup Jadual - new page for schedule setup (ADMIN, ORGANIZER)
         'pages/setup-jadual.php' => ['ADMIN', 'ORGANIZER'],
         'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
-        'pages/checklist.php' => ['ADMIN'],
         'pages/matrix-access.php' => ['ADMIN'],
         
         // Settings - ADMIN only

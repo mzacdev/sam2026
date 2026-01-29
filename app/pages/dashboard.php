@@ -234,6 +234,7 @@ ob_start();
         .medal-table td, .medal-table th { padding: .26rem .35rem; vertical-align: middle; font-size: .85rem; }
         .medal-rank { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:20px; border-radius:6px; background:#f1f5f9; color:#0f172a; font-weight:700; font-size:.78rem; }
         .medal-name { font-weight:600; color:#0f1724; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:10rem; font-size:.85rem; }
+        .kontinjen-logo{width:28px;height:18px;object-fit:contain;border-radius:4px;margin-right:8px;flex:0 0 auto}
         .medal-count { display:inline-block; min-width:32px; padding:0.16rem 0.4rem; border-radius:6px; background:#e5e7eb; color:#0f172a; font-weight:700; font-size:.85rem; }
         .medal-badge { display:inline-block; min-width:28px; padding:.14rem .35rem; border-radius:6px; text-align:center; background:#eef2f7; color:#0b5ed7; font-weight:700; font-size:.85rem; }
         .medal-table .btn.medal-detail-btn { font-weight:700; padding:0; font-size:.85rem; }
@@ -366,7 +367,12 @@ ob_start();
                                             <span class="medal-rank"><?php echo $r; ?></span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="align-middle"><div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                    <td class="align-middle">
+                                        <div style="display:flex;align-items:center;">
+                                            <img src="<?php echo asset('img/logos/UA/' . ($mr['kod_universiti'] ?? '') . '.svg'); ?>" alt="" class="kontinjen-logo" onerror="this.style.display='none'" />
+                                            <div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div>
+                                        </div>
+                                    </td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-warning medal-detail-btn" data-medal="emas"><?php echo (int)($mr['emas'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-secondary medal-detail-btn" data-medal="perak"><?php echo (int)($mr['perak'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-danger medal-detail-btn" data-medal="gangsa"><?php echo (int)($mr['gangsa'] ?? 0); ?></button></td>

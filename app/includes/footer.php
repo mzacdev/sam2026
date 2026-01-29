@@ -24,6 +24,8 @@
         // use the full content-body as the layout container so footer spans the full content area
         var layoutContainer = contentBody || document.querySelector('.main-wrapper');
         var innerContainer = contentBody ? contentBody.querySelector('.container-fluid') : null;
+        // Global container reference used by updateStickyFooter; declare to avoid ReferenceError
+        var container = null;
 
         function applyFixedLayout(pin){
             try{

@@ -64,6 +64,10 @@ define('DEBUG_MODE', false);
 /* ============================================================
  * SESSION & AUTH INITIALIZATION
  * ============================================================ */
+// Ensure database helper is available before initializing auth (some auth helpers call getDB())
+if (file_exists(__DIR__ . '/database.php')) {
+    require_once __DIR__ . '/database.php';
+}
 if (file_exists(__DIR__ . '/auth.php')) {
     require_once __DIR__ . '/auth.php';
     Session::start();
@@ -145,7 +149,7 @@ $nav_sections = [
             ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
             ['title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent-admin.php'],
-            ['title' => 'Checklist', 'icon' => 'cil-list', 'url' => 'pages/checklist.php'],
+                // Checklist removed - no longer shown in menu
         ],
     ],
     [

@@ -79,7 +79,8 @@ try {
                     p.nama_pasukan,
                     k.id AS kontinjen_id,
                     k.kod_universiti,
-                    u.nama_universiti
+                    u.nama_universiti,
+                    u.nama_pendek
                 FROM table_pasukan_atlet pa
                 JOIN table_pasukan p ON pa.pasukan_id = p.id
                 JOIN table_kontinjen k ON p.kontinjen_id = k.id
@@ -106,7 +107,8 @@ try {
                     p.nama_pasukan,
                     k.id AS kontinjen_id,
                     k.kod_universiti,
-                    u.nama_universiti
+                    u.nama_universiti,
+                    u.nama_pendek
                 FROM table_pasukan_atlet pa
                 JOIN table_pasukan p ON pa.pasukan_id = p.id
                 JOIN table_kontinjen k ON p.kontinjen_id = k.id
@@ -127,20 +129,21 @@ try {
         // Format for display
         $formatted = [];
         foreach ($participants as $p) {
-            $formatted[] = [
-                'id' => $p['id'],
-                'display_name' => $p['nama'] . 
-                    ($p['no_matrik'] ? ' (' . $p['no_matrik'] . ')' : '') .
-                    ' - ' . ($p['nama_universiti'] ?: $p['kod_universiti']),
-                'nama' => $p['nama'],
-                'no_matrik' => $p['no_matrik'],
-                'no_kad_pengenalan' => $p['no_kad_pengenalan'],
-                'pasukan_id' => $p['pasukan_id'],
-                'pasukan_nama' => $p['nama_pasukan'],
-                'kontinjen_id' => $p['kontinjen_id'],
-                'kontinjen_nama' => $p['kod_universiti'],
-                'universiti' => $p['nama_universiti']
-            ];
+                $kontingenLabel = !empty($p['nama_pendek']) ? $p['nama_pendek'] : (!empty($p['nama_universiti']) ? $p['nama_universiti'] : $p['kod_universiti']);
+                $formatted[] = [
+                    'id' => $p['id'],
+                    'display_name' => $p['nama'] . 
+                        ($p['no_matrik'] ? ' (' . $p['no_matrik'] . ')' : '') .
+                        ' - ' . $kontingenLabel,
+                    'nama' => $p['nama'],
+                    'no_matrik' => $p['no_matrik'],
+                    'no_kad_pengenalan' => $p['no_kad_pengenalan'],
+                    'pasukan_id' => $p['pasukan_id'],
+                    'pasukan_nama' => $p['nama_pasukan'],
+                    'kontinjen_id' => $p['kontinjen_id'],
+                    'kontinjen_nama' => $kontingenLabel,
+                    'universiti' => $p['nama_universiti']
+                ];
         }
     } else {
         // Get teams registered to this category (teams that have at least one player in this category)
@@ -152,6 +155,7 @@ try {
                     k.id AS kontinjen_id,
                     k.kod_universiti,
                     u.nama_universiti,
+                    u.nama_pendek,
                     COUNT(DISTINCT pa.id) AS jumlah_atlet
                 FROM table_pasukan p
                 JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id AND pa.kategori_id = :kategori_id
@@ -174,6 +178,7 @@ try {
                     k.id AS kontinjen_id,
                     k.kod_universiti,
                     u.nama_universiti,
+                    u.nama_pendek,
                     COUNT(DISTINCT pa.id) AS jumlah_atlet
                 FROM table_pasukan p
                 JOIN table_pasukan_atlet pa ON p.id = pa.pasukan_id
@@ -194,14 +199,15 @@ try {
         // Format for display
         $formatted = [];
         foreach ($participants as $p) {
+            $kontingenLabel = !empty($p['nama_pendek']) ? $p['nama_pendek'] : (!empty($p['nama_universiti']) ? $p['nama_universiti'] : $p['kod_universiti']);
             $formatted[] = [
                 'id' => $p['id'],
                 'display_name' => $p['nama_pasukan'] . 
-                    ' (' . ($p['nama_universiti'] ?: $p['kod_universiti']) . ')' .
+                    ' (' . $kontingenLabel . ')' .
                     ($p['jumlah_atlet'] > 0 ? ' - ' . $p['jumlah_atlet'] . ' atlet' : ''),
                 'nama_pasukan' => $p['nama_pasukan'],
                 'kontinjen_id' => $p['kontinjen_id'],
-                'kontinjen_nama' => $p['kod_universiti'],
+                'kontinjen_nama' => $kontingenLabel,
                 'universiti' => $p['nama_universiti'],
                 'jumlah_atlet' => $p['jumlah_atlet']
             ];
