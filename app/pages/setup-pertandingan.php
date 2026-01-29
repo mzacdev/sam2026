@@ -523,6 +523,69 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_assignments') {
 	}
 }
 
+// --- Server-side: AJAX loader for TAB2 (fetch rounds, teams, metadata) ---
+if (isset($_GET['action']) && $_GET['action'] === 'load_tab2') {
+	header('Content-Type: application/json; charset=utf-8');
+	$event_id = isset($_SESSION['current_event_id']) ? (int)$_SESSION['current_event_id'] : 0;
+	if ($event_id <= 0) { echo json_encode(['success' => false, 'error' => 'no_event']); exit; }
+	try {
+		$db = getDB();
+		$rstmt = $db->prepare("SELECT id, group_code, group_order, qualification_rule, nama_round FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
+		$rstmt->execute([':event_id' => $event_id]);
+		$rounds = $rstmt->fetchAll(PDO::FETCH_ASSOC);
+
+		$rnStmt = $db->prepare("SELECT DISTINCT nama_round FROM table_round WHERE event_id = :event_id AND deleted_at IS NULL ORDER BY nama_round ASC");
+		$rnStmt->execute([':event_id' => $event_id]);
+		$round_names = $rnStmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+		// fetch teams for this sukan (include initial_group_code and kontingen + university short name)
+		$evstmt = $db->prepare('SELECT sukan_id FROM table_event WHERE id = :id AND deleted_at IS NULL');
+		$evstmt->execute([':id' => $event_id]);
+		$ev = $evstmt->fetch(PDO::FETCH_ASSOC);
+		$teams = [];
+		if ($ev) {
+			$event_sukan_id = (int)$ev['sukan_id'];
+			$tstmt = $db->prepare("SELECT p.id, p.nama_pasukan, p.kontinjen_id, p.initial_group_code, k.kod_universiti, r.nama_pendek AS nama_kontinjen, p.status FROM table_pasukan p LEFT JOIN table_kontinjen k ON p.kontinjen_id = k.id LEFT JOIN table_ref_universiti r ON k.kod_universiti = r.kod_universiti WHERE p.sukan_id = :sukan_id AND (p.status = 1 OR (p.initial_group_code IS NOT NULL AND p.initial_group_code != '')) AND p.deleted_at IS NULL ORDER BY p.nama_pasukan ASC");
+			$tstmt->execute([':sukan_id' => $event_sukan_id]);
+			$teams = $tstmt->fetchAll(PDO::FETCH_ASSOC);
+		}
+
+		// detect format and qualification rule
+		$detected_format = 'alphabetical';
+		$qualification_topn = null; $qualification_criteria = null;
+		$group_assignments_exist = false;
+		if (!empty($rounds)) {
+			$codes = array_filter(array_map(function($r){ return isset($r['group_code']) ? (string)$r['group_code'] : ''; }, $rounds));
+			$all_numeric = true;
+			foreach ($codes as $c) { if ($c === '') continue; if (!ctype_digit($c)) { $all_numeric = false; break; } }
+			$detected_format = $all_numeric ? 'numeric' : 'alphabetical';
+			foreach ($rounds as $r) {
+				if (!empty($r['qualification_rule'])) {
+					$qr = json_decode($r['qualification_rule'], true);
+					if (is_array($qr)) {
+						if (isset($qr['top_n'])) $qualification_topn = (int)$qr['top_n'];
+						if (isset($qr['criteria'])) $qualification_criteria = $qr['criteria'];
+						break;
+					}
+				}
+			}
+		}
+		// detect assignments exist
+		if (!empty($teams)) {
+			foreach ($teams as $t) {
+				if (isset($t['initial_group_code']) && trim((string)$t['initial_group_code']) !== '') { $group_assignments_exist = true; break; }
+			}
+		}
+
+		echo json_encode(['success' => true, 'rounds' => $rounds, 'round_names' => $round_names, 'teams' => $teams, 'detected_format' => $detected_format, 'qualification_topn' => $qualification_topn, 'qualification_criteria' => $qualification_criteria, 'group_assignments_exist' => $group_assignments_exist]);
+		exit;
+	} catch (Exception $e) {
+		error_log('[setup-pertandingan load_tab2] ' . $e->getMessage());
+		echo json_encode(['success' => false, 'error' => 'server_error']);
+		exit;
+	}
+}
+
 // Fetch sukan list for the Sukan select
 $sukan_list = [];
 try {
@@ -1289,6 +1352,112 @@ ob_start();
 			}
 		}
 		attachTab3Loader();
+
+		// TAB2: loader to fetch fresh rounds/teams and update UI (used on tab show or after save)
+		async function loadTab2FromServer() {
+			try {
+				console.debug('[setup-pertandingan] loadTab2FromServer');
+				const res = await fetch('?action=load_tab2&t=' + Date.now(), { credentials: 'same-origin' });
+				if (!res.ok) { console.error('load_tab2 HTTP', res.status); return; }
+				const json = await res.json();
+				if (!json || !json.success) { console.error('load_tab2 failed', json); return; }
+				// update DOM: rounds preview, bilangan, format, qualification inputs, groups container and assign select
+				const rounds = json.rounds || [];
+				const round_names = json.round_names || [];
+				const teams = json.teams || [];
+				const detected_format = json.detected_format || 'alphabetical';
+				const qualification_topn = json.qualification_topn || null;
+				const qualification_criteria = json.qualification_criteria || null;
+				const group_assignments_exist = !!json.group_assignments_exist;
+
+				// update bilangan and preview
+				const bilInputEl = document.getElementById('bilangan_kumpulan');
+				const formatEl = document.getElementById('format_kumpulan');
+				const previewTbodyEl = document.querySelector('#group-preview-table tbody');
+				if (bilInputEl) bilInputEl.value = rounds.length > 0 ? rounds.length : (bilInputEl.value || 4);
+				if (formatEl) { formatEl.value = detected_format; if (rounds.length > 0) formatEl.disabled = true; else formatEl.disabled = false; }
+				if (previewTbodyEl) {
+					previewTbodyEl.innerHTML = '';
+					if (rounds.length > 0) {
+						rounds.forEach((r, idx) => {
+							const tr = document.createElement('tr');
+							const td1 = document.createElement('td'); td1.textContent = r.group_code || '';
+							const td2 = document.createElement('td'); td2.textContent = r.nama_round || 'Peringkat Kumpulan';
+							const td3 = document.createElement('td'); td3.textContent = (r.group_order || (idx+1)).toString();
+							tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); previewTbodyEl.appendChild(tr);
+						});
+					} else {
+						// generate preview based on bilangan
+						const n = parseInt(bilInputEl ? bilInputEl.value : '4') || 4;
+						const fmt = formatEl ? formatEl.value : 'alphabetical';
+						for (let i=0;i<n;i++){ const code = (fmt==='numeric') ? String(i+1) : String.fromCharCode(65+i); const tr=document.createElement('tr'); tr.innerHTML = '<td>'+code+'</td><td>Peringkat Kumpulan</td><td>'+(i+1)+'</td>'; previewTbodyEl.appendChild(tr); }
+					}
+				}
+
+				// update qualification inputs
+				if (qualification_topn !== null && document.getElementById('qualification_topn')) document.getElementById('qualification_topn').value = qualification_topn;
+				if (qualification_criteria !== null && document.getElementById('qualification_criteria')) document.getElementById('qualification_criteria').value = qualification_criteria;
+
+				// update assign-group-select options and groups container
+				const assignSelectEl = document.getElementById('assign-group-select');
+				const groupsContainerEl = document.getElementById('groups-container');
+				if (assignSelectEl) {
+					assignSelectEl.innerHTML = '<option value="">-- Pilih Kumpulan --</option>';
+					if (rounds.length > 0) {
+						rounds.forEach(r => { const opt=document.createElement('option'); opt.value = r.group_code; opt.textContent = 'Kumpulan ' + r.group_code; assignSelectEl.appendChild(opt); });
+					}
+				}
+				if (groupsContainerEl) {
+					// rebuild groups table from rounds and assigned teams
+					try {
+						groupsContainerEl.innerHTML = '';
+						const table = document.createElement('table'); table.className='table table-sm table-bordered'; table.id='groups-table';
+						const thead = document.createElement('thead'); thead.innerHTML = '<tr><th style="width:120px">Kumpulan</th><th>Anggota Pasukan</th></tr>'; table.appendChild(thead);
+						const tbody = document.createElement('tbody');
+						const teamsByGroup = {};
+						(teams || []).forEach(t => { const g= (t.initial_group_code||'').toString(); if (!g) return; if (!teamsByGroup[g]) teamsByGroup[g]=[]; teamsByGroup[g].push(t); });
+						if (rounds.length>0) {
+							rounds.forEach(r => {
+								const tr=document.createElement('tr'); tr.setAttribute('data-group-code', r.group_code || '');
+								const td1=document.createElement('td'); td1.className='align-top'; td1.textContent='Kumpulan '+ (r.group_code||'');
+								const td2=document.createElement('td'); const ul=document.createElement('ul'); ul.className='list-group list-group-flush group-list'; ul.setAttribute('data-group-code', r.group_code||'');
+									const members = teamsByGroup[r.group_code] || [];
+									members.forEach(m => { const li=document.createElement('li'); li.className='list-group-item p-1'; li.setAttribute('data-team-id', m.id); li.textContent = m.nama_pasukan; ul.appendChild(li); });
+								td2.appendChild(ul); tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+							});
+						} else {
+							// no rounds: show placeholder
+							const tr=document.createElement('tr'); const td=document.createElement('td'); td.colSpan=2; td.className='text-center text-muted py-4'; td.textContent='Tiada kumpulan dicipta.'; tr.appendChild(td); tbody.appendChild(tr);
+						}
+						table.appendChild(tbody); groupsContainerEl.appendChild(table);
+					} catch (e) { console.error('rebuild groups container in loadTab2', e); }
+				}
+
+				// update tab3 enable state
+				const tab3Btn = document.getElementById('tab-3-btn');
+				if (tab3Btn && rounds.length>0) { tab3Btn.classList.remove('disabled'); tab3Btn.removeAttribute('aria-disabled'); tab3Btn.setAttribute('data-bs-toggle','pill'); tab3Btn.setAttribute('data-bs-target','#tab-3'); }
+
+				// final renderAssigned sync: mark rows in teams table
+				try {
+					// clear all team assigned attributes then set from teams payload
+					document.querySelectorAll('#teams-table tbody tr').forEach(tr => { tr.setAttribute('data-assigned-group',''); setTeamRowAssigned(tr,''); });
+					(teams || []).forEach(t => { const tr = document.querySelector('#teams-table tbody tr[data-team-id="'+t.id+'"]'); if (tr) { tr.setAttribute('data-assigned-group', (t.initial_group_code||'') ); setTeamRowAssigned(tr, (t.initial_group_code||'')); } });
+					renderAssigned(); updateSaveButtonState();
+				} catch (e) { console.error('post-loadTab2 sync error', e); }
+			} catch (e) { console.error('loadTab2FromServer error', e); }
+		}
+
+		// Attach listener to load Tab2 when shown (covers user clicking the tab)
+		document.addEventListener('shown.bs.tab', function(ev){
+			try {
+				const target = ev.target || ev.relatedTarget;
+				if (!target) return;
+				const t = (target.getAttribute('data-bs-target') || target.getAttribute('href') || '').toString();
+				if (t === '#tab-2') {
+					if (typeof loadTab2FromServer === 'function') loadTab2FromServer();
+				}
+			} catch (e) { console.error('shown.bs.tab handler for tab2 error', e); }
+		});
 		// also ensure kontinjen status matches initial state
 		function updateKontinjenStatus() {
 			try {
@@ -1432,6 +1601,8 @@ ob_start();
 								tab2Btn.setAttribute('data-bs-target', '#tab-2');
 								var tabTrigger = new bootstrap.Tab(tab2Btn);
 								tabTrigger.show();
+								// Immediately request fresh Tab2 data to avoid stale initial render
+								try { if (typeof loadTab2FromServer === 'function') loadTab2FromServer(); } catch (e) { console.error('loadTab2FromServer call failed', e); }
 							}
 						});
 					} else {

@@ -517,16 +517,15 @@ ob_start();
             // New column: button to open full results
             const fullBtn = `<button class="btn btn-sm btn-outline-primary open-full-btn" data-id="${r.id}">Keputusan Penuh</button>`;
 
-            // Render top-3 winners inside Nama column with medal icons (🥇🥈🥉)
+            // Render top-3 winners inside Nama column (names only; medal icons moved to rank column in modal)
             const winners = Array.isArray(r.standings) ? r.standings.slice(0,3) : [];
-            const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
             const namaLines = [];
             for (var p = 1; p <= 3; p++) {
                 const w = (r.standings || []).find(x => parseInt(x.position) === p) || winners[p-1] || null;
                 if (w && (w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan)) {
                     const display = w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan || '';
                     const pretty = escapeHtml(display.replace(/\s-\s/, ', '));
-                    namaLines.push(`<div><span class="me-2">${medalMap[p] || ''}</span>${pretty}</div>`);
+                    namaLines.push(`<div>${pretty}</div>`);
                 }
             }
             const namaHtml = namaLines.length ? namaLines.join('') : '<span class="text-muted">-</span>';
@@ -584,23 +583,24 @@ ob_start();
         const start = (modalCurrentPage - 1) * modalPageSize;
         const slice = modalStandings.slice(start, start + modalPageSize);
 
-        slice.forEach(s=>{
-            const tr = document.createElement('tr');
-            const pos = escapeHtml(s.position || '');
+                slice.forEach(s=>{
+                    const tr = document.createElement('tr');
+                    var posNum = parseInt(s.position) || 0;
 
-            const rawName = (s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
-            const parts = rawName.split(' - ');
-            const baseName = parts.length > 1 ? parts.slice(0, parts.length - 1).join(' - ') : rawName;
-            const ks = (s.kontingen_short_name && String(s.kontingen_short_name).trim() !== '') ? String(s.kontingen_short_name).trim() : null;
-            const suffix = ks ? (', ' + escapeHtml(ks)) : (parts.length > 1 ? (', ' + escapeHtml(parts[parts.length - 1])) : '');
-            const name = escapeHtml(baseName) + suffix;
+                    const displayRaw = (s.participant_display_name || s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
+                    const parts = displayRaw.split(' - ');
+                    const namePretty = displayRaw.replace(/\s-\s/, ', ');
+                    const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
+                    // Rank cell: show medal icon for 1-3, otherwise the numeric position
+                    const rankCell = medalMap[posNum] ? `<span class="medal-icon">${medalMap[posNum]}</span>` : escapeHtml(String(posNum));
+                    const nameDisplay = escapeHtml(namePretty);
 
-            tr.innerHTML = `<td class="align-top text-center">${pos}</td>` +
-                           `<td class="align-top">${escapeHtml(currentModalSukan)}</td>` +
-                           `<td class="align-top">${escapeHtml(currentModalAcara)}</td>` +
-                           `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${name}">${name}</span></td>`;
-            tbody.appendChild(tr);
-        });
+                    tr.innerHTML = `<td class="align-top text-center">${rankCell}</td>` +
+                                   `<td class="align-top">${escapeHtml(sukan)}</td>` +
+                                   `<td class="align-top">${escapeHtml(acara)}</td>` +
+                                   `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
+                    tbody.appendChild(tr);
+                });
 
         // pager
         pager.innerHTML = `
@@ -1223,13 +1223,14 @@ ob_start();
                     const nameParts = displayRaw.split(' - ');
                     const namePretty = displayRaw.replace(/\s-\s/, ', ');
                     const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
-                    const medal = medalMap[posNum] ? `<span class="me-2">${medalMap[posNum]}</span>` : '';
-                    const nameDisplay = medal + escapeHtml(namePretty);
+                    // Show medal icon in first column for top 3, otherwise show numeric position
+                    const rankCell = medalMap[posNum] ? `<span class="medal-icon">${medalMap[posNum]}</span>` : escapeHtml(String(posNum));
+                    const nameDisplay = escapeHtml(namePretty);
 
-                    tr.innerHTML = `<td class="align-top text-center">${escapeHtml(String(posNum))}</td>` +
+                    tr.innerHTML = `<td class="align-top text-center">${rankCell}</td>` +
                                    `<td class="align-top">${escapeHtml(sukan)}</td>` +
                                    `<td class="align-top">${escapeHtml(acara)}</td>` +
-                                `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
+                                   `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
                     tbody.appendChild(tr);
                 });
 
@@ -1429,6 +1430,8 @@ ob_start();
 /* Modal table nowrap enforcement and tooltip name truncation */
 #modalKeputusanFullTable th, #modalKeputusanFullTable td { white-space: nowrap; overflow: hidden; }
 #modalKeputusanFullTable .text-truncate { max-width: 100%; display: inline-block; vertical-align: middle; }
+/* Medal icon styling in rank column */
+.medal-icon{font-size:1.1rem;display:inline-block}
 </style>
 
 <?php
