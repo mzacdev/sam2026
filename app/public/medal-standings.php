@@ -493,5 +493,8 @@ foreach ($tally as $r) {
 
 <?php
 $content = ob_get_clean();
+?>
+<!-- Sponsors and footer removed from public medal standings as requested -->
+<?php
 require_once __DIR__ . '/../includes/layout_public.php';
 ?>
