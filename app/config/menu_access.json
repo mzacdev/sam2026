@@ -76,7 +76,6 @@
     "pages/contingent-admin.php": [
       "ADMIN",
       "ORGANIZER",
-      "JUDGE",
       "VIEWER"
     ],
     

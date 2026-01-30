@@ -125,7 +125,7 @@ $userEmail = $currentUser['email'] ?? '';
                     <ul class="nav">
                         <li class="nav-item"><a class="nav-link active" href="<?php echo url('public/index.php'); ?>">Home</a></li>
                         <li class="nav-item"><a class="nav-link" href="#">Schedule &amp; Result</a></li>
-                        <li class="nav-item"><a class="nav-link" href="<?php echo url('public/athletes.php'); ?>">Athletes</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#">Athletes</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?php echo url('public/contingents.php'); ?>">Contingent</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?php echo url('public/medal-standings.php'); ?>">Medal Tally</a></li>
                     </ul>

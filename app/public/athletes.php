@@ -71,6 +71,16 @@ try {
     $athletes = [];
 }
 
+// Debug helper: show SQL, params and GET when requested
+if (isset($_GET['debug_athletes']) && $_GET['debug_athletes']) {
+    echo "<div style='background:#fff;padding:12px;border:1px solid #ddd;margin:12px 0;font-family:monospace;white-space:pre-wrap;'>";
+    echo "GET => " . htmlspecialchars(var_export($_GET, true), ENT_QUOTES, 'UTF-8') . "\n\n";
+    echo "SQL => " . htmlspecialchars($sql, ENT_QUOTES, 'UTF-8') . "\n\n";
+    echo "Params => " . htmlspecialchars(var_export($params, true), ENT_QUOTES, 'UTF-8') . "\n\n";
+    echo "Rows => " . (is_array($athletes) ? count($athletes) : 0);
+    echo "</div>";
+}
+
 ob_start();
 ?>
 <div class="container mt-3 mb-4">
