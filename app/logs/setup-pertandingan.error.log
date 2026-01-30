@@ -709,3 +709,5 @@
 [29-Jan-2026 06:26:45 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
 [29-Jan-2026 06:26:46 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
 [29-Jan-2026 06:26:47 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php
+[30-Jan-2026 02:31:32 UTC] [setup-pertandingan] PHP error_log redirected to /var/www/html/pages/../logs/setup-pertandingan.error.log
+[30-Jan-2026 02:31:32 UTC] [setup-pertandingan] included RBAC from: /var/www/html/pages/../config/rbac.php

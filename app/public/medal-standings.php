@@ -87,8 +87,7 @@ foreach ($tally as $r) {
 }
 ?>
 <!-- Page markup continues (styles and table header are above) -->
-<div class="row">
-    <div class="container mt-0">
+<div class="container mt-3 mb-4">
         <div class="row mb-2 align-items-center">
             <div class="col-md-8 col-12">
                 <h2 class="mb-0">Contingent Rankings</h2>
