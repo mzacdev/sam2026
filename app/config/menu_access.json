@@ -20,6 +20,14 @@
       "ADMIN",
       "ORGANIZER"
     ],
+    "pages/setup-pertandingan.php": [
+      "ADMIN",
+      "CONTINGENT"
+    ],
+    "pages/setup-jadual.php": [
+      "ADMIN",
+      "ORGANIZER"
+    ],
     "pages/contingent-user.php": [
       "CONTINGENT"
     ],
@@ -71,9 +79,7 @@
       "JUDGE",
       "VIEWER"
     ],
-    "pages/checklist.php": [
-      "ADMIN"
-    ],
+    
     "pages/matrix-access.php": [
       "ADMIN"
     ],

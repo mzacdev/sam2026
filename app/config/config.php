@@ -64,6 +64,10 @@ define('DEBUG_MODE', false);
 /* ============================================================
  * SESSION & AUTH INITIALIZATION
  * ============================================================ */
+// Ensure database helper is available before initializing auth (some auth helpers call getDB())
+if (file_exists(__DIR__ . '/database.php')) {
+    require_once __DIR__ . '/database.php';
+}
 if (file_exists(__DIR__ . '/auth.php')) {
     require_once __DIR__ . '/auth.php';
     Session::start();
@@ -136,7 +140,7 @@ $nav_sections = [
             ['title' => 'Pasukan', 'icon' => 'cil-people', 'url' => 'pages/pasukan.php'],
             ['title' => 'Venue', 'icon' => 'cil-map', 'url' => 'pages/venues.php'],
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/keputusan.php'],
-            ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'],
+            // 'Kontinjen User' visibility is controlled below so we can restrict it to CONTINGENT only
         ],
     ],
     [
@@ -145,7 +149,7 @@ $nav_sections = [
             ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
             ['title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent-admin.php'],
-            ['title' => 'Checklist', 'icon' => 'cil-list', 'url' => 'pages/checklist.php'],
+                // Checklist removed - no longer shown in menu
         ],
     ],
     [
@@ -173,6 +177,27 @@ function _nav_normalize($p) {
     $p = preg_replace('#^/+#', '/', $p);
     $p = rtrim($p, '/');
     return strtolower($p === '' ? '/' : $p);
+}
+
+// Ensure 'Kontinjen User' menu item only visible to CONTINGENT role
+try {
+    $currentRole = Session::get('user_role') ?? '';
+    $currentRole = strtoupper((string)$currentRole);
+    if ($currentRole === 'CONTINGENT') {
+        // insert the contingent-user item into the first section (Pengurusan)
+        if (isset($nav_sections[0]) && isset($nav_sections[0]['children']) && is_array($nav_sections[0]['children'])) {
+            $nav_sections[0]['children'][] = ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'];
+        }
+    } else {
+        // remove any existing contingent-user entry if present
+        if (isset($nav_sections[0]) && isset($nav_sections[0]['children']) && is_array($nav_sections[0]['children'])) {
+            $nav_sections[0]['children'] = array_values(array_filter($nav_sections[0]['children'], function($c){
+                return (isset($c['url']) && trim($c['url']) === 'pages/contingent-user.php') ? false : true;
+            }));
+        }
+    }
+} catch (Exception $e) {
+    // ignore errors and keep default nav_sections
 }
 
 $current_page_base = strtolower(basename($_SERVER['PHP_SELF']));

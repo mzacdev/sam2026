@@ -191,6 +191,7 @@ ob_start();
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeKeputusanModal()">Batal</button>
                 <button type="button" class="btn btn-primary" id="btnSaveKeputusan">Simpan</button>
+                
             </div>
         </div>
     </div>
@@ -343,38 +344,101 @@ ob_start();
             return Promise.resolve();
         }
         
-        return fetchJSON('<?php echo url("ajax/get_kategori_by_sukan.php"); ?>?sukan_id=' + encodeURIComponent(sukan_id))
-            .then(res=>{
-                if(res && res.success && Array.isArray(res.data) && res.data.length){
-                    select.innerHTML = '<option value="">Pilih Kategori</option>';
-                    res.data.forEach(k=>{
-                        const o = document.createElement('option');
-                        o.value = k.id;
-                        o.textContent = k.nama_kategori || ('Kategori ' + k.id);
-                        select.appendChild(o);
-                    });
-                    select.disabled = false;
-                    
-                    // If this is the modal kategori select, check for existing results
-                    if (select === keputusanKategori) {
-                        // Use setTimeout to ensure DOM is updated before checking
-                        setTimeout(() => {
-                            updateCategoryRestrictions();
-                        }, 100);
-                    }
-                    return Promise.resolve();
-                } else {
-                    select.innerHTML = '<option value="">Tiada kategori untuk sukan ini</option>';
-                    select.disabled = true;
-                    return Promise.resolve();
-                }
-            })
-            .catch(err=>{
-                console.error('Failed to fetch kategori', err);
-                select.innerHTML = '<option value="">Ralat memuat kategori</option>';
+        // Race the fetch against a timeout so the select doesn't remain stuck on 'Loading...'
+        const fetchPromise = fetchJSON('<?php echo url("ajax/get_kategori_by_sukan.php"); ?>?sukan_id=' + encodeURIComponent(sukan_id));
+        const timeoutMs = 5000;
+        const timeoutPromise = new Promise(resolve => setTimeout(()=>resolve({ __timeout: true }), timeoutMs));
+
+        return Promise.race([fetchPromise, timeoutPromise]).then(res => {
+            if (!res || res.__timeout) {
+                console.warn('loadKategori: request timed out for sukan_id=', sukan_id);
+                select.innerHTML = '<option value="">Ralat memuat kategori (timeout)</option>';
                 select.disabled = true;
+                
                 return Promise.resolve();
-            });
+            }
+
+            console.log('loadKategori: response for sukan_id=' + sukan_id, res);
+            if(res && res.success && Array.isArray(res.data) && res.data.length){
+                select.innerHTML = '<option value="">Pilih Kategori</option>';
+                res.data.forEach(k=>{
+                    const o = document.createElement('option');
+                    o.value = k.id;
+                    o.textContent = k.nama_kategori || ('Kategori ' + k.id);
+                    select.appendChild(o);
+                });
+                select.disabled = false;
+
+                // If this is the modal kategori select, check for existing results
+                if (select === keputusanKategori) {
+                    // Use setTimeout to ensure DOM is updated before checking
+                    setTimeout(() => {
+                        updateCategoryRestrictions();
+                        console.log('loadKategori: updated kategori options, enabled state =', select.disabled === false);
+                        // Re-init Select2 only for the modal kategori select so it reflects new options and enabled state
+                        try{
+                            if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                                const $k = jQuery(keputusanKategori);
+                                try{ if ($k.data('select2')) { console.log('loadKategori: destroying existing select2 for kategori'); $k.select2('destroy'); } }catch(e){console.warn(e);} 
+                                // Ensure underlying select disabled flag is cleared before init
+                                try{ $k.prop('disabled', false); $k.removeAttr('disabled'); $k.attr('aria-disabled', 'false'); }catch(e){}
+
+                                // Reinitialize Select2 for kategori and clean up any disabled container classes
+                                    try{
+                                        $k.select2({ dropdownParent: jQuery('#modalKeputusan'), width: '100%', theme: 'bootstrap4' });
+                                        // Ensure Select2 selection on kategori triggers native change
+                                        try{
+                                            // use a namespaced handler to avoid duplicate bindings
+                                            $k.off('select2:select.select2-kategori');
+                                            $k.on('select2:select.select2-kategori', function(e){
+                                                try{ const el = $k[0]; if (el && typeof el.dispatchEvent === 'function') el.dispatchEvent(new Event('change', { bubbles: true })); else $k.trigger('change'); }catch(err){}
+                                            });
+                                        }catch(e){}
+                                    const $cont = $k.next('.select2-container');
+                                    if ($cont && $cont.length) {
+                                        $cont.removeClass('select2-container--disabled');
+                                        $cont.find('.select2-selection').removeClass('select2-selection--disabled').attr('aria-disabled','false');
+                                    }
+                                }catch(e){ console.error('loadKategori: select2 init error', e); }
+
+                                console.log('loadKategori: reinitialized select2 for kategori, disabled=', keputusanKategori.disabled);
+                                
+
+                                // Retry a short time later in case other code toggles disabled after init
+                                setTimeout(()=>{
+                                    try{
+                                        $k.prop('disabled', false); $k.removeAttr('disabled'); $k.attr('aria-disabled','false');
+                                        const $cont2 = $k.next('.select2-container');
+                                        if ($cont2 && $cont2.length) {
+                                            $cont2.removeClass('select2-container--disabled');
+                                            $cont2.find('.select2-selection').removeClass('select2-selection--disabled').attr('aria-disabled','false');
+                                        }
+                                        console.log('loadKategori: retry ensure kategori enabled, disabled=', keputusanKategori.disabled);
+                                    }catch(e){ }
+                                }, 120);
+                            } else {
+                                // Fallback: call full init which will load Select2 if needed
+                                console.log('loadKategori: select2 not present, calling initSelect2ForKeputusanModal');
+                                initSelect2ForKeputusanModal();
+                            }
+                        }catch(e){ console.error('loadKategori: select2 init error', e); }
+                    }, 100);
+                }
+                return Promise.resolve();
+            } else {
+                select.innerHTML = '<option value="">Tiada kategori untuk sukan ini</option>';
+                select.disabled = true;
+                // update debug UI
+                
+                return Promise.resolve();
+            }
+        }).catch(err=>{
+            console.error('Failed to fetch kategori', err);
+            select.innerHTML = '<option value="">Ralat memuat kategori</option>';
+            select.disabled = true;
+            
+            return Promise.resolve();
+        });
     }
     
     function loadParticipants(kategori_id){
@@ -418,9 +482,128 @@ ob_start();
             });
     }
     
+    // Dynamically load Select2 assets (CSS + JS + bootstrap4 theme) when needed.
+    // Returns a Promise that resolves when Select2 is available.
+    function loadSelect2IfNeeded(){
+        return new Promise((resolve, reject) => {
+            try{
+                if (window.jQuery && jQuery.fn && jQuery.fn.select2) return resolve();
+
+                console.log('loadSelect2IfNeeded: starting');
+                // Load CSS if not present
+                const cssHref = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+                const themeHref = 'https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css';
+                if (!document.querySelector(`link[href*="select2.min.css"]`)){
+                    const l = document.createElement('link'); l.rel='stylesheet'; l.href = cssHref; document.head.appendChild(l);
+                }
+                if (!document.querySelector(`link[href*="select2-bootstrap4.min.css"]`)){
+                    const l2 = document.createElement('link'); l2.rel='stylesheet'; l2.href = themeHref; document.head.appendChild(l2);
+                }
+
+                // If jQuery is missing, the page already includes jQuery via layout; if not, fail
+                if (!window.jQuery) {
+                    return reject(new Error('jQuery not present'));
+                }
+
+                // Load Select2 JS if not loaded
+                if (jQuery.fn && jQuery.fn.select2) return resolve();
+
+                const scriptSrc = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
+                if (document.querySelector(`script[src*="select2.min.js"]`)){
+                    console.log('loadSelect2IfNeeded: select2 script tag already present, waiting for registration');
+                    // wait for it to become available
+                    const maxWait = 3000; let waited = 0;
+                    const iv = setInterval(()=>{
+                        if (jQuery.fn && jQuery.fn.select2){ clearInterval(iv); console.log('loadSelect2IfNeeded: select2 is now available'); resolve(); }
+                        waited += 100; if (waited >= maxWait){ clearInterval(iv); console.error('loadSelect2IfNeeded: timeout waiting for select2'); reject(new Error('select2 load timeout')); }
+                    }, 100);
+                    return;
+                }
+
+                const s = document.createElement('script');
+                s.src = scriptSrc;
+                s.onload = function(){
+                    console.log('loadSelect2IfNeeded: select2 script loaded');
+                    // small delay to ensure plugin registers
+                    setTimeout(()=>{
+                        if (jQuery.fn && jQuery.fn.select2) { console.log('loadSelect2IfNeeded: select2 registered'); resolve(); }
+                        else { console.error('loadSelect2IfNeeded: select2 not registered after load'); reject(new Error('select2 not registered')); }
+                    }, 50);
+                };
+                s.onerror = function(){ console.error('loadSelect2IfNeeded: failed to load select2 script'); reject(new Error('Failed to load select2')); };
+                document.head.appendChild(s);
+            }catch(e){ reject(e); }
+        });
+    }
+
+    // Initialize Select2 for all <select> elements inside the Rekod Keputusan modal.
+    // This preserves names/values and sets dropdownParent to the modal to work inside Bootstrap modals.
+    function initSelect2ForKeputusanModal(){
+        // Ensure Select2 library is loaded, then initialize selects inside modal
+        function _doInit(){
+            try{
+                console.log('initSelect2ForKeputusanModal: _doInit start');
+                if (!window.jQuery || !jQuery.fn) { console.warn('initSelect2ForKeputusanModal: jQuery not present'); return; }
+                if (!jQuery.fn.select2) { console.log('initSelect2ForKeputusanModal: select2 not loaded yet'); return; }
+                const $modal = jQuery('#modalKeputusan');
+                if (!$modal.length) { console.warn('initSelect2ForKeputusanModal: modal element not found'); return; }
+
+                const $selects = $modal.find('select');
+                console.log('initSelect2ForKeputusanModal: found selects count=', $selects.length);
+                $selects.each(function(){
+                    const $el = jQuery(this);
+                    // If kategori is still disabled, skip initializing it here — we'll initialize it after options load
+                    try{
+                        if (($el.attr('id') || $el.attr('name')) === 'keputusanKategori' && this.disabled) {
+                            console.log('initSelect2ForKeputusanModal: skipping kategori init because it is disabled');
+                            return; // continue
+                        }
+                    }catch(e){}
+                    // Destroy existing Select2 to avoid duplication
+                    if ($el.data('select2')){
+                        try{ console.log('initSelect2ForKeputusanModal: destroying existing select2 for', $el.attr('id') || $el.attr('name')); $el.select2('destroy'); }catch(e){ console.warn(e); }
+                    }
+
+                    // Initialize with dropdownParent set to modal to avoid z-index clipping
+                    try{
+                        $el.select2({ dropdownParent: $modal, width: '100%', theme: 'bootstrap4' });
+                        console.log('initSelect2ForKeputusanModal: initialized select2 for', $el.attr('id') || $el.attr('name'));
+                        // Ensure Select2 selections trigger the native change handler for keputusanSukan
+                        try{
+                            if (($el.attr('id') || '') === 'keputusanSukan'){
+                                $el.on('select2:select', function(e){
+                                    console.log('select2:select fired for keputusanSukan, dispatching native change');
+                                    try{
+                                        const el = $el[0];
+                                        if (el && typeof el.dispatchEvent === 'function') {
+                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                        } else {
+                                            $el.trigger('change');
+                                        }
+                                    }catch(err){ $el.trigger('change'); }
+                                });
+                            }
+                        }catch(e){ /* ignore */ }
+                    }catch(e){ console.error('initSelect2ForKeputusanModal: select2 init error for', $el.attr('id') || $el.attr('name'), e); }
+                });
+            }catch(e){/* ignore */}
+        }
+
+        // If select2 already present, init immediately
+        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+            _doInit();
+            return;
+        }
+
+        // Otherwise load Select2 CSS/JS dynamically (only once)
+        loadSelect2IfNeeded().then(_doInit).catch(()=>{/* ignore load failure */});
+    }
+
     function generateStandingsTable(participants){
+        // generation token to avoid duplicate bindings/initializations when called multiple times
+        const genToken = String(Date.now());
         const optionHtml = '<option value="">Pilih Peserta</option>' +
-            participants.map(p => `<option value="${p.id}">${p.display_name || p.nama || p.nama_pasukan}</option>`).join('');
+            participants.map(p => `<option value="${p.id}" data-kontinjen="${p.kontinjen_id || ''}">${p.display_name || p.nama || p.nama_pasukan}</option>`).join('');
         
         let tableHtml = '<div class="table-responsive"><table class="table table-sm table-bordered">';
         tableHtml += '<thead><tr><th style="width: 80px;">Kedudukan</th><th>Peserta</th></tr></thead>';
@@ -433,7 +616,7 @@ ob_start();
             tableHtml += `<tr>
                 <td class="align-middle"><strong>${i}${requiredLabel}</strong></td>
                 <td>
-                    <select class="form-select form-select-sm standings-select" data-position="${i}" name="standing_${i}" ${requiredAttr}>
+                    <select class="form-select form-select-sm standings-select" data-position="${i}" data-gen="${genToken}" name="standing_${i}" ${requiredAttr}>
                         ${optionHtml}
                     </select>
                 </td>
@@ -444,13 +627,66 @@ ob_start();
         tableHtml += '<small class="text-muted"><span class="text-danger">*</span> Wajib diisi untuk kedudukan 1, 2, dan 3 sahaja</small>';
         standingsContainer.innerHTML = tableHtml;
         
-        // Add event listeners to all selects
+        // Add event listeners to all newly created selects (guarded by generation token)
         const selects = standingsContainer.querySelectorAll('.standings-select');
         selects.forEach(select => {
-            select.addEventListener('change', function(){
-                updateParticipantDropdowns(this);
-            });
+            try{
+                if (select.dataset.gen !== genToken) return; // skip old selects
+                if (select.dataset.bound === '1') return; // already bound
+                select.addEventListener('change', function(){ updateParticipantDropdowns(this); });
+                select.dataset.bound = '1';
+            }catch(e){ /* ignore */ }
         });
+        
+        // Initialize Select2 for newly created selects inside the modal (loader will fetch library when needed)
+        try{
+            // Ensure Select2 is available then specifically initialize standings-selects
+            loadSelect2IfNeeded().then(()=>{
+                try{
+                    const $modal = jQuery('#modalKeputusan');
+                    // Only initialize selects created by this generation (avoid re-initializing existing ones)
+                    const $stands = $modal.find(`.standings-select`).filter(function(){ return jQuery(this).data('gen') === genToken; });
+                    console.log('generateStandingsTable: initializing select2 for standings-select count=', $stands.length);
+                    $stands.each(function(idx){
+                        const $s = jQuery(this);
+                        try{
+                            if ($s.data('select2-init-done')) { console.log('generateStandingsTable: select2 already initialized for idx=', idx); return; }
+                        }catch(e){}
+                        try{
+                            // Initialize Select2 only if not already present
+                            if (!$s.data('select2')){
+                                $s.select2({ dropdownParent: $modal, width: '100%', theme: 'bootstrap4' });
+                            }
+                            $s.data('select2-init-done', true);
+                            const has = !!$s.data('select2');
+                            const cont = $s.next('.select2-container');
+                            console.log('generateStandingsTable: init result for idx=', idx, 'hasSelect2=', has, 'containerExists=', !!(cont && cont.length));
+                            // Ensure select2 events update participant disabling (attach once)
+                            try{
+                                $s.off('select2:select.select2-change select2:unselect.select2-change change.select2-change');
+                                $s.on('select2:select.select2-change select2:unselect.select2-change change.select2-change', function(e){
+                                    try{ updateParticipantDropdowns(this); }catch(err){ console.warn('select2 change hook failed', err); }
+                                });
+                            }catch(e){ console.warn('attach select2 events failed', e); }
+                        }catch(e){ console.warn('standings-select init failed', e); }
+                    });
+
+                    // Retry shortly after only for selects that are still missing initialization
+                    setTimeout(()=>{
+                        try{
+                            const $retries = $modal.find('.standings-select').filter(function(){ return !jQuery(this).data('select2-init-done') && jQuery(this).data('gen') === genToken; });
+                            $retries.each(function(idx){
+                                const $s = jQuery(this);
+                                try{ console.log('generateStandingsTable: retry init for standings-select idx=', idx); if (!$s.data('select2')){ $s.select2({ dropdownParent: $modal, width: '100%', theme: 'bootstrap4' }); }
+                                    try{ $s.off('select2:select.select2-change select2:unselect.select2-change change.select2-change'); $s.on('select2:select.select2-change select2:unselect.select2-change change.select2-change', function(e){ try{ updateParticipantDropdowns(this); }catch(err){} }); }catch(e){}
+                                    $s.data('select2-init-done', true);
+                                }catch(e){ console.warn('retry init failed', e); }
+                            });
+                        }catch(e){}
+                    }, 120);
+                }catch(e){ console.warn('generateStandingsTable select2 init error', e); }
+            }).catch((err)=>{ console.warn('generateStandingsTable: loadSelect2IfNeeded failed', err); });
+        }catch(e){/* ignore */}
     }
     
     // Pagination state
@@ -540,16 +776,15 @@ ob_start();
             // New column: button to open full results
             const fullBtn = `<button class="btn btn-sm btn-outline-primary open-full-btn" data-id="${r.id}">Keputusan Penuh</button>`;
 
-            // Render top-3 winners inside Nama column with medal icons (🥇🥈🥉)
+            // Render top-3 winners inside Nama column (names only; medal icons moved to rank column in modal)
             const winners = Array.isArray(r.standings) ? r.standings.slice(0,3) : [];
-            const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
             const namaLines = [];
             for (var p = 1; p <= 3; p++) {
                 const w = (r.standings || []).find(x => parseInt(x.position) === p) || winners[p-1] || null;
                 if (w && (w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan)) {
                     const display = w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan || '';
                     const pretty = escapeHtml(display.replace(/\s-\s/, ', '));
-                    namaLines.push(`<div><span class="me-2">${medalMap[p] || ''}</span>${pretty}</div>`);
+                    namaLines.push(`<div>${pretty}</div>`);
                 }
             }
             const namaHtml = namaLines.length ? namaLines.join('') : '<span class="text-muted">-</span>';
@@ -607,23 +842,24 @@ ob_start();
         const start = (modalCurrentPage - 1) * modalPageSize;
         const slice = modalStandings.slice(start, start + modalPageSize);
 
-        slice.forEach(s=>{
-            const tr = document.createElement('tr');
-            const pos = escapeHtml(s.position || '');
+                slice.forEach(s=>{
+                    const tr = document.createElement('tr');
+                    var posNum = parseInt(s.position) || 0;
 
-            const rawName = (s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
-            const parts = rawName.split(' - ');
-            const baseName = parts.length > 1 ? parts.slice(0, parts.length - 1).join(' - ') : rawName;
-            const ks = (s.kontingen_short_name && String(s.kontingen_short_name).trim() !== '') ? String(s.kontingen_short_name).trim() : null;
-            const suffix = ks ? (', ' + escapeHtml(ks)) : (parts.length > 1 ? (', ' + escapeHtml(parts[parts.length - 1])) : '');
-            const name = escapeHtml(baseName) + suffix;
+                    const displayRaw = (s.participant_display_name || s.participant_name || s.nama || s.nama_pasukan || s.participant || s.participant_id || '-').toString();
+                    const parts = displayRaw.split(' - ');
+                    const namePretty = displayRaw.replace(/\s-\s/, ', ');
+                    const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
+                    // Rank cell: show medal icon for 1-3, otherwise the numeric position
+                    const rankCell = medalMap[posNum] ? `<span class="medal-icon">${medalMap[posNum]}</span>` : escapeHtml(String(posNum));
+                    const nameDisplay = escapeHtml(namePretty);
 
-            tr.innerHTML = `<td class="align-top text-center">${pos}</td>` +
-                           `<td class="align-top">${escapeHtml(currentModalSukan)}</td>` +
-                           `<td class="align-top">${escapeHtml(currentModalAcara)}</td>` +
-                           `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${name}">${name}</span></td>`;
-            tbody.appendChild(tr);
-        });
+                    tr.innerHTML = `<td class="align-top text-center">${rankCell}</td>` +
+                                   `<td class="align-top">${escapeHtml(sukan)}</td>` +
+                                   `<td class="align-top">${escapeHtml(acara)}</td>` +
+                                   `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
+                    tbody.appendChild(tr);
+                });
 
         // pager
         pager.innerHTML = `
@@ -712,13 +948,16 @@ ob_start();
         if (typeof coreui !== 'undefined' && coreui.Modal) {
             modalKeputusanInstance = new coreui.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
             modalKeputusanInstance.show();
+            try{ initSelect2ForKeputusanModal(); }catch(e){}
         } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
             modalKeputusanInstance = new bootstrap.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
             modalKeputusanInstance.show();
+            try{ initSelect2ForKeputusanModal(); }catch(e){}
         } else {
             modalEl.classList.add('show');
             modalEl.style.display = 'block';
             document.body.classList.add('modal-open');
+            try{ initSelect2ForKeputusanModal(); }catch(e){}
         }
         
         // If sport is already selected, load categories and check for existing results
@@ -785,6 +1024,16 @@ ob_start();
                                 
                                 // Update dropdowns to disable already selected options
                                 updateParticipantDropdowns();
+
+                                // If Select2 is active for kategori, set its value so UI reflects the selection
+                                try{
+                                    if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                                        const $k = jQuery(keputusanKategori);
+                                        if ($k.data('select2')) {
+                                            $k.val(kategoriId).trigger('change');
+                                        }
+                                    }
+                                }catch(e){}
                                 
                                 const modalEl = document.getElementById('modalKeputusan');
                                 if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
@@ -792,13 +1041,16 @@ ob_start();
                                 if (typeof coreui !== 'undefined' && coreui.Modal) {
                                     modalKeputusanInstance = new coreui.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
                                     modalKeputusanInstance.show();
+                                    try{ initSelect2ForKeputusanModal(); }catch(e){}
                                 } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
                                     modalKeputusanInstance = new bootstrap.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
                                     modalKeputusanInstance.show();
+                                    try{ initSelect2ForKeputusanModal(); }catch(e){}
                                 } else {
                                     modalEl.classList.add('show');
                                     modalEl.style.display = 'block';
                                     document.body.classList.add('modal-open');
+                                    try{ initSelect2ForKeputusanModal(); }catch(e){}
                                 }
                             });
                         } else {
@@ -808,13 +1060,16 @@ ob_start();
                             if (typeof coreui !== 'undefined' && coreui.Modal) {
                                 modalKeputusanInstance = new coreui.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
                                 modalKeputusanInstance.show();
+                                try{ initSelect2ForKeputusanModal(); }catch(e){}
                             } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
                                 modalKeputusanInstance = new bootstrap.Modal(modalEl, {backdrop: true, keyboard: true, focus: true});
                                 modalKeputusanInstance.show();
+                                try{ initSelect2ForKeputusanModal(); }catch(e){}
                             } else {
                                 modalEl.classList.add('show');
                                 modalEl.style.display = 'block';
                                 document.body.classList.add('modal-open');
+                                try{ initSelect2ForKeputusanModal(); }catch(e){}
                             }
                         }
                     });
@@ -844,16 +1099,26 @@ ob_start();
     }
     
     function updateParticipantDropdowns(changedSelect = null){
+        // prevent re-entrancy
+        if (updateParticipantDropdowns._running) return;
+        updateParticipantDropdowns._running = true;
+
         const selects = standingsContainer.querySelectorAll('.standings-select');
         if (!selects || selects.length === 0) return;
         
-        // Collect all selected values
+        // Collect all selected participant values and their kontingen
         const selectedValues = {};
+        const selectedKontingen = {};
         selects.forEach(select => {
             const position = parseInt(select.getAttribute('data-position'));
             const value = select.value;
             if (value && value !== '') {
                 selectedValues[position] = value;
+                // try to read kontingen from selected option data attribute
+                try{
+                    const opt = select.options[select.selectedIndex];
+                    selectedKontingen[position] = opt ? (opt.getAttribute('data-kontinjen') || '') : '';
+                }catch(e){ selectedKontingen[position] = ''; }
             }
         });
         
@@ -905,16 +1170,16 @@ ob_start();
                     opt.disabled = false;
                     opt.style.color = '';
                 } else {
-                    // Check if this option is selected in another position
-                    var isSelectedElsewhere = false;
-                    for (const [pos, val] of Object.entries(finalSelectedValues)) {
-                        if (parseInt(pos) !== currentPosition && val === opt.value) {
-                            isSelectedElsewhere = true;
+                    // Disable option if its kontingen is already selected in another position
+                    var optKont = opt.getAttribute ? (opt.getAttribute('data-kontinjen') || '') : '';
+                    var isKontSelectedElsewhere = false;
+                    for (const [pos, kont] of Object.entries(selectedKontingen)) {
+                        if (parseInt(pos) !== currentPosition && kont && kont === optKont) {
+                            isKontSelectedElsewhere = true;
                             break;
                         }
                     }
-                    
-                    if (isSelectedElsewhere && opt.value !== currentValue) {
+                    if (isKontSelectedElsewhere && opt.value !== currentValue) {
                         opt.disabled = true;
                         opt.style.color = '#999';
                     } else {
@@ -924,6 +1189,30 @@ ob_start();
                 }
             });
         });
+
+        // If Select2 is used for standings-selects, update them so disabled options are reflected in the UI
+        try{
+            if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                const $modal = jQuery('#modalKeputusan');
+                const $stands = $modal.find('.standings-select');
+                $stands.each(function(){
+                    const $s = jQuery(this);
+                    // Ensure the underlying <option> disabled states are already set on the native select.
+                    // Do NOT destroy and recreate Select2 here (causes race/errors). Instead, trigger Select2 to update.
+                    try{
+                        // Trigger Select2 change which causes it to re-evaluate available options when opened.
+                        $s.trigger('change.select2');
+                    }catch(e){
+                        console.warn('updateParticipantDropdowns: select2 trigger failed', e);
+                        try{ $s.trigger('change'); }catch(e){}
+                    }
+                });
+            }
+        }catch(e){
+            console.warn('updateParticipantDropdowns: select2 refresh failed', e);
+        } finally {
+            updateParticipantDropdowns._running = false;
+        }
     }
     
     function saveKeputusan(){
@@ -1246,13 +1535,14 @@ ob_start();
                     const nameParts = displayRaw.split(' - ');
                     const namePretty = displayRaw.replace(/\s-\s/, ', ');
                     const medalMap = {1: '🥇', 2: '🥈', 3: '🥉'};
-                    const medal = medalMap[posNum] ? `<span class="me-2">${medalMap[posNum]}</span>` : '';
-                    const nameDisplay = medal + escapeHtml(namePretty);
+                    // Show medal icon in first column for top 3, otherwise show numeric position
+                    const rankCell = medalMap[posNum] ? `<span class="medal-icon">${medalMap[posNum]}</span>` : escapeHtml(String(posNum));
+                    const nameDisplay = escapeHtml(namePretty);
 
-                    tr.innerHTML = `<td class="align-top text-center">${escapeHtml(String(posNum))}</td>` +
+                    tr.innerHTML = `<td class="align-top text-center">${rankCell}</td>` +
                                    `<td class="align-top">${escapeHtml(sukan)}</td>` +
                                    `<td class="align-top">${escapeHtml(acara)}</td>` +
-                                `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
+                                   `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
                     tbody.appendChild(tr);
                 });
 
@@ -1317,6 +1607,7 @@ ob_start();
     
     keputusanSukan.addEventListener('change', function(){
         const sukanId = this.value;
+        console.log('keputusanSukan change -> sukanId=', sukanId);
         keputusanKategori.value = '';
         loadParticipants('');
         
@@ -1326,9 +1617,25 @@ ob_start();
             updateCategoryRestrictions();
         });
     });
+
+    // Debug: observe attribute changes on modal kategori select to catch unexpected disables
+    try{
+    }catch(e){/* ignore */}
     
+    // Debounced kategori change handler to avoid duplicate/triple loads
+    var _kategoriChangeTimer = null;
+    var _kategoriLastValue = null;
     keputusanKategori.addEventListener('change', function(){
-        console.log('Kategori changed to:', this.value);
+        const newVal = this.value;
+        console.log('Kategori changed to (raw):', newVal);
+        if (_kategoriLastValue === newVal) {
+            console.log('Kategori value unchanged, ignoring');
+            return;
+        }
+        clearTimeout(_kategoriChangeTimer);
+        _kategoriChangeTimer = setTimeout(()=>{
+            _kategoriLastValue = newVal;
+            console.log('Kategori changed (debounced):', newVal);
         
         // First check: Check if selected category is disabled (has existing result)
         const selectedOption = this.options[this.selectedIndex];
@@ -1346,40 +1653,41 @@ ob_start();
             return;
         }
         
-        // Second check: Validate with server if sport is set
-        if(this.value && keputusanSukan.value){
-            const kategoriId = parseInt(this.value);
-            checkCategoriesWithResults(keputusanSukan.value, keputusanKategori)
-                .then(kategoriWithResults => {
-                    if(kategoriWithResults.includes(kategoriId)){
-                        // This category has existing results - prevent selection
-                        if (window.Swal) {
-                            Swal.fire({
-                                text: 'Kategori ini sudah mempunyai keputusan. Sila pilih kategori lain.',
-                                icon: 'warning',
-                                timer: 3000
-                            });
-                        } else {
-                            alert('Kategori ini sudah mempunyai keputusan. Sila pilih kategori lain.');
+            // Second check: Validate with server if sport is set
+            if(newVal && keputusanSukan.value){
+                const kategoriId = parseInt(newVal);
+                checkCategoriesWithResults(keputusanSukan.value, keputusanKategori)
+                    .then(kategoriWithResults => {
+                        if(kategoriWithResults.includes(kategoriId)){
+                            // This category has existing results - prevent selection
+                            if (window.Swal) {
+                                Swal.fire({
+                                    text: 'Kategori ini sudah mempunyai keputusan. Sila pilih kategori lain.',
+                                    icon: 'warning',
+                                    timer: 3000
+                                });
+                            } else {
+                                alert('Kategori ini sudah mempunyai keputusan. Sila pilih kategori lain.');
+                            }
+                            keputusanKategori.value = '';
+                            // Re-update restrictions to ensure UI is correct
+                            updateCategoryRestrictions();
+                            return;
                         }
-                        this.value = '';
-                        // Re-update restrictions to ensure UI is correct
-                        updateCategoryRestrictions();
-                        return;
-                    }
-                    
-                    // Category is valid, load participants
-                    loadParticipants(kategoriId);
-                })
-                .catch(err => {
-                    console.error('Error checking category:', err);
-                    // If check fails, still allow selection but load participants
-                    loadParticipants(this.value);
-                });
-        } else {
-            // No validation needed if sport not set, just load participants
-            loadParticipants(this.value);
-        }
+                        
+                        // Category is valid, load participants
+                        loadParticipants(kategoriId);
+                    })
+                    .catch(err => {
+                        console.error('Error checking category:', err);
+                        // If check fails, still allow selection but load participants
+                        loadParticipants(newVal);
+                    });
+            } else {
+                // No validation needed if sport not set, just load participants
+                loadParticipants(newVal);
+            }
+        }, 120);
     });
     
     // Note: Date change no longer affects category restrictions since we check regardless of date
@@ -1452,6 +1760,8 @@ ob_start();
 /* Modal table nowrap enforcement and tooltip name truncation */
 #modalKeputusanFullTable th, #modalKeputusanFullTable td { white-space: nowrap; overflow: hidden; }
 #modalKeputusanFullTable .text-truncate { max-width: 100%; display: inline-block; vertical-align: middle; }
+/* Medal icon styling in rank column */
+.medal-icon{font-size:1.1rem;display:inline-block}
 </style>
 
 <?php

@@ -73,9 +73,9 @@ if (is_dir($bannerDir)) {
     closedir($dh);
   }
 }
-// fallback to single banner if none found
+// fallback to single banner if none found (use fallback subfolder)
 if (empty($bannerFiles)) {
-  $bannerFiles = [ asset('img/banners/sam2026-banner.jpg') ];
+  $bannerFiles = [ asset('img/banners/fallback/sam2026-banner.jpg') ];
 }
 $slidesJs = json_encode($bannerFiles);
 $siteTitle = defined('SITE_NAME') ? SITE_NAME : 'SAM 2026';
@@ -111,6 +111,14 @@ $csrfToken = $_SESSION['csrf_token'];
   <style>
     body { font-family: 'Poppins', sans-serif; font-size: 13px; }
   </style>
+  <style>
+    .tab-btn{ position:relative; display:inline-block; padding:0.5rem 0.75rem; color: #6b7280; text-decoration:none; }
+    .tab-btn::after{ content:''; position:absolute; left:0; right:0; height:3px; bottom:-10px; background:transparent; transition:all .18s ease; border-radius:2px; }
+    .tab-btn:hover{ color: #0babcd; }
+    .tab-btn:hover::after{ background: #0babcd; transform:translateY(3px); }
+    .tab-btn.active{ color:#0babcd; }
+    .tab-btn.active::after{ background:#0babcd; transform:translateY(3px); }
+  </style>
 </head>
 <body class="bg-gray-100" x-data>
 
@@ -119,7 +127,8 @@ $csrfToken = $_SESSION['csrf_token'];
   <div class="max-w-7xl mx-auto p-4">
     <img src="<?= htmlspecialchars($logoMain) ?>" alt="Logo" class="w-20">
     <nav class="flex space-x-4 border-b border-gray-300 mt-4">
-      <button class="tab-btn px-4 py-2 font-semibold text-[#0babcd] border-b-4 border-[#0babcd]">Utama</button>
+      <a href="<?php echo url('public/index.php'); ?>" class="tab-btn active">Utama</a>
+      <a href="<?php echo url('public/medal-standings.php'); ?>" class="tab-btn">Rangking Kontinjen</a>
     </nav>
   </div>
 </header>

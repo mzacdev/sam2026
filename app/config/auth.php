@@ -382,7 +382,9 @@ class Auth {
         Session::set('user_username', $user['username']);
         Session::set('user_email', $user['email']);
         Session::set('user_name', $user['full_name']);
-        Session::set('user_role', $user['role']);
+            // Normalize and save role (ensure consistent uppercase)
+            $normalizedRole = isset($user['role']) ? strtoupper($user['role']) : null;
+            Session::set('user_role', $normalizedRole);
         // Save contingent id for CONTINGENT users (may be NULL for other roles)
         if (isset($user['kontinjen_id'])) {
             Session::set('kontinjen_id', $user['kontinjen_id']);

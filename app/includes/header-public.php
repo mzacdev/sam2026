@@ -2,6 +2,9 @@
 $pageTitle = isset($page_title) ? $page_title . ' - ' . SITE_NAME : SITE_NAME;
 $currentUser = null;
 
+// mark as public so admin-only UI is hidden
+$is_public = true;
+
 if (function_exists('getAuth')) {
     $auth = getAuth();
     if ($auth && $auth->isLoggedIn()) {
@@ -61,6 +64,44 @@ $userEmail = $currentUser['email'] ?? '';
                 } catch(e) { console && console.warn && console.warn(e); }
             })();
         </script>
+    <style>
+    /* Public header navigation — larger, clean vanilla CSS */
+    .header-section .nav { display:flex; gap:0.6rem; align-items:center; margin:0; padding:0; }
+    .header-section .nav .nav-item { list-style:none; }
+    .header-section .nav .nav-link {
+        font-size:1.05rem;
+        font-weight:600;
+        padding:0.45rem 0.9rem;
+        color:#334155;
+        text-decoration:none;
+        position:relative;
+        border-radius:6px;
+        transition:color .15s ease, background-color .12s ease;
+    }
+    .header-section .nav .nav-link::after{
+        content:'';
+        position:absolute;
+        left:12%;
+        right:12%;
+        height:3px;
+        bottom:-8px;
+        background:transparent;
+        border-radius:3px;
+        transition:all .18s ease;
+        transform-origin:center;
+    }
+    .header-section .nav .nav-link:hover{ color:#0babcd; background:transparent; }
+    .header-section .nav .nav-link:hover::after{ background:#0babcd; transform:translateY(3px); }
+    .header-section .nav .nav-link.active{ color:#0babcd; }
+    .header-section .nav .nav-link.active::after{ background:#0babcd; transform:translateY(3px); }
+    @media(max-width:767px){
+        .header-section .col-auto.d-none.d-md-flex{ display:none !important; }
+    }
+    /* Place sports logos immediately left of the logged user on the right */
+    .header-section .sukan-logos{ order: 2; }
+    .header-section .header-user{ order: 3; margin-left: 8px; }
+    .header-section .sukan-logos img{ margin-left: 6px; margin-right: 6px; }
+    </style>
 </head>
 <body>
 
@@ -79,39 +120,23 @@ $userEmail = $currentUser['email'] ?? '';
                     </a>
                 </div><!-- Header Logo (Header Left) End -->
 
-                
+                <!-- Left Navigation (next to logo) -->
+                <div class="col-auto d-none d-md-flex align-items-center ms-1">
+                    <ul class="nav">
+                        <li class="nav-item"><a class="nav-link active" href="<?php echo url('public/index.php'); ?>">Home</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#">Schedule &amp; Result</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo url('public/athletes.php'); ?>">Athletes</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo url('public/contingents.php'); ?>">Contingent</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo url('public/medal-standings.php'); ?>">Medal Tally</a></li>
+                    </ul>
+                </div>
 
                 <!-- Header Right Start -->
-                <div class="header-right flex-grow-1 col-auto">
-                    <div class="row justify-content-between align-items-center">
+                <div class="header-right flex-grow-1 col-auto ms-auto">
+                    <div class="row justify-content-end align-items-center">
 
-                        <!-- Side Header Toggle & Search (admin only) -->
-                        <?php if (empty($is_public)): ?>
-                        <div class="col-auto">
-                            <div class="row align-items-center">
-                                <div class="col-auto">
-                                    <button class="side-header-toggle"><i class="zmdi zmdi-menu"></i></button>
-                                </div>
-                                <div class="col-auto">
-                                    <div class="header-search">
-                                        <button class="header-search-open d-block d-xl-none"><i class="zmdi zmdi-search"></i></button>
-                                        <div class="header-search-form">
-                                            <form action="#">
-                                                <input type="text" placeholder="Cari...">
-                                                <button><i class="zmdi zmdi-search"></i></button>
-                                            </form>
-                                            <button class="header-search-close d-block d-xl-none"><i class="zmdi zmdi-close"></i></button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <!-- Header User Area removed from middle; shown on far-right when logged in -->
-
-                        <!-- Sports logos + User/Login (far right) -->
-                        <div class="col-auto ms-auto d-flex align-items-center" style="gap:.5rem;">
+                        <!-- Sports logos + Login (right of logo, left of user) -->
+                        <div class="col-auto d-flex align-items-center sukan-logos" style="gap:.5rem;">
                             <?php
                             $sukanDir = realpath(__DIR__ . '/../../assets/img/sukan');
                             $sukanLogos = [];
@@ -133,54 +158,7 @@ $userEmail = $currentUser['email'] ?? '';
                                 <img src="<?php echo asset('img/sukan/' . $logo); ?>" alt="<?php echo $label; ?>" title="<?php echo $label; ?>" width="40" height="40" onerror="this.onerror=null;this.src='<?php echo asset('img/logos/logo-main.png'); ?>'" />
                             <?php endforeach; ?>
 
-                            <?php if (!empty($currentUser)): ?>
-                                <?php
-                                $defaultAvatar = asset('img/avatar/profiles.jpg');
-                                $avatarSrc = $defaultAvatar;
-                                $candidateKeys = ['avatar','f_avatar','profile_image','photo','image','avatar_url'];
-                                foreach ($candidateKeys as $k) {
-                                    if (!empty($currentUser[$k])) {
-                                        $val = trim((string)$currentUser[$k]);
-                                        if ($val === '') continue;
-                                        if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) { $avatarSrc = $val; break; }
-                                        $candidates = [__DIR__ . '/../../assets/img/avatar/' . $val, __DIR__ . '/../../assets/light/images/avatar/' . $val, __DIR__ . '/../../assets/img/users/' . $val, __DIR__ . '/../../assets/img/' . $val];
-                                        foreach ($candidates as $i => $sp) { if (file_exists($sp)) { switch ($i) { case 0: $avatarSrc = asset('img/avatar/' . $val); break; case 1: $avatarSrc = asset('light/images/avatar/' . $val); break; case 2: $avatarSrc = asset('img/users/' . $val); break; default: $avatarSrc = asset('img/' . $val); break; } break 2; } }
-                                        $avatarSrc = asset('img/avatar/' . $val);
-                                        break;
-                                    }
-                                }
-                                ?>
-                                <div class="dropdown">
-                                    <a href="#" class="d-inline-flex align-items-center text-decoration-none" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <img src="<?php echo htmlspecialchars($avatarSrc, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" class="rounded-circle" width="40" height="40" onerror="this.onerror=null;this.src='<?php echo $defaultAvatar; ?>'">
-                                        <span class="d-none d-md-inline ms-2 me-1"><?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></span>
-                                        <i class="zmdi zmdi-chevron-down d-none d-md-inline"></i>
-                                    </a>
-                                    <ul class="dropdown-menu dropdown-menu-end p-0" aria-labelledby="userDropdown">
-                                        <li>
-                                            <div class="card border-0 shadow-sm" style="min-width:220px;">
-                                                <div class="card-body p-3 d-flex align-items-center gap-3">
-                                                    <div>
-                                                        <img src="<?php echo htmlspecialchars($avatarSrc, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" class="rounded-circle" width="56" height="56" onerror="this.onerror=null;this.src='<?php echo $defaultAvatar; ?>'">
-                                                    </div>
-                                                    <div class="flex-fill">
-                                                        <div style="display:block;max-width:100%;">
-                                                            <div class="fw-semibold text-dark" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;"><?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></div>
-                                                            <?php if ($userEmail): ?><div class="text-muted small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?php echo htmlspecialchars($userEmail, ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
-                                                        </div>
-                                                        <div class="text-muted small mt-1"><?php echo htmlspecialchars($currentUser['role'] ?? $currentUser['position'] ?? '', ENT_QUOTES, 'UTF-8'); ?></div>
-                                                    </div>
-                                                </div>
-                                                <div class="card-footer p-2 bg-white">
-                                                    <div class="d-grid">
-                                                        <a class="btn btn-sm btn-primary confirm-logout" href="<?php echo url('auth/logout.php'); ?>">Log Keluar</a>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </li>
-                                    </ul>
-                                </div>
-                            <?php else: ?>
+                            <?php if (empty($currentUser)): ?>
                                 <a class="btn btn-primary btn-sm rounded-pill d-inline-flex align-items-center ms-3" href="<?php echo url('auth/login.php'); ?>" title="Log Masuk">
                                     <i class="zmdi zmdi-account-circle me-2" aria-hidden="true" style="font-size:1.05rem;"></i>
                                     <span class="d-none d-md-inline">Log Masuk</span>
@@ -188,6 +166,85 @@ $userEmail = $currentUser['email'] ?? '';
                             <?php endif; ?>
                         </div>
 
+                        <!-- Header User Area Start (moved to far right) -->
+                        <div class="col-auto header-user">
+                            <ul class="header-notification-area">
+                                <!-- Sports icons moved to far-right area (rendered above) -->
+
+                                <!-- Language & Theme Selector removed per request -->
+                                <?php if ($currentUser): ?>
+                                    <?php
+                                    // Resolve avatar: prefer explicit user fields, allow URL or local filenames, fallback to default in assets/img/avatar
+                                    $defaultAvatar = asset('img/avatar/profiles.jpg');
+                                    $avatarSrc = $defaultAvatar;
+                                    $candidateKeys = ['avatar','f_avatar','profile_image','photo','image','avatar_url'];
+                                    foreach ($candidateKeys as $k) {
+                                        if (!empty($currentUser[$k])) {
+                                            $val = trim((string)$currentUser[$k]);
+                                            if ($val === '') continue;
+                                            // If looks like absolute URL or root-relative path, use as-is
+                                            if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) {
+                                                $avatarSrc = $val;
+                                                break;
+                                            }
+
+                                            // Try common local asset locations (server-side existence check)
+                                            $candidates = [
+                                                __DIR__ . '/../../assets/img/avatar/' . $val,
+                                                __DIR__ . '/../../assets/light/images/avatar/' . $val,
+                                                __DIR__ . '/../../assets/img/users/' . $val,
+                                                __DIR__ . '/../../assets/img/' . $val,
+                                            ];
+                                            foreach ($candidates as $i => $sp) {
+                                                if (file_exists($sp)) {
+                                                    // map server path index to public asset helper
+                                                    switch ($i) {
+                                                        case 0: $avatarSrc = asset('img/avatar/' . $val); break;
+                                                        case 1: $avatarSrc = asset('light/images/avatar/' . $val); break;
+                                                        case 2: $avatarSrc = asset('img/users/' . $val); break;
+                                                        default: $avatarSrc = asset('img/' . $val); break;
+                                                    }
+                                                    break 2;
+                                                }
+                                            }
+                                            // If no server file found, still try treating value as filename under avatar folder
+                                            $avatarSrc = asset('img/avatar/' . $val);
+                                            break;
+                                        }
+                                    }
+                                    ?>
+                                    <li class="adomx-dropdown col-auto">
+                                        <a class="toggle" href="#">
+                                            <span class="user">
+                                                <span class="avatar">
+                                                    <img src="<?php echo htmlspecialchars($avatarSrc, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='<?php echo $defaultAvatar; ?>'">
+                                                    <span class="status"></span>
+                                                </span>
+                                                <span class="name"><?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></span>
+                                            </span>
+                                        </a>
+
+                                        <div class="adomx-dropdown-menu dropdown-menu-user">
+                                            <div class="head">
+                                                <h5 class="name">
+                                                    <a href="#"><?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></a>
+                                                </h5>
+                                                <?php if ($userEmail): ?>
+                                                    <a class="mail" href="#"><?php echo htmlspecialchars($userEmail, ENT_QUOTES, 'UTF-8'); ?></a>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="body">
+                                                <ul>
+                                                    <!-- Removed duplicate 'Tetapan' entry from header (already in sidebar) -->
+                                                    <li><a class="trigger-change-password" href="#"><i class="zmdi zmdi-key"></i> Tukar Kata Laluan</a></li>
+                                                    <li><a class="confirm-logout" href="<?php echo url('auth/logout.php'); ?>"><i class="zmdi zmdi-lock-open"></i>Log keluar</a></li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </li>
+                                <?php endif; ?>
+                            </ul>
+                        </div><!-- Header User Area End -->
                     </div>
                 </div><!-- Header Right End -->
 

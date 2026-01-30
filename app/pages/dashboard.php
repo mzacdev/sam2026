@@ -234,6 +234,7 @@ ob_start();
         .medal-table td, .medal-table th { padding: .26rem .35rem; vertical-align: middle; font-size: .85rem; }
         .medal-rank { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:20px; border-radius:6px; background:#f1f5f9; color:#0f172a; font-weight:700; font-size:.78rem; }
         .medal-name { font-weight:600; color:#0f1724; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:10rem; font-size:.85rem; }
+        .kontinjen-logo{width:28px;height:18px;object-fit:contain;border-radius:4px;margin-right:8px;flex:0 0 auto}
         .medal-count { display:inline-block; min-width:32px; padding:0.16rem 0.4rem; border-radius:6px; background:#e5e7eb; color:#0f172a; font-weight:700; font-size:.85rem; }
         .medal-badge { display:inline-block; min-width:28px; padding:.14rem .35rem; border-radius:6px; text-align:center; background:#eef2f7; color:#0b5ed7; font-weight:700; font-size:.85rem; }
         .medal-table .btn.medal-detail-btn { font-weight:700; padding:0; font-size:.85rem; }
@@ -243,6 +244,11 @@ ob_start();
         .modal-top .modal-dialog { margin-top: 60px; margin-bottom: 20px; }
         /* Lock body scroll when modal open */
         body.modal-open { overflow: hidden; padding-right: 0 !important; }
+        /* Sponsors grid (below medal tally) */
+        .sponsors-section { margin-top:12px; padding:12px; background:linear-gradient(180deg,#ffffff,#fbfdff); border-radius:8px; border:1px solid rgba(14,21,47,0.04); }
+        .sponsors-section h6 { margin:0 0 8px 0; font-size:0.92rem; color:#1f2937; }
+        .sponsors-grid { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+        .sponsors-grid img { height:40px; width:auto; object-fit:contain; border-radius:6px; background:#fff; padding:6px; box-shadow:0 6px 14px rgba(16,24,40,0.04); }
     </style>
     <div class="row align-items-center mb-4">
         <div class="col">
@@ -366,7 +372,12 @@ ob_start();
                                             <span class="medal-rank"><?php echo $r; ?></span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="align-middle"><div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                    <td class="align-middle">
+                                        <div style="display:flex;align-items:center;">
+                                            <img src="<?php echo asset('img/logos/UA/' . ($mr['kod_universiti'] ?? '') . '.svg'); ?>" alt="" class="kontinjen-logo" onerror="this.style.display='none'" />
+                                            <div class="medal-name" title="<?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($mr['nama_pendek'] ?? ($mr['kod_universiti'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div>
+                                        </div>
+                                    </td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-warning medal-detail-btn" data-medal="emas"><?php echo (int)($mr['emas'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-secondary medal-detail-btn" data-medal="perak"><?php echo (int)($mr['perak'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-danger medal-detail-btn" data-medal="gangsa"><?php echo (int)($mr['gangsa'] ?? 0); ?></button></td>
@@ -385,6 +396,7 @@ ob_start();
                     <pre style="white-space:pre-wrap; word-break:break-word; font-size:0.78rem; margin:6px 0 0 0;"><?php echo htmlspecialchars(json_encode($medalDebug, JSON_PRETTY_PRINT), ENT_QUOTES, 'UTF-8'); ?></pre>
                 </div>
             <?php endif; ?>
+            <!-- Sponsors removed from dashboard; shown on public medal standings page only -->
         </div>
     </div>
 </div>
@@ -546,12 +558,12 @@ ob_start();
         });
     });
 })();
-</script>
+    </script>
     </div>
 
 </div>
 
 <?php
-$content = ob_get_clean();
+    $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
 ?>

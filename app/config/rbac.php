@@ -52,8 +52,11 @@ class RBAC {
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER'],
         'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
+        // Setup Pertandingan - restricted to ADMIN and CONTINGENT only
+        'pages/setup-pertandingan.php' => ['ADMIN', 'CONTINGENT'],
+        // Setup Jadual - new page for schedule setup (ADMIN, ORGANIZER)
+        'pages/setup-jadual.php' => ['ADMIN', 'ORGANIZER'],
         'pages/contingent-admin.php' => ['ADMIN', 'ORGANIZER', 'JUDGE', 'VIEWER'],
-        'pages/checklist.php' => ['ADMIN'],
         'pages/matrix-access.php' => ['ADMIN'],
         
         // Settings - ADMIN only
@@ -150,6 +153,7 @@ class RBAC {
     public function hasPageAccess($pagePath) {
         // Normalize page path
         $pagePath = $this->normalizePagePath($pagePath);
+        // (no debug logging)
         
         // Check if page is public
         if ($this->isPublicPage($pagePath)) {
@@ -159,6 +163,16 @@ class RBAC {
         // Page requires authentication - check if user is logged in
         if (!$this->auth->isLoggedIn()) {
             return false;
+        }
+
+        // ADMIN shortcut: administrators have full access
+        try {
+            $roleCheck = Session::get('user_role');
+            if ($roleCheck && strtoupper($roleCheck) === 'ADMIN') {
+                return true;
+            }
+        } catch (Exception $e) {
+            // ignore session read errors
         }
         
         // Use database if available
@@ -183,21 +197,19 @@ class RBAC {
                     // If user has roles in user_roles table, use database-based access control
                     if (!empty($userRoleIds)) {
                         // Check if any of user's roles have access to this page
-                        $placeholders = implode(',', array_fill(0, count($userRoleIds), '?'));
-                        $stmt = $this->db->prepare("
-                            SELECT COUNT(*) as count
-                            FROM page_role_access pra
-                            INNER JOIN page_access_rules par ON pra.page_rule_id = par.id
-                            WHERE par.page_path = :page_path
-                            AND pra.role_id IN ($placeholders)
-                        ");
-                        
-                        $params = [':page_path' => $pagePath];
-                        foreach ($userRoleIds as $roleId) {
-                            $params[] = $roleId;
-                        }
-                        
-                        $stmt->execute($params);
+                            $inPlaceholders = implode(',', array_fill(0, count($userRoleIds) + 1, '?'));
+                            $sql = "
+                                SELECT COUNT(*) as count
+                                FROM page_role_access pra
+                                INNER JOIN page_access_rules par ON pra.page_rule_id = par.id
+                                WHERE par.page_path = ?
+                                AND pra.role_id IN (" . implode(',', array_fill(0, count($userRoleIds), '?')) . ")
+                            ";
+                            $stmt = $this->db->prepare($sql);
+
+                            // Build positional params: first pagePath, then role ids
+                            $params = array_merge([$pagePath], $userRoleIds);
+                            $stmt->execute($params);
                         $result = $stmt->fetch();
                         
                         return $result && $result['count'] > 0;
@@ -213,10 +225,12 @@ class RBAC {
         
         // Fallback to static configuration
         $userRole = Session::get('user_role');
-        
-        // If page is in pageAccessRules, check if user's role is allowed
+        $userRoleNorm = $userRole ? strtoupper($userRole) : null;
+
+        // If page is in pageAccessRules, check if user's role is allowed (case-insensitive)
         if (isset($this->pageAccessRules[$pagePath])) {
-            return in_array($userRole, $this->pageAccessRules[$pagePath]);
+            $allowed = array_map('strtoupper', $this->pageAccessRules[$pagePath]);
+            return in_array($userRoleNorm, $allowed, true);
         }
         
         // If page is not in pageAccessRules but is not public, require any authenticated user
@@ -438,7 +452,6 @@ class RBAC {
         if (!$this->auth->isLoggedIn()) {
             return false;
         }
-        
         // Check if user has access to the page
         return $this->hasPageAccess($pagePath);
     }
