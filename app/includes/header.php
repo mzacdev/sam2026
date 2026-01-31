@@ -171,11 +171,13 @@ $userEmail = $currentUser['email'] ?? '';
                                                         <div class="text-muted small mt-1"><?php echo htmlspecialchars($currentUser['role'] ?? $currentUser['position'] ?? '', ENT_QUOTES, 'UTF-8'); ?></div>
                                                     </div>
                                                 </div>
-                                                <div class="card-footer p-2 bg-white">
-                                                    <div class="d-grid">
-                                                        <a class="btn btn-sm btn-primary confirm-logout" href="<?php echo url('auth/logout.php'); ?>">Log Keluar</a>
-                                                    </div>
-                                                </div>
+                                                <hr class="dropdown-divider" />
+                                                <a class="dropdown-item trigger-change-password" href="#" style="padding: .5rem 1rem;">
+                                                    <i class="zmdi zmdi-key me-2"></i> Tukar Kata Laluan
+                                                </a>
+                                                <a class="dropdown-item confirm-logout" href="<?php echo url('auth/logout.php'); ?>" style="padding: .5rem 1rem;">
+                                                    <i class="zmdi zmdi-power me-2"></i> Log Keluar
+                                                </a>
                                             </div>
                                         </li>
                                     </ul>

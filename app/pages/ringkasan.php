@@ -457,7 +457,7 @@ ob_start();
                                             <tr>
                                                 <td class="text-center"><?php echo $idxGender === $firstNonEmptyIndex ? $bilAcara : ''; ?></td>
                                                 <td><?php echo $idxGender === $firstNonEmptyIndex ? htmlspecialchars($sukan, ENT_QUOTES, 'UTF-8') : ''; ?></td>
-                                                <td><?php echo ($g === 'LELAKI') ? '<i class="cil-male me-1"></i>Lelaki' : '<i class="cil-child me-1"></i>Wanita'; ?></td>
+                                                <td class="text-end"><?php echo ($g === 'LELAKI') ? '<i class="cil-male me-1"></i>Lelaki' : '<i class="cil-child me-1"></i>Wanita'; ?></td>
                                                 <?php $rowSum = 0; ?>
                                                 <?php foreach ($unis as $uni): ?>
                                                     <?php

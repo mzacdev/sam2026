@@ -255,12 +255,7 @@ ob_start();
             <h1 class="h3 mb-0">Dashboard</h1>
             <p class="text-muted small mb-0">Ringkasan pantas sistem dan aktiviti terkini</p>
         </div>
-        <div class="col-auto">
-            <div class="btn-group">
-                <button class="btn btn-outline-secondary">Laporan</button>
-                <button class="btn btn-primary">Tindakan Cepat</button>
-            </div>
-        </div>
+        <!-- Quick action buttons removed as requested -->
     </div>
 
     <div class="row g-3 align-items-stretch">

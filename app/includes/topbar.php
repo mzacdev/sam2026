@@ -104,14 +104,11 @@ if (!defined('SKIP_AUTH_CHECK')) {
                                         <span class="badge bg-primary"><?php echo htmlspecialchars($currentUser['role'] ?? 'GUEST'); ?></span>
                                     </div>
                                 </div>
-                                <a class="dropdown-item" href="#">
-                                    <i class="icon me-2 cil cil-user"></i> Profil
-                                </a>
-                                <a class="dropdown-item" href="<?php echo url('pages/settings.php'); ?>">
-                                    <i class="icon me-2 cil cil-settings"></i> Tetapan
-                                </a>
                                 <hr class="dropdown-divider">
-                                <a class="dropdown-item" href="<?php echo url('auth/logout.php'); ?>">
+                                <a class="dropdown-item trigger-change-password" href="#">
+                                    <i class="icon me-2 cil cil-lock-locked"></i> Tukar Kata Laluan
+                                </a>
+                                <a class="dropdown-item confirm-logout" href="<?php echo url('auth/logout.php'); ?>">
                                     <i class="icon me-2 cil cil-account-logout"></i> Log Keluar
                                 </a>
                             </div>

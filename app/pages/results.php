@@ -20,9 +20,7 @@ ob_start();
                     <h2 class="mb-0">Keputusan</h2>
                     <p class="text-muted">Rekod keputusan pertandingan</p>
                 </div>
-                <button class="btn btn-primary" id="btnRecordResult">
-                    <i class="cil cil-plus me-1"></i> Rekod Keputusan
-                </button>
+                
             </div>
         </div>
     </div>
