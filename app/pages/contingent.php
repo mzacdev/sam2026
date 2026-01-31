@@ -849,9 +849,10 @@ function showRegistrationForm(data = null) {
 
 // Load form data from localStorage
 function loadFormData() {
-    const saved = localStorage.getItem('contingentRegistrationData');
+    let saved = null;
+    try { saved = localStorage.getItem('contingentRegistrationData'); } catch(e) { saved = null; }
     if (saved) {
-        formData = JSON.parse(saved);
+        try { formData = JSON.parse(saved); } catch(e){ formData = {}; }
         // Populate form fields
         Object.keys(formData).forEach(key => {
             const field = document.getElementById(key);
@@ -874,8 +875,7 @@ function saveFormData() {
             formData[fieldId] = field.value;
         }
     });
-    
-    localStorage.setItem('contingentRegistrationData', JSON.stringify(formData));
+    try { localStorage.setItem('contingentRegistrationData', JSON.stringify(formData)); } catch(e) { /* ignore storage errors */ }
 }
 
 // Update step display

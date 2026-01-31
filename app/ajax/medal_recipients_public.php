@@ -6,10 +6,10 @@ header('Content-Type: application/json; charset=utf-8');
 
 $kod = isset($_GET['kod_universiti']) ? trim($_GET['kod_universiti']) : '';
 $medal = isset($_GET['medal']) ? strtolower(trim($_GET['medal'])) : '';
-$allowed = ['emas','perak','gangsa'];
+$allowed = ['emas','perak','gangsa','all'];
 
 if ($kod === '' || !in_array($medal, $allowed, true)) {
-    echo json_encode(['status' => 'error', 'message' => 'Parameter tidak sah']);
+    echo json_encode(['status' => 'error', 'message' => 'Invalid parameter']);
     exit;
 }
 
@@ -45,11 +45,21 @@ try {
         LEFT JOIN table_kategori kat ON kat.id = tr.kategori_id
         WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
           AND COALESCE(k.kod_universiti, k2.kod_universiti) = :kod
-          AND CASE jt.position WHEN 1 THEN 'emas' WHEN 2 THEN 'perak' WHEN 3 THEN 'gangsa' END = :medal
-        ORDER BY COALESCE(s.nama_sukan, s2.nama_sukan) ASC, kat.nama_kategori ASC, nama_pasukan ASC
-    ";
+        ";
+
+    // If not requesting all medals, add a filter for the specific medal
+    if ($medal !== 'all') {
+        $sql .= "\n          AND CASE jt.position WHEN 1 THEN 'emas' WHEN 2 THEN 'perak' WHEN 3 THEN 'gangsa' END = :medal";
+    }
+
+    $sql .= "\n        ORDER BY COALESCE(s.nama_sukan, s2.nama_sukan) ASC, kat.nama_kategori ASC, nama_pasukan ASC";
+
     $stmt = $db->prepare($sql);
-    $stmt->execute([':kod' => $kod, ':medal' => $medal]);
+    if ($medal !== 'all') {
+        $stmt->execute([':kod' => $kod, ':medal' => $medal]);
+    } else {
+        $stmt->execute([':kod' => $kod]);
+    }
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode(['status' => 'ok', 'data' => $rows]);
 } catch (Exception $e) {

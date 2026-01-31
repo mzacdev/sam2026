@@ -104,10 +104,10 @@ try {
                     participant_id VARCHAR(255) PATH '$.participant_id'
                 )) jt ON jt.position IN (1,2,3)
                 /* try to resolve participant as a team */
-                LEFT JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
+                LEFT JOIN table_pasukan p ON p.id = CAST(jt.participant_id AS UNSIGNED) AND p.deleted_at IS NULL
                 LEFT JOIN table_kontinjen kp ON kp.id = p.kontinjen_id AND kp.deleted_at IS NULL AND kp.status = 1
                 /* try to resolve participant as an individual athlete (pa -> pasukan -> kontinjen) */
-                LEFT JOIN table_pasukan_atlet pa ON pa.id = jt.participant_id AND pa.deleted_at IS NULL
+                LEFT JOIN table_pasukan_atlet pa ON pa.id = CAST(jt.participant_id AS UNSIGNED) AND pa.deleted_at IS NULL
                 LEFT JOIN table_pasukan p2 ON p2.id = pa.pasukan_id AND p2.deleted_at IS NULL
                 LEFT JOIN table_kontinjen ka ON ka.id = p2.kontinjen_id AND ka.deleted_at IS NULL AND ka.status = 1
                 WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
@@ -166,9 +166,9 @@ try {
                                     position INT PATH '$.position',
                                     participant_id VARCHAR(255) PATH '$.participant_id'
                                 )) jt ON 1=1
-                                LEFT JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
+                                LEFT JOIN table_pasukan p ON p.id = CAST(jt.participant_id AS UNSIGNED) AND p.deleted_at IS NULL
                                 LEFT JOIN table_kontinjen kp ON kp.id = p.kontinjen_id AND kp.deleted_at IS NULL
-                                LEFT JOIN table_pasukan_atlet pa ON pa.id = jt.participant_id AND pa.deleted_at IS NULL
+                                LEFT JOIN table_pasukan_atlet pa ON pa.id = CAST(jt.participant_id AS UNSIGNED) AND pa.deleted_at IS NULL
                                 LEFT JOIN table_pasukan p2 ON p2.id = pa.pasukan_id AND p2.deleted_at IS NULL
                                 LEFT JOIN table_kontinjen ka ON ka.id = p2.kontinjen_id AND ka.deleted_at IS NULL
                                 WHERE tr.id = :rid

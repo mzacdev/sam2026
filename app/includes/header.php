@@ -36,10 +36,16 @@ $userEmail = $currentUser['email'] ?? '';
     <script>
         (function(){
             try {
-                var theme = localStorage.getItem('sam_theme') || 'style-primary.css';
+                // Safely read theme from localStorage without throwing in restricted contexts
+                var theme = null;
+                try {
+                    if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') {
+                        theme = window.localStorage.getItem('sam_theme');
+                    }
+                } catch(inner){ theme = null; }
+                theme = theme || 'style-primary.css';
                 var themeLink = document.getElementById('themeStylesheet');
                 if (themeLink && theme) {
-                    // ensure we only use filenames (no path injection)
                     var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
                     if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
                     themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
@@ -47,20 +53,58 @@ $userEmail = $currentUser['email'] ?? '';
             } catch(e) { console && console.warn && console.warn(e); }
         })();
     </script>
-        <script>
-            (function(){
+    <script>
+        // Shim localStorage methods to avoid throws in restricted contexts (sandboxed iframes, extensions)
+        (function(){
+            try {
+                function makeSafeStorage(){
+                    return {
+                        getItem: function(){ return null; },
+                        setItem: function(){},
+                        removeItem: function(){},
+                        clear: function(){}
+                    };
+                }
+
+                // localStorage
                 try {
-                    var theme = localStorage.getItem('sam_theme') || 'style-primary.css';
-                    var themeLink = document.getElementById('themeStylesheet');
-                    if (themeLink && theme) {
-                        // ensure we only use filenames (no path injection)
-                        var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
-                        if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
-                        themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
+                    if (window.localStorage && typeof window.localStorage.getItem === 'function') {
+                        try { window.localStorage.getItem('__ls_test'); }
+                        catch(e){ try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.localStorage = makeSafeStorage(); } }
+                    } else {
+                        try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(e){ window.localStorage = makeSafeStorage(); }
                     }
-                } catch(e) { console && console.warn && console.warn(e); }
-            })();
-        </script>
+                } catch(e) { try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.localStorage = makeSafeStorage(); } }
+
+                // sessionStorage
+                try {
+                    if (window.sessionStorage && typeof window.sessionStorage.getItem === 'function') {
+                        try { window.sessionStorage.getItem('__ss_test'); }
+                        catch(e){ try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.sessionStorage = makeSafeStorage(); } }
+                    } else {
+                        try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(e){ window.sessionStorage = makeSafeStorage(); }
+                    }
+                } catch(e) { try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.sessionStorage = makeSafeStorage(); } }
+
+                // caches (CacheStorage)
+                try {
+                    if (!window.caches) {
+                        var safeCaches = { open: function(){ return Promise.reject(new Error('caches unavailable')); }, match: function(){ return Promise.reject(new Error('caches unavailable')); }, keys: function(){ return Promise.resolve([]); } };
+                        try{ Object.defineProperty(window, 'caches', { value: safeCaches, configurable: true }); }catch(e){ window.caches = safeCaches; }
+                    }
+                } catch(e){ try{ Object.defineProperty(window, 'caches', { value: { open: function(){ return Promise.reject(new Error('caches unavailable')); } }, configurable: true }); }catch(_){ window.caches = { open: function(){ return Promise.reject(new Error('caches unavailable')); } }; } }
+
+                // indexedDB - avoid throwing by setting to undefined if access throws
+                try {
+                    if (typeof window.indexedDB === 'undefined') {
+                        // leave as undefined
+                    }
+                } catch(e) {
+                    try{ Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); }catch(_){ window.indexedDB = undefined; }
+                }
+            } catch(e) { /* ignore overall shim errors */ }
+        })();
+    </script>
 </head>
 <body>
 

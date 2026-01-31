@@ -49,12 +49,8 @@ try {
         $params[':kod'] = $filterKod;
     }
     if ($filterKat > 0) {
-        // only include athletes who appear in results for the selected category
-        $sql .= " AND EXISTS (
-            SELECT 1 FROM table_results tr
-            JOIN JSON_TABLE(tr.standings, '$[*]' COLUMNS(participant_id VARCHAR(255) PATH '$.participant_id')) jt ON jt.participant_id = pa.id
-            WHERE tr.deleted_at IS NULL AND tr.kategori_id = :kat
-        )";
+        // Filter directly by athlete's kategori (show athletes registered for the category)
+        $sql .= " AND pa.kategori_id = :kat";
         $params[':kat'] = $filterKat;
     }
     if ($q !== '') {
@@ -160,5 +156,6 @@ ob_start();
 <?php
 $content = ob_get_clean();
 $content .= "\n<script>\n// Ensure filter works even if other scripts intercept form submission\n(function(){\n    var form = document.getElementById('athleteFilters');\n    if (!form) return;\n    form.addEventListener('submit', function(e){\n        try {\n            var params = new URLSearchParams();\n            var q = form.querySelector('input[name=\\\"q\\\"]');\n            var kod = form.querySelector('select[name=\\\"kod_universiti\\\"]');\n            var kat = form.querySelector('select[name=\\\"kategori_id\\\"]');\n            if (q && q.value) params.set('q', q.value);\n            if (kod && kod.value) params.set('kod_universiti', kod.value);\n            if (kat && kat.value) params.set('kategori_id', kat.value);\n            var action = form.getAttribute('action') || window.location.pathname;\n            window.location.href = action + (params.toString() ? ('?' + params.toString()) : '');\n        } catch(err){ /* fallback to default submit */ }\n        e.preventDefault();\n        return false;\n    }, { passive: false });\n})();\n<\/script>\n";
+$content .= "\n<script>\n// Ensure filter works even if other scripts intercept form submission\n(function(){\n    var form = document.getElementById('athleteFilters');\n    if (!form) return;\n    form.addEventListener('submit', function(e){\n        try {\n            var params = new URLSearchParams();\n            var q = form.querySelector('input[name=\\\"q\\\"]');\n            var kod = form.querySelector('select[name=\\\"kod_universiti\\\"]');\n            var kat = form.querySelector('select[name=\\\"kategori_id\\\"]');\n            if (q && q.value) params.set('q', q.value);\n            if (kod && kod.value) params.set('kod_universiti', kod.value);\n            if (kat && kat.value) params.set('kategori_id', kat.value);\n            var action = form.getAttribute('action') || window.location.pathname;\n            window.location.href = action + (params.toString() ? ('?' + params.toString()) : '');\n        } catch(err){ /* fallback to default submit */ }\n        e.preventDefault();\n        return false;\n    }, { passive: false });\n})();\n</script>\n";
 require_once __DIR__ . '/../includes/layout_public.php';
 ?>

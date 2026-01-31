@@ -39,10 +39,11 @@ $userEmail = $currentUser['email'] ?? '';
     <script>
         (function(){
             try {
-                var theme = localStorage.getItem('sam_theme') || 'style-primary.css';
+                var theme = null;
+                try { if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') theme = window.localStorage.getItem('sam_theme'); } catch(_){ theme = null; }
+                theme = theme || 'style-primary.css';
                 var themeLink = document.getElementById('themeStylesheet');
                 if (themeLink && theme) {
-                    // ensure we only use filenames (no path injection)
                     var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
                     if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
                     themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
@@ -50,37 +51,76 @@ $userEmail = $currentUser['email'] ?? '';
             } catch(e) { console && console.warn && console.warn(e); }
         })();
     </script>
-        <script>
-            (function(){
-                try {
-                    var theme = localStorage.getItem('sam_theme') || 'style-primary.css';
-                    var themeLink = document.getElementById('themeStylesheet');
-                    if (themeLink && theme) {
-                        // ensure we only use filenames (no path injection)
-                        var allowed = ['style-primary.css','style-red.css','style-green.css','style-brown.css','style-indigo.css','style-orange.css','style-pink.css','style-purple.css','style-cyan.css','style-teal.css','style-yellow.css','style-gray.css'];
-                        if (allowed.indexOf(theme) === -1) theme = 'style-primary.css';
-                        themeLink.href = '<?php echo asset("light/css/"); ?>' + theme;
-                    }
-                } catch(e) { console && console.warn && console.warn(e); }
-            })();
-        </script>
+    <script>
+        // Shim localStorage methods to avoid throws in restricted contexts (sandboxed iframes, extensions)
+        (function(){
+            try {
+                var ls = window.localStorage;
+                // Test access
+                try { ls && ls.getItem && ls.getItem('__ls_test'); return; } catch(e) {
+                    var _ls = ls || {};
+                    var safe = {
+                        getItem: function(k){ try{ return _ls.getItem ? _ls.getItem(k) : null; }catch(e){ return null; } },
+                        setItem: function(k,v){ try{ if(_ls.setItem) _ls.setItem(k,v); }catch(e){} },
+                        removeItem: function(k){ try{ if(_ls.removeItem) _ls.removeItem(k); }catch(e){} },
+                        clear: function(){ try{ if(_ls.clear) _ls.clear(); }catch(e){} }
+                    };
+                    try { Object.defineProperty(window, 'localStorage', { value: safe, configurable: true }); } catch(e){ window.localStorage = safe; }
+                }
+            } catch(e) { /* ignore */ }
+        })();
+    </script>
     <style>
-    /* Public header navigation — larger, clean vanilla CSS */
-    .header-section .nav { display:flex; gap:0.6rem; align-items:center; margin:0; padding:0; }
-    .header-section .nav .nav-item { list-style:none; }
-    .header-section .nav .nav-link {
-        font-size:1.05rem;
-        font-weight:600;
-        padding:0.45rem 0.9rem;
-        color:#334155;
-        text-decoration:none;
-        position:relative;
-        border-radius:6px;
-        transition:color .15s ease, background-color .12s ease;
-    }
-    .header-section .nav .nav-link::after{
-        content:'';
-        position:absolute;
+        // Safe storage shim: localStorage, sessionStorage, caches, indexedDB
+        (function(){
+            try {
+                function makeSafeStorage(){
+                    return {
+                        getItem: function(){ return null; },
+                        setItem: function(){},
+                        removeItem: function(){},
+                        clear: function(){}
+                    };
+                }
+
+                // localStorage
+                try {
+                    if (window.localStorage && typeof window.localStorage.getItem === 'function') {
+                        try { window.localStorage.getItem('__ls_test'); }
+                        catch(e){ try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.localStorage = makeSafeStorage(); } }
+                    } else {
+                        try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(e){ window.localStorage = makeSafeStorage(); }
+                    }
+                } catch(e) { try{ Object.defineProperty(window, 'localStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.localStorage = makeSafeStorage(); } }
+
+                // sessionStorage
+                try {
+                    if (window.sessionStorage && typeof window.sessionStorage.getItem === 'function') {
+                        try { window.sessionStorage.getItem('__ss_test'); }
+                        catch(e){ try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.sessionStorage = makeSafeStorage(); } }
+                    } else {
+                        try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(e){ window.sessionStorage = makeSafeStorage(); }
+                    }
+                } catch(e) { try{ Object.defineProperty(window, 'sessionStorage', { value: makeSafeStorage(), configurable: true }); }catch(_){ window.sessionStorage = makeSafeStorage(); } }
+
+                // caches (CacheStorage)
+                try {
+                    if (!window.caches) {
+                        var safeCaches = { open: function(){ return Promise.reject(new Error('caches unavailable')); }, match: function(){ return Promise.reject(new Error('caches unavailable')); }, keys: function(){ return Promise.resolve([]); } };
+                        try{ Object.defineProperty(window, 'caches', { value: safeCaches, configurable: true }); }catch(e){ window.caches = safeCaches; }
+                    }
+                } catch(e){ try{ Object.defineProperty(window, 'caches', { value: { open: function(){ return Promise.reject(new Error('caches unavailable')); } }, configurable: true }); }catch(_){ window.caches = { open: function(){ return Promise.reject(new Error('caches unavailable')); } }; } }
+
+                // indexedDB - avoid throwing by setting to undefined if access throws
+                try {
+                    if (typeof window.indexedDB === 'undefined') {
+                        // leave as undefined
+                    }
+                } catch(e) {
+                    try{ Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); }catch(_){ window.indexedDB = undefined; }
+                }
+            } catch(e) { /* ignore overall shim errors */ }
+        })();
         left:12%;
         right:12%;
         height:3px;
@@ -124,8 +164,7 @@ $userEmail = $currentUser['email'] ?? '';
                 <div class="col-auto d-none d-md-flex align-items-center ms-1">
                     <ul class="nav">
                         <li class="nav-item"><a class="nav-link active" href="<?php echo url('public/index.php'); ?>">Home</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#">Schedule &amp; Result</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#">Athletes</a></li>
+                        <!-- Schedule & Result and Athletes links removed for public header -->
                         <li class="nav-item"><a class="nav-link" href="<?php echo url('public/contingents.php'); ?>">Contingent</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?php echo url('public/medal-standings.php'); ?>">Medal Tally</a></li>
                     </ul>
@@ -136,29 +175,13 @@ $userEmail = $currentUser['email'] ?? '';
                     <div class="row justify-content-end align-items-center">
 
                         <!-- Sports logos + Login (right of logo, left of user) -->
+                        <?php
+                        // Hide sport icons on mobile devices; keep login button visible.
+                        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                        $is_mobile_ua = $ua && preg_match('/Android|webOS|iPhone|iPad|iPod|BlackBerry|Opera Mini|IEMobile|Mobile/i', $ua);
+                        ?>
                         <div class="col-auto d-flex align-items-center sukan-logos" style="gap:.5rem;">
-                            <?php
-                            $sukanDir = realpath(__DIR__ . '/../../assets/img/sukan');
-                            $sukanLogos = [];
-                            if ($sukanDir && is_dir($sukanDir)) {
-                                $files = glob($sukanDir . '/*.{png,jpg,jpeg,svg,gif}', GLOB_BRACE);
-                                if ($files) {
-                                    usort($files, function($a,$b){ return strcmp(basename($a), basename($b)); });
-                                    foreach (array_slice($files, 0, 10) as $f) {
-                                        $sukanLogos[] = basename($f);
-                                    }
-                                }
-                            }
-                            if (empty($sukanLogos)) {
-                                $sukanLogos = ['badminton.png','bola-jaring.png','bola-sepak.png','catur.png','mlbb-pubg.png','olahraga.png','ragbi.png','takraw.png','tenpin-bowling.png','volleyball.png'];
-                            }
-                            foreach ($sukanLogos as $logo):
-                                $label = htmlspecialchars(ucwords(str_replace(array('-', '_'), ' ', pathinfo($logo, PATHINFO_FILENAME))), ENT_QUOTES, 'UTF-8');
-                            ?>
-                                <img src="<?php echo asset('img/sukan/' . $logo); ?>" alt="<?php echo $label; ?>" title="<?php echo $label; ?>" width="40" height="40" onerror="this.onerror=null;this.src='<?php echo asset('img/logos/logo-main.png'); ?>'" />
-                            <?php endforeach; ?>
-
-                            <?php if (empty($currentUser)): ?>
+                            <?php if (empty($currentUser) && !$is_mobile_ua): ?>
                                 <a class="btn btn-primary btn-sm rounded-pill d-inline-flex align-items-center ms-3" href="<?php echo url('auth/login.php'); ?>" title="Log Masuk">
                                     <i class="zmdi zmdi-account-circle me-2" aria-hidden="true" style="font-size:1.05rem;"></i>
                                     <span class="d-none d-md-inline">Log Masuk</span>

@@ -41,8 +41,12 @@ try {
                 position INT PATH '$.position',
                 participant_id VARCHAR(255) PATH '$.participant_id'
             )) jt ON jt.position IN (1,2,3)
-            JOIN table_pasukan p ON p.id = jt.participant_id AND p.deleted_at IS NULL
-            JOIN table_kontinjen k ON k.id = p.kontinjen_id AND k.deleted_at IS NULL AND k.status = 1
+            -- participant_id may refer to a team (table_pasukan.id) or an individual athlete (table_pasukan_atlet.id)
+            LEFT JOIN table_pasukan p ON p.id = CAST(jt.participant_id AS UNSIGNED) AND p.deleted_at IS NULL
+            LEFT JOIN table_pasukan_atlet pa ON pa.id = CAST(jt.participant_id AS UNSIGNED) AND pa.deleted_at IS NULL
+            LEFT JOIN table_pasukan p2 ON p2.id = pa.pasukan_id AND p2.deleted_at IS NULL
+            -- determine kontinjen via team.kontinjen_id or athlete->team->kontinjen
+            JOIN table_kontinjen k ON k.id = COALESCE(p.kontinjen_id, p2.kontinjen_id) AND k.deleted_at IS NULL AND k.status = 1
             JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
             WHERE tr.deleted_at IS NULL AND tr.status = 'completed'
             GROUP BY k.kod_universiti
@@ -77,6 +81,8 @@ foreach ($tally as $r) {
     $standings[] = [
         // Prefer full university name where available
         'kontinjen_nama' => $r['nama_universiti'] ?? $r['nama_pendek'] ?? ($r['kontinjen_nama'] ?? ''),
+        // short name for mobile view
+        'nama_pendek' => $r['nama_pendek'] ?? ($r['nama_universiti'] ?? ($r['kontinjen_nama'] ?? '')),
         'kod_universiti' => $r['kod_universiti'] ?? '',
         'gold' => isset($r['emas']) ? (int)$r['emas'] : (isset($r['gold']) ? (int)$r['gold'] : 0),
         'silver' => isset($r['perak']) ? (int)$r['perak'] : (isset($r['silver']) ? (int)$r['silver'] : 0),
@@ -88,31 +94,26 @@ foreach ($tally as $r) {
 ?>
 <!-- Page markup continues (styles and table header are above) -->
 <div class="container mt-3 mb-4">
-        <div class="row mb-2 align-items-center">
-            <div class="col-md-8 col-12">
+        <div class="row mb-2">
+            <div class="col-12 text-center medal-header">
+                <div class="medal-logos mb-2">
+                    <div style="display:flex;justify-content:center;align-items:center;gap:18px;">
+                        <img src="../assets/img/logos/UA/kpt.png" alt="KPT" width="72" height="72" onerror="this.style.display='none'" />
+                        <img src="<?php echo asset('img/logos/medal-rank.png'); ?>" alt="SAM2026" width="72" height="72" onerror="this.style.display='none'" />
+                        <img src="../assets/img/logos/UA/UPNM.svg" alt="UPNM" width="72" height="72" onerror="this.style.display='none'" />
+                    </div>
+                </div>
                 <h2 class="mb-0">Contingent Rankings</h2>
                 <div class="text-muted small">Latest medals won by each contingent</div>
-            </div>
-            <div class="col-md-4 col-12 mt-2 mt-md-0 text-md-right">
-                <div class="medal-controls d-flex justify-content-end gap-2">
-                    <div class="input-with-icon" style="max-width:340px;">
-                        <svg class="icon-search" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="#6B7280" d="M10 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm8.707 15.293-4.387-4.387A8 8 0 1 0 18 19.586z"/></svg>
-                        <input id="medalSearch" class="form-control form-control-sm medal-search" placeholder="Cari kontinjen..." />
-                    </div>
-                    <select id="medalSort" class="form-control form-control-sm medal-select" style="max-width:240px;">
-                        <option value="rank_desc">Sort by Rank</option>
-                        <option value="gold_desc">Gold (Most)</option>
-                        <option value="total_desc">Total (Most)</option>
-                        <option value="name_asc">Name (A→Z)</option>
-                    </select>
-                </div>
             </div>
         </div>
 
         <div class="row">
             <div class="col-12">
-                <div class="table-responsive">
-                    <table class="table table-medal" id="medalTable">
+                <div class="medal-wrapper mx-auto">
+                    <!-- logo moved above header -->
+                    <div class="table-responsive">
+                        <table class="table table-medal" id="medalTable">
                         <thead>
                             <tr>
                                 <th class="col-rank text-left">Rank</th>
@@ -144,19 +145,42 @@ foreach ($tally as $r) {
                                         <path d="M14 6 L18 6 L24 18 L30 6 L34 6 L26 26 L22 26 Z" fill="#9A5C3A" opacity="0.9"/>
                                     </svg>
                                 </th>
-                                <th class="medal-col text-center" aria-label="total"></th>
+                                <th class="medal-col text-center" aria-label="total">Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($standings as $row): ?>
-                            <tr data-kod="<?php echo htmlspecialchars($row['kod_universiti']); ?>" data-name="<?php echo htmlspecialchars(strtolower($row['kontinjen_nama'])); ?>" data-gold="<?php echo (int)$row['gold']; ?>" data-silver="<?php echo (int)$row['silver']; ?>" data-bronze="<?php echo (int)$row['bronze']; ?>" data-total="<?php echo (int)$row['total']; ?>" data-rank="<?php echo (int)$row['rank']; ?>">
+                            <tr <?php if (in_array((int)$row['rank'], [1,2,3])) { echo 'class="rank-'.(int)$row['rank'].'"'; } ?> data-kod="<?php echo htmlspecialchars($row['kod_universiti']); ?>" data-name="<?php echo htmlspecialchars(strtolower($row['nama_pendek'] ?? $row['kontinjen_nama'])); ?>" data-gold="<?php echo (int)$row['gold']; ?>" data-silver="<?php echo (int)$row['silver']; ?>" data-bronze="<?php echo (int)$row['bronze']; ?>" data-total="<?php echo (int)$row['total']; ?>" data-rank="<?php echo (int)$row['rank']; ?>">
                                 <td class="rank-cell col-rank">
-                                    <div class="rank-text"><?php echo $row['rank']; ?></div>
+                                    <?php if ((int)$row['rank'] === 1): ?>
+                                        <div class="rank-icon" title="Emas">
+                                            <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                                <circle cx="14" cy="9" r="7" fill="#FFD54A" stroke="#D4A017" stroke-width="1" />
+                                                <rect x="11" y="16" width="6" height="8" fill="#D4A017" rx="1" />
+                                            </svg>
+                                        </div>
+                                    <?php elseif ((int)$row['rank'] === 2): ?>
+                                        <div class="rank-icon" title="Perak">
+                                            <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                                <circle cx="14" cy="9" r="7" fill="#C7CDD9" stroke="#9AA5B2" stroke-width="1" />
+                                                <rect x="11" y="16" width="6" height="8" fill="#9AA5B2" rx="1" />
+                                            </svg>
+                                        </div>
+                                    <?php elseif ((int)$row['rank'] === 3): ?>
+                                        <div class="rank-icon" title="Gangsa">
+                                            <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                                <circle cx="14" cy="9" r="7" fill="#D8A07A" stroke="#9A5C3A" stroke-width="1" />
+                                                <rect x="11" y="16" width="6" height="8" fill="#9A5C3A" rx="1" />
+                                            </svg>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="rank-text"><?php echo $row['rank']; ?></div>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="col-kontinjen">
                                     <div style="display:flex;align-items:center;">
                                         <img src="../assets/img/logos/UA/<?php echo htmlspecialchars($row['kod_universiti']); ?>.svg" alt="" class="kontinjen-logo" onerror="this.style.display='none'" />
-                                        <div class="kontinjen-name"><?php echo htmlspecialchars($row['kontinjen_nama']); ?></div>
+                                            <div class="kontinjen-name"><?php echo htmlspecialchars($row['nama_pendek'] ?? $row['kontinjen_nama']); ?></div>
                                     </div>
                                 </td>
                                 <td class="medal-col text-center"><span class="medal-text medal-detail-btn-public" data-medal="emas" style="cursor:pointer;">
@@ -170,6 +194,15 @@ foreach ($tally as $r) {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
+                    <div class="last-updated text-muted small mt-2 text-center"><?php
+                        try {
+                            $dt = new DateTime('now', new DateTimeZone('Asia/Kuala_Lumpur'));
+                            echo 'Last updated: ' . $dt->format('d/m/Y H:i');
+                        } catch (Exception $e) {
+                            echo 'Last updated: ' . date('d/m/Y H:i');
+                        }
+                        ?></div>
                 </div>
             </div>
         </div>
@@ -178,25 +211,34 @@ foreach ($tally as $r) {
     <!-- Styles (kept near content for simplicity) -->
     <style>
     :root{--accent-50:#e8f0ff;--accent-100:#cfe0ff;--accent-300:#8fb8ff;--accent-600:#2563eb;--accent-700:#1e40af;--muted:#374151;--gold:#f59e0b;--silver:#94a3b8;--bronze:#c0845a;--card-bg:#ffffff;--card-shadow:0 6px 18px rgba(2,6,23,0.06)}
-    .table-medal{width:100%;border-collapse:separate;border-spacing:0 8px}
-    .table-medal thead th{background:transparent;border-bottom:0;padding:8px 12px 12px;color:var(--muted);font-weight:600;font-size:1.05rem;vertical-align:top}
-    .table-medal tbody tr{background:var(--card-bg);border-radius:8px;box-shadow:var(--card-shadow);transition:transform .12s ease,box-shadow .12s ease}
-    .table-medal tbody tr:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(2,6,23,0.08)}
-    .table-medal td{vertical-align:middle;padding:10px 12px;border:0}
-    .rank-text{font-weight:400;font-size:1.05rem;color:var(--muted);display:inline-block;text-align:left}
-    .medal-text{font-weight:400;color:var(--muted);display:inline-block;min-width:36px;font-size:1.05rem}
-    .total-count{font-size:1.05rem;color:#111;font-weight:400}
-    .kontinjen-name{font-weight:600;font-size:1.05rem}
+    /* Centered, constrained wrapper for desktop to keep medal tally compact */
+    .medal-wrapper{ max-width:680px; margin:0 auto; }
+    @media (max-width:767px){ .medal-wrapper{ max-width:100%; padding:0 8px; } }
+    .table-medal{width:100%;border-collapse:separate;border-spacing:0 4px;font-size:0.88rem}
+    .table-medal thead th{background:transparent;border-bottom:0;padding:3px 6px 6px;color:var(--muted);font-weight:600;font-size:0.9rem;vertical-align:top}
+    .table-medal tbody tr{background:var(--card-bg);border-radius:6px;box-shadow:var(--card-shadow);transition:transform .12s ease,box-shadow .12s ease}
+    .table-medal tbody tr:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(2,6,23,0.04)}
+    .table-medal td{vertical-align:middle;padding:4px 6px;border:0}
+    .rank-text{font-weight:400;font-size:0.82rem;color:var(--muted);display:inline-block;text-align:center}
+    .medal-text{font-weight:400;color:var(--muted);display:inline-block;min-width:28px;font-size:0.92rem}
+    .total-count{font-size:0.92rem;color:#111;font-weight:400}
+    .kontinjen-name{font-weight:600;font-size:0.92rem}
     /* Column width and alignment enforcement */
-    .table-medal thead th.col-rank, .table-medal tbody td.col-rank { width:5%; text-align:left }
-    .table-medal thead th.col-kontinjen, .table-medal tbody td.col-kontinjen { width:55%; text-align:left }
-    .table-medal thead th.medal-col, .table-medal tbody td.medal-col { width:10%; text-align:center }
+    .table-medal thead th.col-rank, .table-medal tbody td.col-rank { width:56px; text-align:center }
+    .table-medal thead th.col-kontinjen, .table-medal tbody td.col-kontinjen { width:46%; text-align:left }
+    .table-medal thead th.medal-col, .table-medal tbody td.medal-col { width:9%; text-align:center }
     .input-with-icon{position:relative;display:inline-block}
-    .input-with-icon .icon-search{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;z-index:3;pointer-events:none}
-    .medal-search{width:100%;padding-left:48px !important;border-radius:12px;border:1px solid #e6edf3;background:#fff;box-shadow:0 6px 18px rgba(15,23,42,0.06);transition:box-shadow .12s ease,border-color .12s ease;font-size:1.05rem;height:48px;box-sizing:border-box;z-index:1}
-    .medal-select{border-radius:12px;border:1px solid #e6edf3;padding:8px 44px 8px 14px;appearance:none;background-color:#fff;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%236B7280" d="M7 10l5 5 5-5z"/></svg>');background-repeat:no-repeat;background-position:right 14px center;background-size:16px 16px;box-shadow:0 6px 18px rgba(15,23,42,0.06);transition:box-shadow .12s ease,border-color .12s ease;font-size:1rem;height:48px}
-    .icon-medal{width:34px;height:34px;vertical-align:middle}
-    .kontinjen-logo{width:36px;height:24px;object-fit:contain;border-radius:4px;margin-right:12px;flex:0 0 auto}
+    .input-with-icon .icon-search{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;z-index:3;pointer-events:none}
+    /* Controls removed: medal-search and medal-select styles not needed */
+    .icon-medal{width:26px;height:26px;vertical-align:middle}
+    .kontinjen-logo{width:28px;height:16px;object-fit:contain;border-radius:3px;margin-right:8px;flex:0 0 auto}
+    .medal-logos{display:flex;justify-content:center;align-items:center}
+    .medal-logos img{width:72px;height:72px;object-fit:contain}
+    /* Top-3 row highlights */
+    .table-medal tbody tr.rank-1 { background-color: rgba(255,236,179,0.36) }
+    .table-medal tbody tr.rank-2 { background-color: rgba(226,232,240,0.36) }
+    .table-medal tbody tr.rank-3 { background-color: rgba(236,208,193,0.36) }
+    .rank-icon svg{display:block;margin:0 auto}
     </style>
 
     <!-- Medal detail modal (public) -->
@@ -209,8 +251,8 @@ foreach ($tally as $r) {
         transform: translateX(-50%);
         top: 6vh; /* slightly from top center */
         margin: 0;
-        width: min(900px, 95vw);
-        max-width: 95vw;
+        width: min(1200px, 98vw);
+        max-width: 98vw;
         z-index: 1050;
     }
 
@@ -298,7 +340,7 @@ foreach ($tally as $r) {
     }
     </style>
     <div class="modal fade modal-top" id="medalDetailModalPublic" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-xxl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Medal Recipients</h5>
@@ -351,8 +393,7 @@ foreach ($tally as $r) {
         var tbody = table.querySelector('tbody');
         var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
 
-        var searchInput = document.getElementById('medalSearch');
-        var sortSelect = document.getElementById('medalSort');
+        // Search and sort controls removed from UI; keep JS minimal
 
         function renderRows(list){
             tbody.innerHTML = '';
@@ -376,17 +417,8 @@ foreach ($tally as $r) {
             renderRows(rows.slice());
         }
 
-        // events
-        var searchTimer = null;
-        if (searchInput) searchInput.addEventListener('input', function(){
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(function(){ filterRows(searchInput.value); }, 160);
-        });
-
-        if (sortSelect) sortSelect.addEventListener('change', function(){ sortRows(sortSelect.value); });
-
-        // initial sort
-        sortRows((sortSelect && sortSelect.value) || 'rank_desc');
+        // initial sort (default to Gold)
+        sortRows('gold_desc');
     })();
     </script>
 
@@ -465,24 +497,17 @@ foreach ($tally as $r) {
                 $('#medalDetailSummaryPublic').text(''); cache = []; currentPage = 1;
                 var $modal = $('#medalDetailModalPublic'); $modal.modal('show');
                 var endpoint = '<?php echo url('ajax/medal_recipients_public.php'); ?>';
-                var types = ['emas','perak','gangsa'];
-                var requests = types.map(function(m){ return $.ajax({ url: endpoint, data: { kod_universiti: kod, medal: m }, dataType: 'json' }); });
-                $.when.apply($, requests).done(function(){
-                    // arguments can be single or multiple depending on number of requests
-                    var responses = Array.prototype.slice.call(arguments);
-                    var merged = [];
-                    var seen = {};
-                    responses.forEach(function(resp){
-                        // when single request, resp is [data, status, jqXHR]; when multiple, each arg is that tuple
-                        var obj = Array.isArray(resp) && resp[0] ? resp[0] : resp;
-                        if (!obj || obj.status !== 'ok' || !Array.isArray(obj.data)) return;
-                        obj.data.forEach(function(r){
-                            var id = r.participant_id || (r.nama_pasukan + '|' + r.nama_kategori + '|' + r.nama_sukan);
-                            if (!seen[id]){ seen[id] = true; merged.push(r); }
-                        });
-                    });
-                    cache = merged; renderPage($('#medalDetailBodyPublic'), $('#medalDetailPagerPublic'), $('#medalDetailSummaryPublic'));
-                }).fail(function(){
+                $.ajax({ url: endpoint, data: { kod_universiti: kod, medal: 'all' }, dataType: 'json' })
+                .done(function(res){
+                    if (!res || res.status !== 'ok' || !Array.isArray(res.data)){
+                        $('#medalDetailBodyPublic').html('<tr><td colspan="5" class="text-center text-danger">Failed to load data</td></tr>');
+                        $('#medalDetailSummaryPublic').text('Failed to load data');
+                        return;
+                    }
+                    cache = res.data || [];
+                    renderPage($('#medalDetailBodyPublic'), $('#medalDetailPagerPublic'), $('#medalDetailSummaryPublic'));
+                })
+                .fail(function(){
                     $('#medalDetailBodyPublic').html('<tr><td colspan="5" class="text-center text-danger">Failed to load data</td></tr>'); $('#medalDetailSummaryPublic').text('Failed to load data');
                 });
             });

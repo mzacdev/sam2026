@@ -12,8 +12,7 @@ require_once __DIR__ . '/header-public.php';
         <a class="navbar-brand" href="<?php echo url('public/index.php'); ?>"><?php echo SITE_NAME; ?></a>
         <ul class="nav">
             <li class="nav-item"><a class="nav-link" href="<?php echo url('public/index.php'); ?>">Home</a></li>
-            <li class="nav-item"><a class="nav-link" href="#">Schedule & Result</a></li>
-            <li class="nav-item"><a class="nav-link" href="#">Athletes</a></li>
+            <!-- Schedule & Result and Athletes removed from public nav -->
             <li class="nav-item"><a class="nav-link" href="#">Contingent</a></li>
             <li class="nav-item"><a class="nav-link" href="<?php echo url('public/medal-standings.php'); ?>">Medal Tally</a></li>
         </ul>

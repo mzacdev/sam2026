@@ -1166,27 +1166,31 @@ ob_start();
             const currentValue = select.value;
             
             Array.from(select.options).forEach(opt => {
-                if (opt.value === '') {
-                    opt.disabled = false;
-                    opt.style.color = '';
-                } else {
-                    // Disable option if its kontingen is already selected in another position
-                    var optKont = opt.getAttribute ? (opt.getAttribute('data-kontinjen') || '') : '';
-                    var isKontSelectedElsewhere = false;
-                    for (const [pos, kont] of Object.entries(selectedKontingen)) {
-                        if (parseInt(pos) !== currentPosition && kont && kont === optKont) {
-                            isKontSelectedElsewhere = true;
-                            break;
+                // Keep placeholder empty option always enabled
+                if (opt.value === '') { opt.disabled = false; opt.style.color = ''; return; }
+
+                // Determine disabling logic based on category type
+                try{
+                    var optValue = opt.value || '';
+                    if (currentCategoryType === 'individu') {
+                        // For individual categories, block by individual (participant id), not by kontingen
+                        var isSelectedElsewhere = false;
+                        for (const [pos, val] of Object.entries(selectedValues)) {
+                            if (parseInt(pos) !== currentPosition && val && String(val) === String(optValue)) { isSelectedElsewhere = true; break; }
                         }
-                    }
-                    if (isKontSelectedElsewhere && opt.value !== currentValue) {
-                        opt.disabled = true;
-                        opt.style.color = '#999';
+                        if (isSelectedElsewhere && opt.value !== currentValue) { opt.disabled = true; opt.style.color = '#999'; }
+                        else { opt.disabled = false; opt.style.color = ''; }
                     } else {
-                        opt.disabled = false;
-                        opt.style.color = '';
+                        // For team categories, continue blocking by kontingen
+                        var optKont = opt.getAttribute ? (opt.getAttribute('data-kontinjen') || '') : '';
+                        var isKontSelectedElsewhere = false;
+                        for (const [pos, kont] of Object.entries(selectedKontingen)) {
+                            if (parseInt(pos) !== currentPosition && kont && kont === optKont) { isKontSelectedElsewhere = true; break; }
+                        }
+                        if (isKontSelectedElsewhere && opt.value !== currentValue) { opt.disabled = true; opt.style.color = '#999'; }
+                        else { opt.disabled = false; opt.style.color = ''; }
                     }
-                }
+                }catch(e){ opt.disabled = false; opt.style.color = ''; }
             });
         });
 
