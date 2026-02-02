@@ -376,7 +376,7 @@ ob_start();
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-warning medal-detail-btn" data-medal="emas"><?php echo (int)($mr['emas'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-secondary medal-detail-btn" data-medal="perak"><?php echo (int)($mr['perak'] ?? 0); ?></button></td>
                                     <td class="text-center"><button type="button" class="btn btn-link p-0 text-danger medal-detail-btn" data-medal="gangsa"><?php echo (int)($mr['gangsa'] ?? 0); ?></button></td>
-                                    <td class="text-center"><span class="medal-count"><?php echo (int)($mr['jumlah'] ?? 0); ?></span></td>
+                                                                        <td class="text-center"><button type="button" class="btn btn-link p-0 medal-detail-btn text-dark" data-medal="all"><?php echo (int)($mr['jumlah'] ?? 0); ?></button></td>
                                  </tr>
                              <?php endforeach; ?>
                         </tbody>
@@ -406,12 +406,12 @@ ob_start();
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="fw-semibold" id="medalDetailTitle">Penerima Pingat <span id="medalDetailBadge" class="badge" style="margin-left:.4rem;"></span> <span id="medalDetailName" style="margin-left:.6rem;"></span></div>
                     <div>
-                        <select class="form-select form-select-sm" id="medalDetailPageSize" style="width:90px;">
-                            <option value="5">5</option>
-                            <option value="10" selected>10</option>
-                            <option value="25">25</option>
-                            <option value="100">100</option>
-                        </select>
+                                <select class="form-select form-select-sm" id="medalDetailPageSize" style="width:90px;">
+                                    <option value="5" selected>5</option>
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="100">100</option>
+                                </select>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -440,13 +440,28 @@ ob_start();
         </div>
     </div>
 </div>
+<style>
+    /* Hide page-size control but keep it in DOM so JS reads default */
+    #medalDetailPageSize { display: none !important; }
+    /* Reduce modal height to suit default pageSize=5 (slightly smaller) */
+    #medalDetailModal .modal-content { height: 420px; max-height: calc(100vh - 12vh); display:flex; flex-direction:column; }
+    @media (max-height: 700px) { #medalDetailModal .modal-content { height: calc(100vh - 12vh); } }
+
+    /* Keep pager and summary anchored to bottom of modal */
+    #medalDetailModal .modal-body { display:flex; flex-direction:column; padding: 1rem; flex:1 1 auto; }
+    #medalDetailModal .modal-body .table-responsive { flex:1 1 auto; overflow:auto; }
+    #medalDetailModal .modal-body > .d-flex.mt-2 { flex:0 0 auto; margin-top:8px; }
+    /* Ensure header row doesn't collapse */
+    #medalDetailModal .modal-body > .d-flex.mb-2 { flex:0 0 auto; }
+</style>
 <script>
 (function(){
     function whenJQ(cb){ if (window.jQuery){ cb(window.jQuery); } else { setTimeout(function(){ whenJQ(cb); }, 50); } }
     whenJQ(function($){
         var medalRowsCache = [];
-        var pageSize = 10;
+        var pageSize = parseInt($('#medalDetailPageSize').val(), 10) || 5;
         var currentPage = 1;
+        var currentMedalDashboard = '';
 
         function renderPager(total){
             var totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -480,8 +495,20 @@ ob_start();
             var pageRows = medalRowsCache.slice(start, end);
             var html = '';
             pageRows.forEach(function(r, idx){
-                html += '<tr>'+
-                        '<td>'+(start+idx+1)+'</td>'+
+                var firstCell = '';
+                if (String(currentMedalDashboard).toLowerCase() === 'all'){
+                    var m = String(r.medal || '').toLowerCase();
+                    var icon = '';
+                    if (m === 'emas') icon = '🥇';
+                    else if (m === 'perak') icon = '🥈';
+                    else if (m === 'gangsa') icon = '🥉';
+                    else icon = (start+idx+1);
+                    firstCell = '<td>' + icon + '</td>';
+                } else {
+                    firstCell = '<td>' + (start+idx+1) + '</td>';
+                }
+
+                html += '<tr>' + firstCell +
                         '<td>'+(r.nama || r.nama_pasukan || '-')+'</td>'+
                         '<td>'+(r.nama_kontinjen || r.kod_universiti || '-')+'</td>'+
                         '<td>'+(r.nama_sukan || '-')+'</td>'+
@@ -511,6 +538,7 @@ ob_start();
             var kod = $tr.data('kod');
             var name = $tr.data('kontinjen') || kod;
             var medal = $(this).data('medal');
+            currentMedalDashboard = String(medal).toLowerCase();
             if (!kod || !medal) return;
             $('#medalDetailName').text(name);
             // set single badge next to title indicating selected medal
@@ -521,28 +549,45 @@ ob_start();
             else if (medal === 'gangsa') { $badge.css({'background':'#cd7f32','color':'#fff'}); }
             $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-muted">Memuatkan...</td></tr>');
             $('#medalDetailSummary').text('');
-            // reset pagination to defaults each time modal opens
-            pageSize = 10;
-            $('#medalDetailPageSize').val('10');
+            // reset pagination to defaults each time modal opens (fixed to 5)
+            pageSize = parseInt($('#medalDetailPageSize').val(), 10) || 5;
+            $('#medalDetailPageSize').val(String(pageSize));
             medalRowsCache = []; currentPage = 1;
             $('#medalDetailModal').modal('show');
-            $.ajax({
-                url: '<?php echo url('ajax/medal_recipients.php'); ?>',
-                data: { kod_universiti: kod, medal: medal },
-                dataType: 'json'
-            }).done(function(res){
-                if (!res || res.status !== 'ok') {
-                    $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Gagal memuatkan data</td></tr>');
-                    $('#medalDetailSummary').text('Gagal memuatkan data');
-                    return;
-                }
-                medalRowsCache = res.data || [];
-                renderDetailTable();
-            }).fail(function(){
-                $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Ralat memuatkan data</td></tr>');
-                $('#medalDetailSummary').text('Ralat memuatkan data');
-            });
-        
+            if (String(medal).toLowerCase() === 'all') {
+                // public endpoint returns medal type per row
+                $.ajax({ url: '<?php echo url('ajax/medal_recipients_public.php'); ?>', data: { kod_universiti: kod, medal: 'all' }, dataType: 'json' })
+                .done(function(res){
+                    if (!res || res.status !== 'ok' || !Array.isArray(res.data)){
+                        $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Gagal memuatkan data</td></tr>');
+                        $('#medalDetailSummary').text('Gagal memuatkan data');
+                        return;
+                    }
+                    medalRowsCache = res.data || [];
+                    renderDetailTable();
+                }).fail(function(){
+                    $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Ralat memuatkan data</td></tr>');
+                    $('#medalDetailSummary').text('Ralat memuatkan data');
+                });
+            } else {
+                $.ajax({
+                    url: '<?php echo url('ajax/medal_recipients.php'); ?>',
+                    data: { kod_universiti: kod, medal: medal },
+                    dataType: 'json'
+                }).done(function(res){
+                    if (!res || res.status !== 'ok') {
+                        $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Gagal memuatkan data</td></tr>');
+                        $('#medalDetailSummary').text('Gagal memuatkan data');
+                        return;
+                    }
+                    medalRowsCache = res.data || [];
+                    renderDetailTable();
+                }).fail(function(){
+                    $('#medalDetailBody').html('<tr><td colspan="5" class="text-center text-danger">Ralat memuatkan data</td></tr>');
+                    $('#medalDetailSummary').text('Ralat memuatkan data');
+                });
+            }
+
         // Ensure body doesn't scroll when modal is open (extra guard)
         $('#medalDetailModal').on('shown.bs.modal', function(){
             try{ document.body.style.overflow = 'hidden'; }catch(e){}

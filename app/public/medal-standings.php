@@ -256,9 +256,9 @@ foreach ($tally as $r) {
         z-index: 1050;
     }
 
-    /* Fixed modal size tuned for 10 rows (row ~44px); adjust as needed */
+    /* Fixed modal size tuned for default page-size 5 (row ~44px); adjust as needed */
     #medalDetailModalPublic .modal-content {
-        height: 640px; /* fixed height to avoid jumps */
+        height: 480px; /* reduced height to suit 5 rows */
         max-height: calc(100vh - 12vh);
         box-shadow: 0 18px 40px rgba(2,6,23,0.18);
         border-radius: 8px;
@@ -300,6 +300,14 @@ foreach ($tally as $r) {
     /* Table layout: header sticky, table area scrolls inside the responsive wrapper */
     #medalDetailModalPublic .table-responsive { width: 100%; flex: 1 1 auto; overflow: auto; }
     #medalDetailModalPublic table { width: 100%; border-collapse: collapse; font-size: 0.95rem; min-width: 520px }
+    /* Fix column widths so pagination doesn't shift layout */
+    #medalDetailModalPublic table { table-layout: fixed; }
+    #medalDetailModalPublic thead th:nth-child(1) { width: 6%; }
+    #medalDetailModalPublic thead th:nth-child(2) { width: 34%; }
+    #medalDetailModalPublic thead th:nth-child(3) { width: 20%; }
+    #medalDetailModalPublic thead th:nth-child(4) { width: 20%; }
+    #medalDetailModalPublic thead th:nth-child(5) { width: 20%; }
+    #medalDetailModalPublic td, #medalDetailModalPublic th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #medalDetailModalPublic thead th {
         position: sticky;
         top: 0; /* stick to the top of modal body */
@@ -339,6 +347,10 @@ foreach ($tally as $r) {
         #medalDetailModalPublic thead th { font-size: 0.9rem }
     }
     </style>
+    <style>
+    /* Hide pagesize control from users but keep it in DOM so JS can read default */
+    #medalDetailPageSizePublic { display: none !important; }
+    </style>
     <div class="modal fade modal-top" id="medalDetailModalPublic" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xxl modal-dialog-centered">
             <div class="modal-content">
@@ -371,8 +383,8 @@ foreach ($tally as $r) {
                         <div class="text-muted small" id="medalDetailSummaryPublic"></div>
                         <div class="d-flex align-items-center gap-2">
                             <select class="form-select form-select-sm" id="medalDetailPageSizePublic" style="width:80px;">
-                                <option value="5">5</option>
-                                <option value="10" selected>10</option>
+                                    <option value="5" selected>5</option>
+                                    <option value="10">10</option>
                                 <option value="25">25</option>
                                 <option value="50">50</option>
                             </select>
@@ -428,7 +440,8 @@ foreach ($tally as $r) {
         function whenJQ(cb){ if (window.jQuery){ cb(window.jQuery); } else { setTimeout(function(){ whenJQ(cb); }, 50); } }
         whenJQ(function($){
             var cache = [];
-            var pageSize = 10, currentPage = 1;
+            var pageSize = parseInt($('#medalDetailPageSizePublic').val(), 10) || 10, currentPage = 1;
+            var currentMedalPublic = ''; // 'emas'|'perak'|'gangsa'|'all' - used to control first-column rendering
 
             function renderPager(total, $pager, summaryEl){
                 var totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -454,8 +467,22 @@ foreach ($tally as $r) {
                 if (!cache.length){ $body.html('<tr><td colspan="5" class="text-center text-muted">No recipients.</td></tr>'); renderPager(0, $pager, summaryEl); return; }
                 var start = (currentPage-1)*pageSize; var end = start + pageSize; var pageRows = cache.slice(start, end);
                 var html = '';
-                pageRows.forEach(function(r, idx){ html += '<tr>'+
-                    '<td>'+(start+idx+1)+'</td>'+
+                pageRows.forEach(function(r, idx){
+                    // Determine first column content: numbering by default, but if currentMedalPublic === 'all' show medal icon per row
+                    var firstCell = '';
+                    if (String(currentMedalPublic).toLowerCase() === 'all'){
+                        var m = String(r.medal || '').toLowerCase();
+                        var icon = '';
+                        if (m === 'emas') icon = '🥇';
+                        else if (m === 'perak') icon = '🥈';
+                        else if (m === 'gangsa') icon = '🥉';
+                        else icon = (start+idx+1);
+                        firstCell = '<td>' + icon + '</td>';
+                    } else {
+                        firstCell = '<td>' + (start+idx+1) + '</td>';
+                    }
+
+                    html += '<tr>' + firstCell +
                     '<td>'+(r.nama_pasukan || '-')+'</td>'+
                     '<td>'+(String(r.nama_kontinjen || r.kod_universiti || '-').toUpperCase())+'</td>'+
                     '<td>'+(r.nama_sukan || '-')+'</td>'+
@@ -475,9 +502,22 @@ foreach ($tally as $r) {
                 var medal = $(this).data('medal');
                 if (!kod || !medal) return;
                 $('#medalDetailTitlePublic').text(String(name).toUpperCase());
-                $('#medalDetailMedalPublic').text(medal.toUpperCase());
+                // Show English medal label and colored badge
+                var med = String(medal).toLowerCase();
+                currentMedalPublic = med;
+                if (med === 'emas'){
+                    $('#medalDetailMedalPublic').text('Gold').removeClass().addClass('badge bg-warning text-dark');
+                } else if (med === 'perak'){
+                    $('#medalDetailMedalPublic').text('Silver').removeClass().addClass('badge bg-secondary text-dark');
+                } else if (med === 'gangsa'){
+                    $('#medalDetailMedalPublic').text('Bronze').removeClass().addClass('badge').css({'background':'#cd7f32','color':'#fff'});
+                } else {
+                    $('#medalDetailMedalPublic').text(medal.toUpperCase()).removeClass().addClass('badge bg-light text-dark');
+                }
                 $('#medalDetailBodyPublic').html('<tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>');
                 $('#medalDetailSummaryPublic').text(''); cache = []; currentPage = 1;
+                // ensure pageSize matches selected control in case user changed it previously
+                pageSize = parseInt($('#medalDetailPageSizePublic').val(), 10) || pageSize;
                 var $modal = $('#medalDetailModalPublic');
                 $modal.modal('show');
                 $.ajax({ url: '<?php echo url('ajax/medal_recipients_public.php'); ?>', data: { kod_universiti: kod, medal: medal }, dataType: 'json' })
@@ -493,8 +533,11 @@ foreach ($tally as $r) {
                 if (!kod) return;
                 $('#medalDetailTitlePublic').text(String(name).toUpperCase());
                 $('#medalDetailMedalPublic').text('ALL');
+                currentMedalPublic = 'all';
                 $('#medalDetailBodyPublic').html('<tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>');
                 $('#medalDetailSummaryPublic').text(''); cache = []; currentPage = 1;
+                // ensure pageSize matches selected control in case user changed it previously
+                pageSize = parseInt($('#medalDetailPageSizePublic').val(), 10) || pageSize;
                 var $modal = $('#medalDetailModalPublic'); $modal.modal('show');
                 var endpoint = '<?php echo url('ajax/medal_recipients_public.php'); ?>';
                 $.ajax({ url: endpoint, data: { kod_universiti: kod, medal: 'all' }, dataType: 'json' })

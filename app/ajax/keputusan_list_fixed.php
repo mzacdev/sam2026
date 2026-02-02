@@ -304,4 +304,3 @@ try {
     echo json_encode(['success' => false, 'message' => 'Ralat memuatkan keputusan.', 'data' => []]);
     exit;
 }
-

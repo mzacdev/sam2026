@@ -48,6 +48,43 @@ try {
 } catch (Exception $e) {
     error_log('[keputusan.php] DB error fetching sports: ' . $e->getMessage());
 }
+// Determine completion status for each sport: whether all active categories have results
+$sportCompletion = [];
+try {
+    if (!empty($sports)) {
+        $ids = array_map(function($s){ return (int)$s['id']; }, $sports);
+        $in = implode(',', $ids);
+        // Count active categories per sport
+        $sqlTotal = "SELECT s.id AS sukan_id, COUNT(k.id) AS total_kategori
+            FROM table_sukan s
+            JOIN table_kategori k ON k.sukan_id = s.id AND k.deleted_at IS NULL AND k.status = 1
+            WHERE s.id IN ($in)
+            GROUP BY s.id";
+        $totStmt = $db->query($sqlTotal);
+        $totals = $totStmt ? $totStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $totalMap = [];
+        foreach ($totals as $t) $totalMap[(int)$t['sukan_id']] = (int)$t['total_kategori'];
+
+        // Count distinct kategori_ids present in table_results per sport
+        $sqlHas = "SELECT sukan_id, COUNT(DISTINCT kategori_id) AS kategori_with_results
+            FROM table_results
+            WHERE sukan_id IN ($in) AND kategori_id IS NOT NULL AND deleted_at IS NULL
+            GROUP BY sukan_id";
+        $hasStmt = $db->query($sqlHas);
+        $haves = $hasStmt ? $hasStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $haveMap = [];
+        foreach ($haves as $h) $haveMap[(int)$h['sukan_id']] = (int)$h['kategori_with_results'];
+
+        foreach ($ids as $sid) {
+            $total = isset($totalMap[$sid]) ? $totalMap[$sid] : 0;
+            $have = isset($haveMap[$sid]) ? $haveMap[$sid] : 0;
+            // Consider complete only when there is at least one active category and all of them have results
+            $sportCompletion[$sid] = ($total > 0 && $have >= $total) ? true : false;
+        }
+    }
+} catch (Exception $e) {
+    error_log('[keputusan.php] error computing sport completion: ' . $e->getMessage());
+}
 
 ob_start();
 ?>
@@ -74,8 +111,11 @@ ob_start();
         <div class="col-md-3">
             <select class="form-select" id="filterSport">
                 <option value="">Semua Sukan</option>
-                <?php foreach ($sports as $s): ?>
-                    <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
+                <?php foreach ($sports as $s):
+                    $sid = (int)$s['id'];
+                    $complete = isset($sportCompletion[$sid]) && $sportCompletion[$sid] ? 1 : 0;
+                ?>
+                    <option value="<?php echo $sid; ?>" data-complete="<?php echo $complete; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -151,8 +191,11 @@ ob_start();
                         <label for="keputusanSukan" class="form-label">Sukan <span class="text-danger">*</span></label>
                         <select class="form-select" id="keputusanSukan" name="sukan_id" required>
                             <option value="">Pilih Sukan</option>
-                            <?php foreach ($sports as $s): ?>
-                                <option value="<?php echo (int)$s['id']; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
+                            <?php foreach ($sports as $s):
+                                $sid = (int)$s['id'];
+                                $complete = isset($sportCompletion[$sid]) && $sportCompletion[$sid] ? 1 : 0;
+                            ?>
+                                <option value="<?php echo $sid; ?>" data-complete="<?php echo $complete; ?>"><?php echo htmlspecialchars($s['nama_sukan'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -235,6 +278,28 @@ ob_start();
     .table-nowrap td, .table-nowrap th { white-space: nowrap; }
     .modal .text-truncate { display: inline-block; vertical-align: middle; max-width: 360px; }
     .modal .text-truncate.small { max-width: 260px; }
+    /* Sport completion visuals for Select2 / enhanced selects */
+    .sport-complete { background: #e9f7ee !important; font-weight: 700; }
+    .sport-complete .sport-label { flex: 1 1 auto; }
+    .sport-complete .sport-status { color: #0f5132; margin-left: 8px; }
+    .select2-container--bootstrap4 .select2-results__option.sport-complete { background: #e9f7ee; font-weight:700 }
+    /* Highlight full-result rows for sports that are complete */
+    .sukan-complete { background-color: rgba(237,247,237,0.6); }
+    .sukan-complete td { font-weight: 600; }
+</style>
+
+<style>
+/* Lightweight custom dropdown to allow per-option highlighting when Select2 isn't present */
+.custom-select-wrapper { position: relative; display: inline-block; width:100%; }
+.custom-select-display { border:1px solid #d0d7de; padding:6px 10px; border-radius:4px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:space-between }
+.custom-select-list { position:absolute; left:0; right:0; top:100%; z-index:1200; background:#fff; border:1px solid rgba(2,6,23,0.08); border-radius:6px; box-shadow:0 8px 24px rgba(2,6,23,0.08); max-height:320px; overflow:auto; margin-top:6px; display:none }
+.custom-select-item { padding:8px 12px; cursor:pointer; display:flex; align-items:center; justify-content:space-between }
+.custom-select-item:hover { background:#f4f6f8 }
+.custom-select-item.sport-complete { background:#e9f7ee }
+.custom-select-item .label { flex:1 1 auto }
+.custom-select-item .status { margin-left:8px; color:#0f5132 }
+.custom-select-arrow { margin-left:8px; transform:rotate(0deg); transition:transform 0.15s }
+.custom-select-open .custom-select-arrow { transform:rotate(180deg) }
 </style>
 
 <script>
@@ -262,6 +327,126 @@ ob_start();
 
     // Keep latest full dataset from server to avoid duplicate queries
     var latestKeputusanData = [];
+
+    // Enhance sport selects with Select2 rendering to show completion status (icon + highlight)
+    function initSportSelects(){
+        try{
+            if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                var $ = jQuery;
+
+                function formatSport(opt){
+                    if (!opt.id) return opt.text;
+                    var el = opt.element;
+                    var complete = el ? (el.getAttribute('data-complete') === '1') : false;
+                    var label = opt.text || '';
+                    var status = complete ? '<span class="sport-status">&#x2705;</span>' : '';
+                    var cls = complete ? 'sport-complete' : '';
+                    return '<div class="d-flex align-items-center '+cls+'"><span class="sport-label">'+label+'</span><span>'+status+'</span></div>';
+                }
+
+                // Filter select (global page filter)
+                try{
+                    var $f = $(sportSel);
+                    if ($f.length && $f.data('select2')) { $f.select2('destroy'); }
+                    $f.select2({ width: '100%', theme: 'bootstrap4', escapeMarkup: function(m){return m;}, templateResult: formatSport, templateSelection: function(s){ return s.text; } });
+                }catch(e){ console.warn('initSportSelects: filterSport select2 init failed', e); }
+
+                // Modal select (inside modalKeputusan) — ensure dropdown parent is modal so it renders above modal
+                try{
+                    var $m = $(keputusanSukan);
+                    if ($m.length && $m.data('select2')) { $m.select2('destroy'); }
+                    $m.select2({ width: '100%', theme: 'bootstrap4', dropdownParent: $('#modalKeputusan'), escapeMarkup: function(m){return m;}, templateResult: formatSport, templateSelection: function(s){ return s.text; } });
+                }catch(e){ console.warn('initSportSelects: modal sukan select2 init failed', e); }
+            }
+        }catch(err){ console.warn('initSportSelects err', err); }
+    }
+
+    // Initialize sport selects after a short delay so DOM is ready and Select2 (if present) loaded
+    setTimeout(initSportSelects, 50);
+    
+    // Native-select fallback: mark completed sports with text if Select2 isn't present
+    function applyNativeSportLabels(){
+        try{
+            var selects = [sportSel, keputusanSukan];
+            selects.forEach(function(sel){
+                if (!sel) return;
+                // If Select2 is attached, skip native labeling for that element
+                if (window.jQuery && jQuery.fn && jQuery.fn.select2 && jQuery(sel).data('select2')) return;
+                Array.from(sel.options).forEach(function(opt){
+                    if (!opt) return;
+                    if (!opt.getAttribute) return;
+                    var complete = opt.getAttribute('data-complete');
+                    if (complete === '1'){
+                        if (!opt.hasAttribute('data-orig-label')){
+                            opt.setAttribute('data-orig-label', opt.textContent || opt.innerText || '');
+                            opt.textContent = (opt.textContent || opt.innerText || '') + ' (Lengkap)';
+                        }
+                    } else {
+                        // restore if previously modified
+                        if (opt.hasAttribute('data-orig-label')){
+                            opt.textContent = opt.getAttribute('data-orig-label');
+                            opt.removeAttribute('data-orig-label');
+                        }
+                    }
+                });
+            });
+        }catch(e){ console.warn('applyNativeSportLabels error', e); }
+    }
+
+    // Run fallback shortly after init (covers pages without Select2)
+    setTimeout(applyNativeSportLabels, 120);
+
+    // If Select2 not present, replace select with a lightweight custom dropdown that supports per-option highlight
+    function enhanceNativeSelectWithHighlight(sel){
+        try{
+            if (!sel) return;
+            // don't double-enhance
+            if (sel.dataset.enhanced === '1') return;
+            // If Select2 is active, skip
+            if (window.jQuery && jQuery.fn && jQuery.fn.select2 && jQuery(sel).data('select2')) return;
+
+            var wrapper = document.createElement('div');
+            wrapper.className = 'custom-select-wrapper';
+            var display = document.createElement('div');
+            display.className = 'custom-select-display';
+            var arrow = document.createElement('span'); arrow.className = 'custom-select-arrow'; arrow.innerHTML = '▾';
+            var labelSpan = document.createElement('span'); labelSpan.textContent = (sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : (sel.options[0] ? sel.options[0].textContent : '')); 
+            display.appendChild(labelSpan); display.appendChild(arrow);
+
+            var list = document.createElement('div'); list.className = 'custom-select-list';
+
+            Array.from(sel.options).forEach(function(opt){
+                var item = document.createElement('div');
+                item.className = 'custom-select-item';
+                if (opt.getAttribute && opt.getAttribute('data-complete') === '1') item.classList.add('sport-complete');
+                var lbl = document.createElement('span'); lbl.className = 'label'; lbl.textContent = opt.textContent;
+                var st = document.createElement('span'); st.className = 'status'; st.innerHTML = (opt.getAttribute && opt.getAttribute('data-complete') === '1') ? '✔' : '';
+                item.appendChild(lbl); item.appendChild(st);
+                item.dataset.value = opt.value;
+                item.addEventListener('click', function(){
+                    // set original select value and dispatch change
+                    try{ sel.value = this.dataset.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }catch(e){}
+                    labelSpan.textContent = lbl.textContent;
+                    closeList();
+                });
+                list.appendChild(item);
+            });
+
+            function openList(){ list.style.display = 'block'; wrapper.classList.add('custom-select-open'); }
+            function closeList(){ list.style.display = 'none'; wrapper.classList.remove('custom-select-open'); }
+
+            display.addEventListener('click', function(e){ e.stopPropagation(); if (list.style.display === 'block') closeList(); else openList(); });
+            document.addEventListener('click', function(){ closeList(); });
+
+            // insert wrapper before select and hide native select
+            sel.style.display = 'none'; sel.parentNode.insertBefore(wrapper, sel);
+            wrapper.appendChild(display); wrapper.appendChild(list); wrapper.appendChild(sel);
+            sel.dataset.enhanced = '1';
+        }catch(e){ console.warn('enhanceNativeSelectWithHighlight error', e); }
+    }
+
+    // Apply enhancer to both filterSport and keputusanSukan after a short delay
+    setTimeout(function(){ enhanceNativeSelectWithHighlight(sportSel); enhanceNativeSelectWithHighlight(keputusanSukan); }, 200);
     
     function fetchJSON(url){
         return fetch(url, { 
@@ -691,7 +876,7 @@ ob_start();
     
     // Pagination state
     var currentPage = 1;
-    var pageSize = 25; // default page size (requested)
+    var pageSize = 10; // default page size (requested)
 
     // Small HTML escape helper used in JS rendering
     function escapeHtml(str){
@@ -804,6 +989,17 @@ ob_start();
                         <i class="fa fa-trash"></i>
                     </button>
                 </td>`;
+
+            // Highlight row if this sport is marked complete (read from option data attribute)
+            try{
+                var sid = r.sukan_id || r.sukanId || r.sukanId || r.sukan_id === 0 ? r.sukan_id : null;
+                if (sid) {
+                    var opt = document.querySelector('#filterSport option[value="' + sid + '"]') || document.querySelector('#keputusanSukan option[value="' + sid + '"]');
+                    if (opt && opt.getAttribute && opt.getAttribute('data-complete') === '1') {
+                        tr.classList.add('sukan-complete');
+                    }
+                }
+            }catch(e){}
 
             keputusanBody.appendChild(tr);
         });

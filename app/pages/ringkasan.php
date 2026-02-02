@@ -381,9 +381,9 @@ ob_start();
                                 <tr>
                                     <th style="width:5%;" class="bil-col text-center">Bil</th>
                                     <th style="width:65%;">Universiti</th>
-                                    <th style="width:10%;" class="text-end"><i class="cil-male me-1"></i>Lelaki</th>
-                                    <th style="width:10%;" class="text-end"><i class="cil-child me-1"></i>Wanita</th>
-                                    <th style="width:10%;" class="text-end"><i class="cil-calculator me-1"></i>Jumlah</th>
+                                    <th style="width:10%;" class="text-start">Lelaki</th>
+                                    <th style="width:10%;" class="text-start">Wanita</th>
+                                    <th style="width:10%;" class="text-start">Jumlah</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -399,9 +399,9 @@ ob_start();
                                         <tr>
                                             <td class="text-center"><?php echo $bil++; ?></td>
                                             <td><?php echo htmlspecialchars($row['nama_universiti'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
-                                            <td class="text-end text-primary fw-semibold"><?php echo number_format($lelaki); ?></td>
-                                            <td class="text-end text-danger fw-semibold"><?php echo number_format($wanita); ?></td>
-                                            <td class="text-end fw-bold"><?php echo number_format($jumlah); ?></td>
+                                            <td class="text-start text-primary fw-semibold"><?php echo number_format($lelaki); ?></td>
+                                            <td class="text-start text-danger fw-semibold"><?php echo number_format($wanita); ?></td>
+                                            <td class="text-start fw-bold"><?php echo number_format($jumlah); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -410,9 +410,9 @@ ob_start();
                                 <tr>
                                     <th></th>
                                     <th class="text-end">Jumlah Keseluruhan</th>
-                                    <th class="text-end text-primary fw-semibold"><?php echo number_format($totals['LELAKI']); ?></th>
-                                    <th class="text-end text-danger fw-semibold"><?php echo number_format($totals['WANITA']); ?></th>
-                                    <th class="text-end fw-bold"><?php echo number_format($totals['LELAKI'] + $totals['WANITA']); ?></th>
+                                    <th class="text-start text-primary fw-semibold"><?php echo number_format($totals['LELAKI']); ?></th>
+                                    <th class="text-start text-danger fw-semibold"><?php echo number_format($totals['WANITA']); ?></th>
+                                    <th class="text-start fw-bold"><?php echo number_format($totals['LELAKI'] + $totals['WANITA']); ?></th>
                                 </tr>
                             </tfoot>
                         </table>
