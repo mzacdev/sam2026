@@ -333,7 +333,45 @@ select.form-select-sm, .form-select-sm {
 }
 </style>
 
+<?php
+// Precompute inline data-URIs for critical assets so print view works even when direct HTTP
+// requests are blocked by WAF or referrer rules. This inlines logos and sport icons.
+$inline_assets = [];
+$asset_root = realpath(__DIR__ . '/../assets');
+$to_inline = [
+    'img/logos/UA/kpt.png',
+    'img/logos/logo-print.png',
+    'img/logos/UA/UPNM.svg',
+    'img/logos/logo-main.png',
+    // sport icons
+    'img/sukan/badminton.png', 'img/sukan/bola-jaring.png', 'img/sukan/volleyball.png', 'img/sukan/catur.png',
+    'img/sukan/bola-sepak.png', 'img/sukan/ragbi.png', 'img/sukan/takraw.png', 'img/sukan/mlbb-pubg.png',
+    'img/sukan/tenpin-bowling.png', 'img/sukan/olahraga.png', 'img/sukan/default.png'
+];
+foreach ($to_inline as $rel) {
+    $full = $asset_root . '/' . $rel;
+    if (file_exists($full) && is_readable($full)) {
+        $ext = strtolower(pathinfo($full, PATHINFO_EXTENSION));
+        $data = file_get_contents($full);
+        if ($data !== false) {
+            if ($ext === 'svg') {
+                $mime = 'image/svg+xml';
+            } elseif ($ext === 'png') {
+                $mime = 'image/png';
+            } elseif ($ext === 'jpg' || $ext === 'jpeg') {
+                $mime = 'image/jpeg';
+            } else {
+                $mime = 'application/octet-stream';
+            }
+            $inline_assets[$rel] = 'data:' . $mime . ';base64,' . base64_encode($data);
+        }
+    }
+}
+?>
+
 <script>
+var INLINE_ASSETS = <?php echo json_encode($inline_assets); ?>;
+var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
 (function(){
     const sportSel = document.getElementById('filterSport');
     const kategoriSel = document.getElementById('filterKategori');
@@ -1098,8 +1136,8 @@ select.form-select-sm, .form-select-sm {
                     const nameDisplay = escapeHtml(namePretty);
 
                     tr.innerHTML = `<td class="align-top text-center">${rankCell}</td>` +
-                                   `<td class="align-top">${escapeHtml(sukan)}</td>` +
-                                   `<td class="align-top">${escapeHtml(acara)}</td>` +
+                                   `<td class="align-top">${escapeHtml(currentModalSukan || (s.sukan || ''))}</td>` +
+                                   `<td class="align-top">${escapeHtml(currentModalAcara || (s.kategori || s.acara || ''))}</td>` +
                                    `<td class="align-top"><span class="text-truncate" data-bs-toggle="tooltip" title="${escapeHtml(namePretty)}">${nameDisplay}</span></td>`;
                     tbody.appendChild(tr);
                 });
@@ -1155,8 +1193,17 @@ select.form-select-sm, .form-select-sm {
             function absolutizeAsset(p){
                 try{
                     if (!p) return p;
+                    // if this is an assets path, prefer inlined data URI when available
+                    try{
+                        if (typeof INLINE_ASSETS !== 'undefined' && p) {
+                            var rel = null;
+                            if (p.indexOf('/assets/') === 0) rel = p.replace(/^\/assets\//, '');
+                            else if (p.indexOf('assets/') === 0) rel = p.replace(/^assets\//, '');
+                            if (rel && INLINE_ASSETS[rel]) return INLINE_ASSETS[rel];
+                        }
+                    }catch(ee){}
+
                     if (/^https?:\/\//i.test(p)) return p;
-                    // protocol-relative URLs (//example.com)
                     if (p.indexOf('//') === 0) return window.location.protocol + p;
                     if (p.charAt(0) === '/') return window.location.origin + p;
                     return window.location.origin + '/' + p.replace(/^\.\//, '');
@@ -1263,7 +1310,8 @@ select.form-select-sm, .form-select-sm {
                     html += '<td rowspan="3" style="vertical-align:top;width:5%;text-align:center;border:1px solid #000">' + no + '</td>';
                     // Sukan icon cell (rowspan 3)
                     var iconFile = iconMap[String(sukanId)] || 'default.png';
-                    var iconPath = absolutizeAsset('/assets/img/sukan/' + iconFile);
+                    var iconRel = 'img/sukan/' + iconFile;
+                    var iconPath = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS[iconRel]) ? INLINE_ASSETS[iconRel] : (window.location.origin + (SITE_BASE || '') + '/assets/img/sukan/' + iconFile);
                     html += '<td rowspan="3" style="vertical-align:top;width:10%;text-align:center;border:1px solid #000"><img src="' + iconPath + '" alt="' + escapeHtml(sport) + '" style="display:inline-block;margin:0 auto;max-height:40px;max-width:100%;object-fit:contain"></td>';
                     html += '<td rowspan="3" style="vertical-align:top;width:15%">' + escapeHtml(acara) + '</td>';
                     html += '<td style="width:20%;vertical-align:top"><strong>Pemenang Emas</strong><div style="margin-top:6px">' + escapeHtml(w1.kontingen_short_name || w1.participant_name || w1.participant_display_name || '-') + '</div></td>';
@@ -1499,10 +1547,13 @@ select.form-select-sm, .form-select-sm {
                     '</style>';
             html += '</head><body>';
             // three logos: left KPT, center event logo, right UPNM
+            const logoKPT = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/kpt.png']) ? INLINE_ASSETS['img/logos/UA/kpt.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/kpt.png');
+            const logoEvent = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/logo-print.png']) ? INLINE_ASSETS['img/logos/logo-print.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/logo-print.png');
+            const logoUPNM = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/UPNM.svg']) ? INLINE_ASSETS['img/logos/UA/UPNM.svg'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/UPNM.svg');
             html += '<div style="display:flex;justify-content:center;align-items:center;margin-bottom:8px">' +
-                        '<img src="/assets/img/logos/UA/kpt.png" alt="KPT" style="height:56px;margin-right:18px">' +
-                        '<img src="/assets/img/logos/logo-print.png" alt="Logo Sukan" style="height:70px;margin:0 18px">' +
-                        '<img src="/assets/img/logos/UA/UPNM.svg" alt="UPNM" style="height:56px;margin-left:18px">' +
+                        '<img src="' + logoKPT + '" alt="KPT" style="height:56px;margin-right:18px">' +
+                        '<img src="' + logoEvent + '" alt="Logo Sukan" style="height:70px;margin:0 18px">' +
+                        '<img src="' + logoUPNM + '" alt="UPNM" style="height:56px;margin-left:18px">' +
                     '</div>';
             html += '<h1>LAPORAN PENCAPAIAN PINGAT KESELURUHAN KEJOHANAN</h1>';
             html += '<p class="intro">Laporan ini menyenaraikan pencapaian pingat keseluruhan berdasarkan pengiraan rasmi pingat daripada keputusan yang telah disahkan. Analisis ini hanya merujuk kepada jumlah pingat bagi setiap kontinjen.</p>';
@@ -1694,7 +1745,9 @@ select.form-select-sm, .form-select-sm {
                     var iconFile = '';
                     switch(String(sukanId)){
                         case '1': iconFile='badminton.png'; break; case '2': iconFile='bola-jaring.png'; break; case '3': iconFile='volleyball.png'; break; case '4': iconFile='catur.png'; break; case '5': iconFile='bola-sepak.png'; break; case '6': iconFile='ragbi.png'; break; case '7': iconFile='takraw.png'; break; case '8': case '9': iconFile='mlbb-pubg.png'; break; case '10': iconFile='tenpin-bowling.png'; break; case '11': iconFile='olahraga.png'; break; default: iconFile='default.png'; }
-                    var iconPath = '/assets/img/sukan/' + iconFile;
+                    // Prefer inlined asset when available; otherwise build absolute URL using SITE_BASE
+                    var iconRel = 'img/sukan/' + iconFile;
+                    var iconPath = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS[iconRel]) ? INLINE_ASSETS[iconRel] : (window.location.origin + (SITE_BASE || '') + '/assets/img/sukan/' + iconFile);
                     html += '<td style="vertical-align:top;width:10%;text-align:center;border:1px solid #000"><img src="' + iconPath + '" style="display:inline-block;margin:0 auto;max-height:40px;max-width:100%;object-fit:contain"></td>';
                     html += '<td style="vertical-align:top;width:15%;text-align:left;border:1px solid #000">' + escapeHtml(acara) + '</td>';
                     html += '<td style="width:20%;vertical-align:top;text-align:left;border:1px solid #000"><strong>Pemenang Emas</strong><div style="margin-top:6px">' + escapeHtml(w1.kontingen_short_name || w1.participant_display_name || '-') + '</div></td>';
@@ -1822,7 +1875,7 @@ select.form-select-sm, .form-select-sm {
             Swal.showLoading();
         }
         
-        fetchJSON(<?php echo json_encode(url("ajax/keputusan_list_fixed.php") . '?id='); ?> + id)
+            fetchJSON(<?php echo json_encode(url("ajax/keputusan_list_fixed.php") . '?id='); ?> + id)
             .then(res=>{
                 if (window.Swal) Swal.close();
                 
