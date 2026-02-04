@@ -147,6 +147,7 @@ $nav_sections = [
         'title' => 'Laporan',
         'children' => [
             ['title' => 'Ringkasan', 'icon' => 'cil-chart', 'url' => 'pages/ringkasan.php'],
+            ['title' => 'Sijil Penyertaan', 'icon' => 'cil-id-card', 'url' => 'pages/sijil.php'],
             ['title' => 'Keputusan', 'icon' => 'cil-award', 'url' => 'pages/results.php'],
             ['title' => 'Kontinjen', 'icon' => 'cil-people', 'url' => 'pages/contingent-admin.php'],
                 // Checklist removed - no longer shown in menu

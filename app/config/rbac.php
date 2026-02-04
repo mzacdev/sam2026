@@ -52,6 +52,8 @@ class RBAC {
         'pages/medal-tally.php' => ['ADMIN', 'ORGANIZER'],
         'pages/reports.php' => ['ADMIN', 'ORGANIZER'],
         'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
+        // Sijil Penyertaan - visible to ADMIN, CONTINGENT and VIEWER
+        'pages/sijil.php' => ['ADMIN', 'CONTINGENT', 'VIEWER'],
         // Setup Pertandingan - restricted to ADMIN and CONTINGENT only
         'pages/setup-pertandingan.php' => ['ADMIN', 'CONTINGENT'],
         // Setup Jadual - new page for schedule setup (ADMIN, ORGANIZER)
