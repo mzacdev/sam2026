@@ -230,7 +230,7 @@ if ($printAll !== '') {
         $multiHtml .= '<div class="page">' .
             '<img class="bg-img" src="' . htmlspecialchars($absTemplateUrl, ENT_QUOTES, 'UTF-8') . '" alt="background">' .
             '<div class="cert-name">' . htmlspecialchars($rname, ENT_QUOTES, 'UTF-8') . '</div>' .
-            '<div class="cert-sport"><strong>' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</strong></div>' .
+            '<div class="cert-sport">' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</div>' .
         '</div>';
     }
 
@@ -335,7 +335,7 @@ if ($printId !== '') {
         '<div class="page">' .
             '<img class="bg-img" src="' . htmlspecialchars($absTemplateUrl, ENT_QUOTES, 'UTF-8') . '" alt="background">' .
             '<div class="cert-name">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>' .
-            '<div class="cert-sport"><strong>' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</strong></div>' .
+            '<div class="cert-sport">' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</div>' .
         '</div>' .
         '<script> (function(){ var bg=document.querySelector(".bg-img"); function p(){ try{ if(window.top===window.self){ window.print(); } }catch(e){} } if(bg){ if(bg.complete) setTimeout(p,120); else { bg.addEventListener("load", p); bg.addEventListener("error", p); } } else setTimeout(p,200); })(); </script></body></html>';
 
@@ -588,11 +588,11 @@ ob_start();
                                 function buildCertHtml(name, sukanCombined, templateOverride){
                                 var templateUrl = templateOverride || <?php echo json_encode($img_url_versioned); ?>;
                                 var html = '<!doctype html><html><head><meta charset="utf-8"><title>Sijil Penyertaan</title>' +
-                                    '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' +
+                                    '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;font-weight:700;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' +
                                     '<div class="page">' +
                                         '<img class="bg-img" src="'+templateUrl+'" alt="background">' +
                                         '<div class="cert-name">'+(name||'')+'</div>' +
-                                        '<div class="cert-sport"><strong>' + ((sukanCombined||'').toString().toUpperCase()) + '</strong></div>' +
+                                        '<div class="cert-sport">' + ((sukanCombined||'').toString().toUpperCase()) + '</div>' +
                                     '</div>' +
                                     '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
                                 return html;
@@ -791,7 +791,7 @@ ob_start();
                                     html += '<div class="page">' +
                                         '<img class="bg-img" src="'+img+'" alt="bg">' +
                                         '<div class="cert-name">'+(name.replace(/</g,'&lt;'))+'</div>' +
-                                        '<div class="cert-sport"><strong>'+((sukan_combo||'').toString().toUpperCase().replace(/</g,'&lt;'))+'</strong></div>' +
+                                        '<div class="cert-sport">'+((sukan_combo||'').toString().toUpperCase().replace(/</g,'&lt;'))+'</div>' +
                                     '</div>';
                                 });
                                 html += '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
@@ -945,7 +945,7 @@ document.addEventListener('DOMContentLoaded', function(){
             '<div class="page">'+
                 '<img class="bg-img" src="'+tUrl+'" alt="bg">'+
                 '<div class="cert-name">'+(name||'')+'</div>'+
-                '<div class="cert-sport"><strong>' + ((sukanCombined||'').toString().toUpperCase()) + '</strong></div>'+
+                '<div class="cert-sport">' + ((sukanCombined||'').toString().toUpperCase()) + '</div>'+
             '</div></body></html>';
         return html;
     }
