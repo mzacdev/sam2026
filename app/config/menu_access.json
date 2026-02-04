@@ -21,12 +21,10 @@
       "ORGANIZER"
     ],
     "pages/setup-pertandingan.php": [
-      "ADMIN",
-      "CONTINGENT"
+      "ADMIN"
     ],
     "pages/setup-jadual.php": [
-      "ADMIN",
-      "ORGANIZER"
+      "ADMIN"
     ],
     "pages/contingent-user.php": [
       "CONTINGENT"
@@ -75,7 +73,7 @@
     ],
     "pages/sijil.php": [
       "ADMIN",
-      "CONTINGENT",
+      "ORGANIZER",
       "VIEWER"
     ],
     "pages/contingent-admin.php": [

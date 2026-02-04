@@ -43,8 +43,8 @@ try {
 $kod = strtoupper(trim((string)($_GET['kod'] ?? '')));
 
 // ensure template image URL variable exists to avoid PHP notices
-if (!isset($img_url_versioned) || !$img_url_versioned) {
-    $relPath = '/assets/img/sijil/sam2026_sijil_penyertaan.jpg';
+    if (!isset($img_url_versioned) || !$img_url_versioned) {
+    $relPath = '/assets/img/sijil/sijil_atlet.jpeg';
     $fullPath = realpath(__DIR__ . '/..') . $relPath;
     $ver = @file_exists($fullPath) ? @filemtime($fullPath) : time();
     $img_url_versioned = $relPath . '?v=' . $ver;
@@ -185,18 +185,19 @@ if ($printAll !== '') {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     // choose template based on type
-    if ($type === 'pengurus') {
+        if ($type === 'pengurus') {
         $img_rel = '/assets/img/sijil/sijil_pengurus.jpeg';
     } else if ($type === 'jurulatih') {
         $img_rel = '/assets/img/sijil/sijil_jurulatih.jpeg';
     } else {
-        $img_rel = $img_url_versioned;
+        // athletes -> use new athlete template
+        $img_rel = '/assets/img/sijil/sijil_atlet.jpeg';
     }
     // Build absolute URL including BASE_URL so it works in subfolder deployments
     $absTemplateUrl = $scheme . '://' . $host . url(ltrim($img_rel, '/'));
 
     $multiHtml = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sijil Penyertaan - Semua</title>' .
-        '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>';
+        '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;font-weight:700;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>';
 
     foreach ($rowsAll as $ra) {
         $rname = trim((string)($ra['nama'] ?? ''));
@@ -212,13 +213,24 @@ if ($printAll !== '') {
             if ($racara !== '') {
                 $sukan_combo = $sukan_combo !== '' ? $sukan_combo . ' (' . $racara . ')' : $racara;
             }
+            // uppercase sport/event for printed certificates
+            $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
         } else {
-            $sukan_combo = '';
+            // For non-athletes, show fixed role label in the same position
+            if ($type === 'pengurus') {
+                $sukan_combo = mb_strtoupper('PENGURUS', 'UTF-8');
+            } else if ($type === 'jurulatih') {
+                $sukan_combo = mb_strtoupper('JURULATIH', 'UTF-8');
+            } else if ($type === 'penyelaras') {
+                $sukan_combo = mb_strtoupper('KETUA KONTINJEN', 'UTF-8');
+            } else {
+                $sukan_combo = '';
+            }
         }
         $multiHtml .= '<div class="page">' .
             '<img class="bg-img" src="' . htmlspecialchars($absTemplateUrl, ENT_QUOTES, 'UTF-8') . '" alt="background">' .
             '<div class="cert-name">' . htmlspecialchars($rname, ENT_QUOTES, 'UTF-8') . '</div>' .
-            '<div class="cert-sport">' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</div>' .
+            '<div class="cert-sport"><strong>' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</strong></div>' .
         '</div>';
     }
 
@@ -304,24 +316,26 @@ if ($printId !== '') {
     if ($acara !== '') {
         $sukan_combo = $sukan_combo !== '' ? $sukan_combo . ' (' . $acara . ')' : $acara;
     }
+    // uppercase sport/event for printed certificate
+    $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
 
     // Prepare HTML for certificate. For PDF generation we need absolute URLs.
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     // Use the athlete template explicitly to avoid mismatches when $img_url_versioned
     // may point elsewhere. Build a versioned absolute URL for the athlete background.
-    $athRel = '/assets/img/sijil/sam2026_sijil_penyertaan.jpg';
+    $athRel = '/assets/img/sijil/sijil_atlet.jpeg';
     $athFull = realpath(__DIR__ . '/..') . $athRel;
     $athVer = @file_exists($athFull) ? @filemtime($athFull) : time();
     // include BASE_URL prefix so it resolves correctly in production subfolders
-    $absTemplateUrl = $scheme . '://' . $host . url('assets/img/sijil/sam2026_sijil_penyertaan.jpg') . '?v=' . (int)$athVer;
+    $absTemplateUrl = $scheme . '://' . $host . url('assets/img/sijil/sijil_atlet.jpeg') . '?v=' . (int)$athVer;
 
     $certHtml = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sijil Penyertaan</title>' .
-        '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' .
+        '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;font-weight:700;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' .
         '<div class="page">' .
             '<img class="bg-img" src="' . htmlspecialchars($absTemplateUrl, ENT_QUOTES, 'UTF-8') . '" alt="background">' .
             '<div class="cert-name">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>' .
-            '<div class="cert-sport">' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</div>' .
+            '<div class="cert-sport"><strong>' . htmlspecialchars($sukan_combo, ENT_QUOTES, 'UTF-8') . '</strong></div>' .
         '</div>' .
         '<script> (function(){ var bg=document.querySelector(".bg-img"); function p(){ try{ if(window.top===window.self){ window.print(); } }catch(e){} } if(bg){ if(bg.complete) setTimeout(p,120); else { bg.addEventListener("load", p); bg.addEventListener("error", p); } } else setTimeout(p,200); })(); </script></body></html>';
 
@@ -472,16 +486,16 @@ ob_start();
                 <div id="tabsWrap" style="display:none;">
                         <ul class="nav nav-tabs" id="sijilTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="tab-penyelaras" data-bs-toggle="tab" data-bs-target="#pane-penyelaras" type="button" role="tab">Penyelaras <span id="countPenyelaras" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link active" id="tab-penyelaras" data-bs-toggle="tab" data-bs-target="#pane-penyelaras" type="button" role="tab">Penyelaras / Ketua Kontinjen <span id="countPenyelaras" class="badge bg-secondary ms-1">0</span></button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-pengurus" data-bs-toggle="tab" data-bs-target="#pane-pengurus" type="button" role="tab">Pengurus <span id="countPengurus" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link" id="tab-pengurus" data-bs-toggle="tab" data-bs-target="#pane-pengurus" type="button" role="tab">Pengurus Sukan <span id="countPengurus" class="badge bg-secondary ms-1">0</span></button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-jurulatih" data-bs-toggle="tab" data-bs-target="#pane-jurulatih" type="button" role="tab">Jurulatih <span id="countJurulatih" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link" id="tab-jurulatih" data-bs-toggle="tab" data-bs-target="#pane-jurulatih" type="button" role="tab">Jurulatih Acara Sukan <span id="countJurulatih" class="badge bg-secondary ms-1">0</span></button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-atlet" data-bs-toggle="tab" data-bs-target="#pane-atlet" type="button" role="tab">Atlet <span id="countAtlet" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link" id="tab-atlet" data-bs-toggle="tab" data-bs-target="#pane-atlet" type="button" role="tab">Atlet Sukan <span id="countAtlet" class="badge bg-secondary ms-1">0</span></button>
                             </li>
                         </ul>
                         <div class="tab-content border border-top-0 p-3" id="sijilTabContent">
@@ -490,7 +504,7 @@ ob_start();
                                     <div class="me-auto"></div>
                                     <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%">No</th><th style="width:55%">Nama</th><th style="width:25%">Email</th><th style="width:15%">No Telefon</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama</th><th style="width:20%">Email</th><th style="width:15%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="penyelarasPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="penyelarasPageInfo" class="me-2">Page 1/1</span>
@@ -502,7 +516,7 @@ ob_start();
                                     <div class="me-auto"></div>
                                     <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
@@ -514,7 +528,7 @@ ob_start();
                                     <div class="me-auto"></div>
                                     <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
@@ -526,7 +540,7 @@ ob_start();
                                     <div class="me-auto"></div>
                                     <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%">No</th><th style="width:75%">Nama Atlet</th><th style="width:13%">Sukan / Acara</th><th style="width:7%">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="athletePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="athletePageInfo" class="me-2">Page 1/1</span>
@@ -578,7 +592,7 @@ ob_start();
                                     '<div class="page">' +
                                         '<img class="bg-img" src="'+templateUrl+'" alt="background">' +
                                         '<div class="cert-name">'+(name||'')+'</div>' +
-                                        '<div class="cert-sport">'+(sukanCombined||'')+'</div>' +
+                                        '<div class="cert-sport"><strong>' + ((sukanCombined||'').toString().toUpperCase()) + '</strong></div>' +
                                     '</div>' +
                                     '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
                                 return html;
@@ -600,6 +614,15 @@ ob_start();
                         var PAGE_SIZE = 10;
                         var currentPenyelarasPage = 1, currentPengurusPage = 1, currentJurulatihPage = 1, currentAthletePage = 1;
 
+                        // Render cell HTML with empty-value badge
+                        function escHtml(s){ return (s===null||s===undefined)?'':String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+                        function cellHtml(val, center){
+                            var v = (val===null||val===undefined)?'' : String(val).trim();
+                            var cls = center ? 'text-center' : 'text-truncate';
+                            if (v === '') return '<td class="'+cls+'"><span class="no-data-badge">Tiada</span></td>'; 
+                            return '<td class="'+cls+'" title="'+escHtml(v)+'">'+escHtml(v)+'</td>';
+                        }
+
                         function getSelectedKod(){ var sel = document.getElementById('selectKont'); return sel && sel.value ? sel.value : ''; }
 
                         function renderPengurusPage(){
@@ -615,11 +638,11 @@ ob_start();
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
-                                    '<td>'+ (p.nama.replace(/</g,'&lt;')) +'</td>' +
-                                    '<td>'+ telSafe +'</td>' +
+                                    (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-pengurus">Cetak</button></td>';
                                 pengurusBody.appendChild(tr);
-                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, '', <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'PENGURUS', <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>)); });
                             });
                             try{ document.getElementById('pengurusPageInfo').textContent = 'Page ' + currentPengurusPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('pengurusPrev').disabled = currentPengurusPage <= 1; }catch(e){}
@@ -641,11 +664,11 @@ ob_start();
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
-                                    '<td>'+ (p.nama.replace(/</g,'&lt;')) +'</td>' +
-                                    '<td>'+ telSafe +'</td>' +
+                                    (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-jurulatih">Cetak</button></td>';
                                 jurulatihBody.appendChild(tr);
-                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, '', <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'JURULATIH', <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>)); });
                             });
                             try{ document.getElementById('jurulatihPageInfo').textContent = 'Page ' + currentJurulatihPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('jurulatihPrev').disabled = currentJurulatihPage <= 1; }catch(e){}
@@ -672,8 +695,8 @@ ob_start();
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
-                                    '<td>'+name+'</td>'+
-                                    '<td>'+info+'</td>'+
+                                    (function(){ return cellHtml(name, false); })() +
+                                    (function(){ return cellHtml(info, false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print">Cetak</button></td>';
                                 athleteBody.appendChild(tr);
                                 var btnEl = tr.querySelector('.do-print');
@@ -703,11 +726,13 @@ ob_start();
                                 var emailSafe = (r.emel || '').replace(/</g,'&lt;');
                                 var telSafe = (r.telefon || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
-                                    '<td>'+nameSafe+'</td>'+
-                                    '<td>'+emailSafe+'</td>'+
-                                    '<td>' + telSafe + ' <button type="button" class="btn btn-sm btn-outline-primary float-end do-print-penyelaras">Cetak</button></td>';
+                                    (function(){ return cellHtml(nameSafe, false); })() +
+                                    (function(){ return cellHtml(emailSafe, false); })() +
+                                    (function(){ return cellHtml(telSafe, true); })() +
+                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-penyelaras">Cetak</button></td>';
                                 penyelarasBody.appendChild(tr);
-                                tr.querySelector('.do-print-penyelaras').addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.nama || '', '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
+                                var btn = tr.querySelector('.do-print-penyelaras');
+                                if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.nama || '', 'KETUA KONTINJEN', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
                             });
                             try{ document.getElementById('penyelarasPageInfo').textContent = 'Page ' + currentPenyelarasPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('penyelarasPrev').disabled = currentPenyelarasPage <= 1; }catch(e){}
@@ -734,15 +759,15 @@ ob_start();
                             var tmplJurulatih = <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>;
                             var tmplPenyelaras = <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>;
                             var tmplAtlet = <?php
-                                $athPath = __DIR__ . '/../assets/img/sijil/sam2026_sijil_penyertaan.jpg';
+                                $athPath = __DIR__ . '/../assets/img/sijil/sijil_atlet.jpeg';
                                 $ver = @file_exists($athPath) ? @filemtime($athPath) : time();
-                                echo json_encode(url('assets/img/sijil/sam2026_sijil_penyertaan.jpg') . '?v=' . (int)$ver);
+                                echo json_encode(url('assets/img/sijil/sijil_atlet.jpeg') . '?v=' . (int)$ver);
                             ?>;
 
                             function buildMultiHtml(rows, type){
                                 var img = type === 'pengurus' ? tmplPengurus : (type === 'jurulatih' ? tmplJurulatih : (type === 'penyelaras' ? tmplPenyelaras : tmplAtlet));
                                 var html = '<!doctype html><html><head><meta charset="utf-8"><title>Cetak Semua Sijil</title>' +
-                                    '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>';
+                                    '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;font-weight:700;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>';
                                 rows.forEach(function(r){
                                     var raw = (r.nama || '').toString();
                                     // strip phone/email
@@ -754,11 +779,19 @@ ob_start();
                                         var a = (r.acara||'').toString();
                                         sukan_combo = s;
                                         if (a !== '') sukan_combo = sukan_combo !== '' ? (sukan_combo + ' (' + a + ')') : a;
+                                        // uppercase for athletes
+                                        sukan_combo = (sukan_combo||'').toString().toUpperCase();
+                                    } else {
+                                        // fixed labels for other types
+                                        if (type === 'pengurus') sukan_combo = 'PENGURUS';
+                                        else if (type === 'jurulatih') sukan_combo = 'JURULATIH';
+                                        else if (type === 'penyelaras') sukan_combo = 'KETUA KONTINJEN';
+                                        else sukan_combo = '';
                                     }
                                     html += '<div class="page">' +
                                         '<img class="bg-img" src="'+img+'" alt="bg">' +
                                         '<div class="cert-name">'+(name.replace(/</g,'&lt;'))+'</div>' +
-                                        '<div class="cert-sport">'+(sukan_combo.replace(/</g,'&lt;'))+'</div>' +
+                                        '<div class="cert-sport"><strong>'+((sukan_combo||'').toString().toUpperCase().replace(/</g,'&lt;'))+'</strong></div>' +
                                     '</div>';
                                 });
                                 html += '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
@@ -907,12 +940,12 @@ document.addEventListener('DOMContentLoaded', function(){
     var templateUrl = <?php echo json_encode($img_url_versioned); ?>;
     function buildCertHtml(name, sukanCombined, templateOverride){
         var tUrl = templateOverride || templateUrl;
-        var html = '<!doctype html><html><head><meta charset="utf-8"><title>Sijil Penyertaan</title>' +
-            '<style>html,body{height:100%;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:20px;font-weight:700;color:#000;text-align:center;padding:0 30px;line-height:1.05;z-index:1}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);font-size:20px;color:#000;text-align:center;padding:0 30px;z-index:1}@media print{.bg-img{display:block}}</style></head><body>'+
+            var html = '<!doctype html><html><head><meta charset="utf-8"><title>Sijil Penyertaan</title>' +
+            '<style>html,body{height:100%;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:20px;font-weight:700;color:#000;text-align:center;padding:0 30px;line-height:1.05;z-index:1}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);font-size:20px;font-weight:700;color:#000;text-align:center;padding:0 30px;z-index:1}@media print{.bg-img{display:block}}</style></head><body>'+
             '<div class="page">'+
                 '<img class="bg-img" src="'+tUrl+'" alt="bg">'+
                 '<div class="cert-name">'+(name||'')+'</div>'+
-                '<div class="cert-sport">'+(sukanCombined||'')+'</div>'+
+                '<div class="cert-sport"><strong>' + ((sukanCombined||'').toString().toUpperCase()) + '</strong></div>'+
             '</div></body></html>';
         return html;
     }

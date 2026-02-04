@@ -250,7 +250,7 @@ ob_start();
             // disable acara until categories are loaded and populated for chosen sport
             $selectAcara.prop('disabled', true);
             var $search = $('<input type="search" class="form-control form-control-sm details-search" placeholder="Cari peserta...">');
-            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5">5</option><option value="10" selected>10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>');
+            var $pageSizeSel = $('<select class="form-select form-select-sm details-pagesize"><option value="5">5</option><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select>');
             // left and right control groups
             var $leftControls = $('<div class="left-controls"></div>').append($select).append($selectAcara);
             var $rightControls = $('<div class="right-controls"></div>').append($search).append($pageSizeSel);
@@ -372,7 +372,7 @@ ob_start();
             });
 
             var $tbody = $table.find('tbody');
-            var pageSize = parseInt($pageSizeSel.val(),10) || 10;
+            var pageSize = parseInt($pageSizeSel.val(),10) || 25;
             var currentPage = 1;
 
             function applyFilters(){
@@ -528,7 +528,7 @@ ob_start();
             });
             $selectAcara.on('change', function(){ currentPage = 1; reloadFromServer(); });
             $search.on('input', function(){ currentPage = 1; renderPage(); });
-            $pageSizeSel.on('change', function(){ pageSize = parseInt($(this).val(),10) || 5; currentPage = 1; renderPage(); });
+            $pageSizeSel.on('change', function(){ pageSize = parseInt($(this).val(),10) || 25; currentPage = 1; renderPage(); });
             $pager.on('click', 'a.page-link', function(e){ e.preventDefault(); var p = $(this).data('page'); if (!p) return; currentPage = parseInt(p,10)||1; renderPage(); });
 
             // initial render
