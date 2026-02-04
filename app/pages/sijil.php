@@ -89,6 +89,37 @@ if ($ajax === 'athletes') {
     exit;
 }
 
+if ($ajax === 'penyelaras') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'rows' => [], 'elapsed_ms' => null, 'error' => null, 'count' => 0];
+    $k = strtoupper(trim((string)($_GET['kod'] ?? '')));
+    if ($k === '') {
+        echo json_encode($out);
+        exit;
+    }
+    $t0 = microtime(true);
+    try {
+        $db = getDB();
+        $sql = "SELECT id, TRIM(nama_pegawai_untuk_dihubungi) AS nama, TRIM(emel) AS emel, TRIM(no_telefon) AS telefon
+            FROM table_kontinjen
+            WHERE UPPER(COALESCE(kod_universiti,'')) = :kod_val
+              AND deleted_at IS NULL
+            ORDER BY nama_pegawai_untuk_dihubungi";
+        $st = $db->prepare($sql);
+        $st->execute([':kod_val' => $k]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $out['ok'] = true;
+        $out['rows'] = $rows;
+        $out['count'] = count($rows);
+    } catch (Exception $e) {
+        $out['ok'] = false;
+        $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
 // Handle printing all athletes for a kontinjen (multi-page HTML or combined PDF)
 $printAll = trim((string)($_GET['print_all'] ?? ''));
 if ($printAll !== '') {
@@ -441,7 +472,10 @@ ob_start();
                 <div id="tabsWrap" style="display:none;">
                         <ul class="nav nav-tabs" id="sijilTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="tab-pengurus" data-bs-toggle="tab" data-bs-target="#pane-pengurus" type="button" role="tab">Pengurus <span id="countPengurus" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link active" id="tab-penyelaras" data-bs-toggle="tab" data-bs-target="#pane-penyelaras" type="button" role="tab">Penyelaras <span id="countPenyelaras" class="badge bg-secondary ms-1">0</span></button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-pengurus" data-bs-toggle="tab" data-bs-target="#pane-pengurus" type="button" role="tab">Pengurus <span id="countPengurus" class="badge bg-secondary ms-1">0</span></button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="tab-jurulatih" data-bs-toggle="tab" data-bs-target="#pane-jurulatih" type="button" role="tab">Jurulatih <span id="countJurulatih" class="badge bg-secondary ms-1">0</span></button>
@@ -451,7 +485,19 @@ ob_start();
                             </li>
                         </ul>
                         <div class="tab-content border border-top-0 p-3" id="sijilTabContent">
-                            <div class="tab-pane fade show active" id="pane-pengurus" role="tabpanel">
+                            <div class="tab-pane fade show active" id="pane-penyelaras" role="tabpanel">
+                                <div class="d-flex mb-2">
+                                    <div class="me-auto"></div>
+                                    <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                </div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%">No</th><th style="width:55%">Nama</th><th style="width:25%">Email</th><th style="width:15%">No Telefon</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
+                                <div class="d-flex justify-content-end align-items-center mt-2">
+                                    <button type="button" id="penyelarasPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                    <span id="penyelarasPageInfo" class="me-2">Page 1/1</span>
+                                    <button type="button" id="penyelarasNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="pane-pengurus" role="tabpanel">
                                 <div class="d-flex mb-2">
                                     <div class="me-auto"></div>
                                     <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
@@ -497,14 +543,17 @@ ob_start();
                                 var athleteBody = document.getElementById('athleteBody');
                                 var pengurusBody = document.getElementById('pengurusBody');
                                 var jurulatihBody = document.getElementById('jurulatihBody');
+                                var penyelarasBody = document.getElementById('penyelarasBody');
                                 var loader = document.getElementById('tableLoader');
                                 var printAllPengurus = document.getElementById('printAllPengurus');
                                 var printAllJurulatih = document.getElementById('printAllJurulatih');
                                 var printAllAtlet = document.getElementById('printAllAtlet');
+                                var printAllPenyelaras = document.getElementById('printAllPenyelaras');
                                 var countPengurus = document.getElementById('countPengurus');
                                 var countJurulatih = document.getElementById('countJurulatih');
                                 var countAtlet = document.getElementById('countAtlet');
-                                var lastRows = { athletes: [], pengurus: [], jurulatih: [] };
+                                var countPenyelaras = document.getElementById('countPenyelaras');
+                                var lastRows = { athletes: [], pengurus: [], jurulatih: [], penyelaras: [] };
 
                         function showLoader(){ try{ if(loader) loader.style.display = 'inline-block'; }catch(e){} }
                         function hideLoader(){ try{ if(loader) loader.style.display = 'none'; }catch(e){} }
@@ -549,7 +598,7 @@ ob_start();
 
                         // Pagination and rendering helpers
                         var PAGE_SIZE = 10;
-                        var currentPengurusPage = 1, currentJurulatihPage = 1, currentAthletePage = 1;
+                        var currentPenyelarasPage = 1, currentPengurusPage = 1, currentJurulatihPage = 1, currentAthletePage = 1;
 
                         function getSelectedKod(){ var sel = document.getElementById('selectKont'); return sel && sel.value ? sel.value : ''; }
 
@@ -639,8 +688,38 @@ ob_start();
                             if (printAllAtlet) printAllAtlet.disabled = total === 0;
                         }
 
+                        function renderPenyelarasPage(){
+                            var list = lastRows.penyelaras || [];
+                            var total = list.length;
+                            var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+                            if (currentPenyelarasPage > pages) currentPenyelarasPage = pages;
+                            var start = (currentPenyelarasPage - 1) * PAGE_SIZE;
+                            var slice = list.slice(start, start + PAGE_SIZE);
+                            penyelarasBody.innerHTML = '';
+                            slice.forEach(function(r, idx){
+                                var nIdx = start + idx + 1;
+                                var tr = document.createElement('tr');
+                                var nameSafe = (r.nama || '').replace(/</g,'&lt;');
+                                var emailSafe = (r.emel || '').replace(/</g,'&lt;');
+                                var telSafe = (r.telefon || '').replace(/</g,'&lt;');
+                                tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
+                                    '<td>'+nameSafe+'</td>'+
+                                    '<td>'+emailSafe+'</td>'+
+                                    '<td>' + telSafe + ' <button type="button" class="btn btn-sm btn-outline-primary float-end do-print-penyelaras">Cetak</button></td>';
+                                penyelarasBody.appendChild(tr);
+                                tr.querySelector('.do-print-penyelaras').addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.nama || '', '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
+                            });
+                            try{ document.getElementById('penyelarasPageInfo').textContent = 'Page ' + currentPenyelarasPage + '/' + pages; }catch(e){}
+                            try{ document.getElementById('penyelarasPrev').disabled = currentPenyelarasPage <= 1; }catch(e){}
+                            try{ document.getElementById('penyelarasNext').disabled = currentPenyelarasPage >= pages; }catch(e){}
+                            if (countPenyelaras) countPenyelaras.textContent = total;
+                            if (printAllPenyelaras) printAllPenyelaras.disabled = total === 0;
+                        }
+
                         // wire prev/next buttons
                         try{
+                            document.getElementById('penyelarasPrev').addEventListener('click', function(){ if (currentPenyelarasPage>1){ currentPenyelarasPage--; renderPenyelarasPage(); } });
+                            document.getElementById('penyelarasNext').addEventListener('click', function(){ currentPenyelarasPage++; renderPenyelarasPage(); });
                             document.getElementById('pengurusPrev').addEventListener('click', function(){ if (currentPengurusPage>1){ currentPengurusPage--; renderPengurusPage(); } });
                             document.getElementById('pengurusNext').addEventListener('click', function(){ currentPengurusPage++; renderPengurusPage(); });
                             document.getElementById('jurulatihPrev').addEventListener('click', function(){ if (currentJurulatihPage>1){ currentJurulatihPage--; renderJurulatihPage(); } });
@@ -653,6 +732,7 @@ ob_start();
                         try{
                             var tmplPengurus = <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>;
                             var tmplJurulatih = <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>;
+                            var tmplPenyelaras = <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>;
                             var tmplAtlet = <?php
                                 $athPath = __DIR__ . '/../assets/img/sijil/sam2026_sijil_penyertaan.jpg';
                                 $ver = @file_exists($athPath) ? @filemtime($athPath) : time();
@@ -660,7 +740,7 @@ ob_start();
                             ?>;
 
                             function buildMultiHtml(rows, type){
-                                var img = type === 'pengurus' ? tmplPengurus : (type === 'jurulatih' ? tmplJurulatih : tmplAtlet);
+                                var img = type === 'pengurus' ? tmplPengurus : (type === 'jurulatih' ? tmplJurulatih : (type === 'penyelaras' ? tmplPenyelaras : tmplAtlet));
                                 var html = '<!doctype html><html><head><meta charset="utf-8"><title>Cetak Semua Sijil</title>' +
                                     '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:50%;top:48%;transform:translateX(-50%);width:78%;text-align:center;color:#000;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>';
                                 rows.forEach(function(r){
@@ -702,6 +782,11 @@ ob_start();
                                 var html = buildMultiHtml(lastRows.athletes, 'athletes');
                                 printDirectHtml(html);
                             });
+                            if (printAllPenyelaras) printAllPenyelaras.addEventListener('click', function(){
+                                if (!lastRows.penyelaras || lastRows.penyelaras.length===0){ alert('Tiada penyelaras untuk dicetak.'); return; }
+                                var html = buildMultiHtml(lastRows.penyelaras, 'penyelaras');
+                                printDirectHtml(html);
+                            });
                         }catch(e){}
                         btn.addEventListener('click', function(){
                             var kod = (document.getElementById('selectKont') && document.getElementById('selectKont').value) ? document.getElementById('selectKont').value : '';
@@ -723,16 +808,27 @@ ob_start();
                                         var j = JSON.parse(text);
                                         console.log('Athletes JSON response', j);
                                         var athletesJson = j && j.ok ? (j.rows || []) : [];
-                                        // fetch managers from ringkasan
-                                        return fetch(urlManagers, { credentials: 'same-origin' }).then(function(r2){ if(!r2.ok) throw new Error('HTTP ' + r2.status); return r2.text(); }).then(function(text2){
+                                        // fetch managers and penyelaras concurrently
+                                        var urlPenyelaras = window.location.pathname + '?ajax=penyelaras&kod=' + encodeURIComponent(kod);
+                                        return Promise.all([
+                                            fetch(urlManagers, { credentials: 'same-origin' }).then(function(r2){ if(!r2.ok) throw new Error('HTTP ' + r2.status); return r2.text(); }),
+                                            fetch(urlPenyelaras, { credentials: 'same-origin' }).then(function(r3){ if(!r3.ok) throw new Error('HTTP ' + r3.status); return r3.text(); })
+                                        ]).then(function(texts){
                                             try {
-                                                var mj = JSON.parse(text2);
+                                                var mj = JSON.parse(texts[0]);
                                                 var mgrRows = mj && mj.ok ? (mj.rows || []) : [];
-                                                return { athletes: athletesJson, managers: mgrRows };
                                             } catch(err2) {
-                                                console.error('Managers endpoint returned non-JSON:', text2);
+                                                console.error('Managers endpoint returned non-JSON:', texts[0]);
                                                 throw new Error('Managers endpoint returned non-JSON');
                                             }
+                                            try {
+                                                var pj = JSON.parse(texts[1]);
+                                                var penyRows = pj && pj.ok ? (pj.rows || []) : [];
+                                            } catch(err3) {
+                                                console.error('Penyelaras endpoint returned non-JSON:', texts[1]);
+                                                throw new Error('Penyelaras endpoint returned non-JSON');
+                                            }
+                                            return { athletes: athletesJson, managers: mgrRows, penyelaras: penyRows };
                                         });
                                     } catch(err) {
                                         console.error('Athletes endpoint returned non-JSON:', text);
@@ -776,7 +872,9 @@ ob_start();
                                     lastRows.pengurus = pengurusList;
                                     lastRows.jurulatih = jurulatihList;
                                     lastRows.athletes = (all.athletes || []);
-                                    currentPengurusPage = 1; currentJurulatihPage = 1; currentAthletePage = 1;
+                                    lastRows.penyelaras = (all.penyelaras || []);
+                                    currentPenyelarasPage = 1; currentPengurusPage = 1; currentJurulatihPage = 1; currentAthletePage = 1;
+                                    renderPenyelarasPage();
                                     renderPengurusPage();
                                     renderJurulatihPage();
                                     renderAthletePage();
