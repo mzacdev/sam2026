@@ -16,8 +16,9 @@ Session::start();
 $auth = getAuth();
 $auth->requireAuth();
 $rbac = getRBAC();
-$rbac->requirePageAccess('pages/sijil.php');
+$rbac->requirePageAccess('pages/sijil-user.php');
 
+$kontinjen_display = '';
 $page_title = 'Sijil Penyertaan';
 
 // load list of universities (same approach as ringkasan)
@@ -41,6 +42,42 @@ try {
 }
 // ensure $kod is defined (may be provided via GET when returning from form)
 $kod = strtoupper(trim((string)($_GET['kod'] ?? '')));
+
+// If the logged-in user is a CONTINGENT, restrict view to their kontinjen only
+$is_contingent_user = false;
+try {
+    if ($auth->hasRole('CONTINGENT')) {
+        $is_contingent_user = true;
+        $kontinjen_id = Session::get('kontinjen_id');
+        if (!empty($kontinjen_id)) {
+            try {
+                $db = getDB();
+                $stK = $db->prepare('SELECT UPPER(COALESCE(kod_universiti, "")) AS kod FROM table_kontinjen WHERE id = :id LIMIT 1');
+                $stK->execute([':id' => $kontinjen_id]);
+                $krow = $stK->fetch(PDO::FETCH_ASSOC);
+                if ($krow && !empty($krow['kod'])) {
+                    $kod = strtoupper(trim((string)$krow['kod']));
+                    // resolve display name for the kontinjen if possible
+                    try {
+                        $stR = $db->prepare('SELECT COALESCE(NULLIF(nama_pendek, ""), nama_universiti, kod_universiti) AS display FROM table_ref_universiti WHERE kod_universiti = :kod LIMIT 1');
+                        $stR->execute([':kod' => $kod]);
+                        $r2 = $stR->fetch(PDO::FETCH_ASSOC);
+                        if ($r2 && !empty($r2['display'])) $kontinjen_display = (string)$r2['display'];
+                    } catch (Exception $e) { /* ignore */ }
+                }
+            } catch (Exception $e) {
+                // leave $kod as-is on error
+            }
+        }
+    }
+} catch (Exception $e) {
+    $is_contingent_user = false;
+}
+
+// If we have a kontinjen kod, show it in the page title as requested: "Sijil Penyertaan [KOD]"
+if (!empty($kod)) {
+    $page_title = 'Sijil Penyertaan ' . strtoupper($kod);
+}
 
 // ensure template image URL variable exists to avoid PHP notices
     if (!isset($img_url_versioned) || !$img_url_versioned) {
@@ -486,8 +523,8 @@ ob_start();
 ?>
 <div class="container-fluid px-3">
     <div class="row mb-3">
-        <div class="col-12">
-            <h2 class="mb-1">Sijil Penyertaan</h2>
+            <div class="col-12">
+            <h2 class="mb-1"><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?></h2>
             <p class="text-muted mb-0">Cetak sijil untuk Pengurus dan Jurulatih.</p>
         </div>
     </div>
@@ -498,12 +535,23 @@ ob_start();
                 <label class="form-label small mb-1">Pilih Kontinjen</label>
                 <form method="get" id="frmKont">
                     <div class="d-flex align-items-center">
-                        <select id="selectKont" name="kod" class="form-select form-select-sm" style="min-width:360px;max-width:60%">
-                            <option value="">-- Semua Kontinjen --</option>
-                            <?php foreach ($unis as $u): ?>
-                                <option value="<?php echo htmlspecialchars(strtoupper($u['kod_universiti']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($kod !== '' && strtoupper($u['kod_universiti']) === $kod) ? 'selected' : ''; ?>><?php echo htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <?php if ($is_contingent_user): ?>
+                            <select id="selectKont" name="_disabled_kod" class="form-select form-select-sm" disabled style="min-width:360px;max-width:60%">
+                                <?php foreach ($unis as $u): ?>
+                                    <?php if (strtoupper($u['kod_universiti']) === $kod): ?>
+                                        <option value="<?php echo htmlspecialchars(strtoupper($u['kod_universiti']), ENT_QUOTES, 'UTF-8'); ?>" selected><?php echo htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="hidden" name="kod" value="<?php echo htmlspecialchars($kod, ENT_QUOTES, 'UTF-8'); ?>" />
+                        <?php else: ?>
+                            <select id="selectKont" name="kod" class="form-select form-select-sm" style="min-width:360px;max-width:60%">
+                                <option value="">-- Semua Kontinjen --</option>
+                                <?php foreach ($unis as $u): ?>
+                                    <option value="<?php echo htmlspecialchars(strtoupper($u['kod_universiti']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($kod !== '' && strtoupper($u['kod_universiti']) === $kod) ? 'selected' : ''; ?>><?php echo htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
                         <button type="button" id="btnLoadList" class="btn btn-sm btn-secondary ms-2" style="min-width:120px">Papar Data</button>
                         <span id="loadStatus" class="ms-2 text-muted"></span>
                         <div id="tableLoader" class="ms-auto align-self-center" style="display:none;">
@@ -516,6 +564,21 @@ ob_start();
             </div>
         </div>
     </div>
+
+                    <?php if ($is_contingent_user && $kod !== ''): ?>
+                    <script>
+                        // Auto-load data for contingent users so they see their kontinjen immediately
+                        document.addEventListener('DOMContentLoaded', function(){
+                            try {
+                                var btn = document.getElementById('btnLoadList');
+                                if (btn) {
+                                    // small timeout allow other scripts to bind
+                                    setTimeout(function(){ btn.click(); }, 250);
+                                }
+                            } catch(e){}
+                        });
+                    </script>
+                    <?php endif; ?>
 
     <div class="row">
             <div class="col-12">

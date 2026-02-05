@@ -54,6 +54,8 @@ class RBAC {
         'pages/ringkasan.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
         // Sijil Penyertaan - visible to ADMIN, ORGANIZER and VIEWER
         'pages/sijil.php' => ['ADMIN', 'ORGANIZER', 'VIEWER'],
+        // Sijil user page (per-contingent actions) - accessible to CONTINGENT only
+        'pages/sijil-user.php' => ['CONTINGENT'],
         // Setup Pertandingan - restricted to ADMIN only
         'pages/setup-pertandingan.php' => ['ADMIN'],
         // Setup Jadual - restricted to ADMIN only
@@ -168,10 +170,17 @@ class RBAC {
         }
 
         // ADMIN shortcut: administrators have full access
+        // NOTE: some pages should explicitly forbid ADMIN automatic override
         try {
             $roleCheck = Session::get('user_role');
             if ($roleCheck && strtoupper($roleCheck) === 'ADMIN') {
-                return true;
+                $noAdminOverride = [
+                    'pages/sijil-user.php'
+                ];
+                // if current page is not in the no-override list, allow ADMIN full access
+                if (!in_array($pagePath, $noAdminOverride, true)) {
+                    return true;
+                }
             }
         } catch (Exception $e) {
             // ignore session read errors
@@ -327,22 +336,30 @@ class RBAC {
      * Normalize page path for comparison
      */
     private function normalizePagePath($path) {
+        // Normalize separators and trim leading slashes
+        $path = str_replace('\\', '/', $path);
+        $path = ltrim($path, '/');
+
+        // Normalize common workspace prefix 'app/' so paths like 'app/pages/..' become 'pages/..'
+        if (strpos($path, 'app/') === 0) {
+            $path = substr($path, 4);
+        }
+
         // If path is already normalized (starts with 'pages/', 'auth/', or 'index.php'), return as is
         if (strpos($path, 'pages/') === 0 || strpos($path, 'auth/') === 0 || $path === 'index.php') {
             // Remove query string
             $path = strtok($path, '?');
             return $path;
         }
-        
-        // Remove base URL
+
+        // Remove base URL if present
         $path = str_replace(BASE_URL, '', $path);
         $path = ltrim($path, '/');
         
         // Remove query string
         $path = strtok($path, '?');
         
-        // Handle Windows paths (convert backslashes to forward slashes)
-        $path = str_replace('\\', '/', $path);
+        // (remaining normalization continues)
         
         // Remove document root if present
         $docRoot = str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? '');

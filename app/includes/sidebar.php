@@ -47,6 +47,37 @@ if (!$contingentCode) {
 $displayNavItems = $nav_items;
 $useSections = isset($nav_sections) && is_array($nav_sections);
 
+// Ensure 'Sijil Penyertaan' child is present before $useSections is evaluated
+// so it can appear under the Laporan group when sections are used.
+try {
+    $sijilChild = [ 'title' => 'Sijil Penyertaan', 'url' => 'pages/sijil-user.php', 'icon' => 'cil-award' ];
+    if (!isset($nav_sections) || !is_array($nav_sections)) {
+        $nav_sections = [];
+    }
+    // find Laporan section, otherwise leave nav_sections intact
+    $found = false;
+    foreach ($nav_sections as $idx => $sec) {
+        if (isset($sec['title']) && $sec['title'] === 'Laporan') {
+            $found = true;
+            if (!isset($nav_sections[$idx]['children']) || !is_array($nav_sections[$idx]['children'])) {
+                $nav_sections[$idx]['children'] = [];
+            }
+            $exists = false;
+            foreach ($nav_sections[$idx]['children'] as $c) { if (isset($c['url']) && $c['url'] === $sijilChild['url']) { $exists = true; break; } }
+            if (!$exists) $nav_sections[$idx]['children'][] = $sijilChild;
+            break;
+        }
+    }
+    // If Pengurusan section not present, add it with sijil child so it appears
+    if (!$found) {
+        $nav_sections[] = [ 'title' => 'Laporan', 'children' => [ $sijilChild ] ];
+    }
+    // ensure sections mode is enabled
+    $useSections = true;
+} catch (Exception $e) {
+    // ignore
+}
+
 // Add "Pertandingan" section when user has access to any Pertandingan pages
 if ($rbac && ($rbac->hasPageAccess('pages/setup-pertandingan.php') || $rbac->hasPageAccess('pages/setup-jadual.php'))) {
     $exists = false;
@@ -76,6 +107,36 @@ if ($rbac && ($rbac->hasPageAccess('pages/setup-pertandingan.php') || $rbac->has
     }
 }
 
+// Ensure 'Sijil Penyertaan' menu exists under 'Laporan' and is controlled by RBAC
+try {
+    $sijilChild = [
+        'title' => 'Sijil Penyertaan',
+        'url' => 'pages/sijil-user.php',
+        'icon' => 'cil-award',
+    ];
+    $found = false;
+    if (!isset($nav_sections) || !is_array($nav_sections)) $nav_sections = [];
+    foreach ($nav_sections as &$sec) {
+        if (isset($sec['title']) && $sec['title'] === 'Laporan') {
+            // check duplicate
+            $exists = false;
+            if (isset($sec['children']) && is_array($sec['children'])) {
+                foreach ($sec['children'] as $c) { if (isset($c['url']) && $c['url'] === $sijilChild['url']) { $exists = true; break; } }
+            } else {
+                $sec['children'] = [];
+            }
+            if (!$exists) $sec['children'][] = $sijilChild;
+            $found = true; break;
+        }
+    }
+    unset($sec);
+    if (!$found) {
+        $nav_sections[] = [ 'title' => 'Laporan', 'children' => [ $sijilChild ] ];
+    }
+} catch (Exception $e) {
+    // ignore - non-critical
+}
+
 if ($rbac) {
     if ($useSections) {
         foreach ($nav_sections as $sidx => $section) {
@@ -99,6 +160,17 @@ if ($rbac) {
 // auth state for logout
 $auth = function_exists('getAuth') ? getAuth() : null;
 $isLoggedIn = ($auth && $auth->isLoggedIn());
+// RBAC diagnostic comment for troubleshooting menu visibility
+try {
+    if (isset($rbac) && $rbac) {
+        $diagRole = Session::get('user_role') ?? '(none)';
+        $diagStatus = $rbac->getPageAccessStatus('pages/sijil-user.php');
+        $diagHas = $rbac->hasPageAccess('pages/sijil-user.php') ? '1' : '0';
+        echo "<!-- RBAC-DIAG role={$diagRole} isLoggedIn=" . ($isLoggedIn ? '1' : '0') . " status={$diagStatus} hasAccess={$diagHas} -->\n";
+    }
+} catch (Exception $e) {
+    // ignore
+}
 ?>
 <!-- Side Header Start -->
 <div class="side-header show">

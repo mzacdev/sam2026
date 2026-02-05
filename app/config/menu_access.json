@@ -76,6 +76,9 @@
       "ORGANIZER",
       "VIEWER"
     ],
+    "pages/sijil-user.php": [
+      "CONTINGENT"
+    ],
     "pages/contingent-admin.php": [
       "ADMIN",
       "ORGANIZER",
