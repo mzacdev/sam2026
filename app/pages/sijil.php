@@ -12,6 +12,11 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/rbac.php';
 
+// DEV: enable error display to help diagnose blank-page issues during testing
+@ini_set('display_errors', 1);
+@ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 Session::start();
 $auth = getAuth();
 $auth->requireAuth();
@@ -492,96 +497,125 @@ ob_start();
         </div>
     </div>
 
-    <div class="card mb-3">
-        <div class="card-body d-flex gap-3 align-items-end">
-            <div>
-                <label class="form-label small mb-1">Pilih Kontinjen</label>
-                <form method="get" id="frmKont">
-                    <div class="d-flex align-items-center">
-                        <select id="selectKont" name="kod" class="form-select form-select-sm" style="min-width:360px;max-width:60%">
-                            <option value="">-- Semua Kontinjen --</option>
-                            <?php foreach ($unis as $u): ?>
-                                <option value="<?php echo htmlspecialchars(strtoupper($u['kod_universiti']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($kod !== '' && strtoupper($u['kod_universiti']) === $kod) ? 'selected' : ''; ?>><?php echo htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="button" id="btnLoadList" class="btn btn-sm btn-secondary ms-2" style="min-width:120px">Papar Data</button>
-                        <span id="loadStatus" class="ms-2 text-muted"></span>
-                        <div id="tableLoader" class="ms-auto align-self-center" style="display:none;">
-                            <div class="spinner-border text-primary" role="status" style="width:1.6rem;height:1.6rem;vertical-align:middle;">
-                                <span class="visually-hidden">Memuat...</span>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+    <!-- filter moved into SIJIL KONTINJEN tab -->
 
     <div class="row">
             <div class="col-12">
-                <div id="tabsWrap" style="display:none;">
+                <div id="tabsWrap">
                         <ul class="nav nav-tabs" id="sijilTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="tab-penyelaras" data-bs-toggle="tab" data-bs-target="#pane-penyelaras" type="button" role="tab">Penyelaras / Ketua Kontinjen <span id="countPenyelaras" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link active" id="tab-kontinjen" data-bs-toggle="tab" data-bs-target="#pane-kontinjen" type="button" role="tab">SIJIL KONTINJEN</button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-pengurus" data-bs-toggle="tab" data-bs-target="#pane-pengurus" type="button" role="tab">Pengurus Sukan <span id="countPengurus" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link" id="tab-jawatankuasa" data-bs-toggle="tab" data-bs-target="#pane-jawatankuasa" type="button" role="tab">SIJIL JAWATANKUASA PELAKSANA</button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-jurulatih" data-bs-toggle="tab" data-bs-target="#pane-jurulatih" type="button" role="tab">Jurulatih Acara Sukan <span id="countJurulatih" class="badge bg-secondary ms-1">0</span></button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-atlet" data-bs-toggle="tab" data-bs-target="#pane-atlet" type="button" role="tab">Atlet Sukan <span id="countAtlet" class="badge bg-secondary ms-1">0</span></button>
+                                <button class="nav-link" id="tab-sukarelawan" data-bs-toggle="tab" data-bs-target="#pane-sukarelawan" type="button" role="tab">SIJIL SUKARELAWAN</button>
                             </li>
                         </ul>
                         <div class="tab-content border border-top-0 p-3" id="sijilTabContent">
-                            <div class="tab-pane fade show active" id="pane-penyelaras" role="tabpanel">
-                                <div class="d-flex mb-2">
-                                    <div class="me-auto"></div>
-                                    <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
+                            <div class="tab-pane fade show active" id="pane-kontinjen" role="tabpanel">
+                                <!-- Filter for kontinjen (moved here) -->
+                                <div class="card mb-3">
+                                    <div class="card-body d-flex gap-3 align-items-end">
+                                        <div>
+                                            <label class="form-label small mb-1">Pilih Kontinjen</label>
+                                            <form method="get" id="frmKont">
+                                                <div class="d-flex align-items-center">
+                                                    <select id="selectKont" name="kod" class="form-select form-select-sm" style="min-width:360px;max-width:60%">
+                                                        <option value="">-- Semua Kontinjen --</option>
+                                                        <?php foreach ($unis as $u): ?>
+                                                            <option value="<?php echo htmlspecialchars(strtoupper($u['kod_universiti']), ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($kod !== '' && strtoupper($u['kod_universiti']) === $kod) ? 'selected' : ''; ?>><?php echo htmlspecialchars($u['nama_universiti'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <button type="button" id="btnLoadList" class="btn btn-sm btn-secondary ms-2" style="min-width:120px">Papar Data</button>
+                                                    <span id="loadStatus" class="ms-2 text-muted"></span>
+                                                    <div id="tableLoader" class="ms-auto align-self-center" style="display:none;">
+                                                        <div class="spinner-border text-primary" role="status" style="width:1.6rem;height:1.6rem;vertical-align:middle;">
+                                                            <span class="visually-hidden">Memuat...</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    </div>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama</th><th style="width:20%">Email</th><th style="width:15%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
-                                <div class="d-flex justify-content-end align-items-center mt-2">
-                                    <button type="button" id="penyelarasPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
-                                    <span id="penyelarasPageInfo" class="me-2">Page 1/1</span>
-                                    <button type="button" id="penyelarasNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                <!-- Existing kontingen content (penyelaras/pengurus/jurulatih/atlet) -->
+                                <div id="kontinjen-inner">
+                                    <ul class="nav nav-pills mb-3" id="kontinjenSubNav" role="tablist" style="display:none;">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active" data-sub="0" type="button">Ketua Kontinjen</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" data-sub="1" type="button">Pengurus</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" data-sub="2" type="button">Jurulatih</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" data-sub="3" type="button">Atlet</button>
+                                        </li>
+                                    </ul>
+                                    <div id="kontinjenSubtabs" style="display:none;">
+                                    <div class="tab-pane-inner">
+                                        <div class="d-flex mb-2">
+                                            <div class="me-auto"></div>
+                                            <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                        </div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama</th><th style="width:20%">Email</th><th style="width:15%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
+                                        <div class="d-flex justify-content-end align-items-center mt-2">
+                                            <button type="button" id="penyelarasPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                            <span id="penyelarasPageInfo" class="me-2">Page 1/1</span>
+                                            <button type="button" id="penyelarasNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-pane-inner mt-4">
+                                        <div class="d-flex mb-2">
+                                            <div class="me-auto"></div>
+                                            <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                        </div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
+                                        <div class="d-flex justify-content-end align-items-center mt-2">
+                                            <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                            <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
+                                            <button type="button" id="pengurusNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-pane-inner mt-4">
+                                        <div class="d-flex mb-2">
+                                            <div class="me-auto"></div>
+                                            <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                        </div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
+                                        <div class="d-flex justify-content-end align-items-center mt-2">
+                                            <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                            <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
+                                            <button type="button" id="jurulatihNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-pane-inner mt-4">
+                                        <div class="d-flex mb-2">
+                                            <div class="me-auto"></div>
+                                            <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                        </div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
+                                        <div class="d-flex justify-content-end align-items-center mt-2">
+                                            <button type="button" id="athletePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                            <span id="athletePageInfo" class="me-2">Page 1/1</span>
+                                            <button type="button" id="athleteNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="tab-pane fade" id="pane-pengurus" role="tabpanel">
-                                <div class="d-flex mb-2">
-                                    <div class="me-auto"></div>
-                                    <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
-                                </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
-                                <div class="d-flex justify-content-end align-items-center mt-2">
-                                    <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
-                                    <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
-                                    <button type="button" id="pengurusNext" class="btn btn-sm btn-outline-secondary">Next</button>
-                                </div>
+                            <div class="tab-pane fade" id="pane-jawatankuasa" role="tabpanel">
+                                <div class="p-4 text-muted">Tiada data untuk <strong>SIJIL JAWATANKUASA PELAKSANA</strong> buat masa ini.</div>
                             </div>
-                            <div class="tab-pane fade" id="pane-jurulatih" role="tabpanel">
-                                <div class="d-flex mb-2">
-                                    <div class="me-auto"></div>
-                                    <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
-                                </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
-                                <div class="d-flex justify-content-end align-items-center mt-2">
-                                    <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
-                                    <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
-                                    <button type="button" id="jurulatihNext" class="btn btn-sm btn-outline-secondary">Next</button>
-                                </div>
-                            </div>
-                            <div class="tab-pane fade" id="pane-atlet" role="tabpanel">
-                                <div class="d-flex mb-2">
-                                    <div class="me-auto"></div>
-                                    <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
-                                </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
-                                <div class="d-flex justify-content-end align-items-center mt-2">
-                                    <button type="button" id="athletePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
-                                    <span id="athletePageInfo" class="me-2">Page 1/1</span>
-                                    <button type="button" id="athleteNext" class="btn btn-sm btn-outline-secondary">Next</button>
-                                </div>
+                            <div class="tab-pane fade" id="pane-sukarelawan" role="tabpanel">
+                                <div class="p-4 text-muted">Tiada data untuk <strong>SIJIL SUKARELAWAN</strong> buat masa ini.</div>
                             </div>
                         </div>
                     </div>
@@ -590,6 +624,8 @@ ob_start();
                                 var btn = document.getElementById('btnLoadList');
                                 var status = document.getElementById('loadStatus');
                                 var wrap = document.getElementById('tabsWrap');
+                                var kontSubNav = document.getElementById('kontinjenSubNav');
+                                var kontSub = document.getElementById('kontinjenSubtabs');
                                 var athleteBody = document.getElementById('athleteBody');
                                 var pengurusBody = document.getElementById('pengurusBody');
                                 var jurulatihBody = document.getElementById('jurulatihBody');
@@ -789,6 +825,47 @@ ob_start();
                             document.getElementById('athleteNext').addEventListener('click', function(){ currentAthletePage++; renderAthletePage(); });
                         }catch(e){}
 
+                        // subtabs: show/hide the .tab-pane-inner sections inside #kontinjenSubtabs
+                        function showSubIndex(i){
+                            try{
+                                var container = document.getElementById('kontinjenSubtabs');
+                                if(!container) return;
+                                var panes = container.querySelectorAll('.tab-pane-inner');
+                                panes.forEach(function(p, idx){ p.style.display = (idx === i ? '' : 'none'); });
+                                if (kontSubNav){
+                                    var links = kontSubNav.querySelectorAll('.nav-link');
+                                    links.forEach(function(l, idx){ if(idx===i) l.classList.add('active'); else l.classList.remove('active'); });
+                                }
+                            }catch(e){ console.error(e); }
+                        }
+                        if (kontSubNav){
+                            kontSubNav.querySelectorAll('.nav-link').forEach(function(btn, idx){
+                                btn.addEventListener('click', function(ev){ ev.preventDefault(); showSubIndex(idx); });
+                            });
+                        }
+
+                        // Hide kontinjen subnav/subtabs when switching to other main tabs
+                        try{
+                            var sijilTabsEl = document.getElementById('sijilTabs');
+                            if (sijilTabsEl){
+                                sijilTabsEl.addEventListener('shown.bs.tab', function(e){
+                                    try{
+                                        var target = e.target || e.srcElement;
+                                        var sel = '';
+                                        if (target) sel = target.getAttribute('data-bs-target') || target.dataset.bsTarget || '';
+                                        if (sel === '#pane-kontinjen'){
+                                            if (kontSubNav) kontSubNav.style.display = '';
+                                            if (kontSub) kontSub.style.display = '';
+                                            showSubIndex(0);
+                                        } else {
+                                            if (kontSubNav) kontSubNav.style.display = 'none';
+                                            if (kontSub) kontSub.style.display = 'none';
+                                        }
+                                    }catch(er){ console.error(er); }
+                                });
+                            }
+                        }catch(e){ console.error(e); }
+
                         // wire print all buttons to client-side print (build multi-page HTML and print via hidden iframe)
                         try{
                             var tmplPengurus = <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>;
@@ -947,7 +1024,26 @@ ob_start();
                                     renderPengurusPage();
                                     renderJurulatihPage();
                                     renderAthletePage();
-                                    wrap.style.display = '';
+                                    // update subtab labels with kod and counts
+                                    try{
+                                        function badgeHtml(n, cls){ return '<span class="badge ' + (cls||'bg-secondary') + ' ms-2">' + (parseInt(n,10)||0) + '</span>'; }
+                                        var kodLbl = (getSelectedKod() || '').toUpperCase();
+                                        var nav = kontSubNav;
+                                        if (nav){
+                                            var links = nav.querySelectorAll('.nav-link');
+                                            // Ketua Kontinjen
+                                            if (links[0]) links[0].innerHTML = 'Ketua Kontinjen ' + (kodLbl ? ('['+kodLbl+']') : '') + badgeHtml(lastRows.penyelaras.length || 0, 'bg-info text-dark');
+                                            // Pengurus
+                                            if (links[1]) links[1].innerHTML = 'Pengurus Pasukan ' + (kodLbl ? ('['+kodLbl+']') : '') + badgeHtml(lastRows.pengurus.length || 0, 'bg-success');
+                                            // Jurulatih
+                                            if (links[2]) links[2].innerHTML = 'Jurulatih Acara Sukan ' + (kodLbl ? ('['+kodLbl+']') : '') + badgeHtml(lastRows.jurulatih.length || 0, 'bg-warning text-dark');
+                                            // Atlet
+                                            if (links[3]) links[3].innerHTML = 'Athlet Sukan ' + (kodLbl ? ('['+kodLbl+']') : '') + badgeHtml(lastRows.athletes.length || 0, 'bg-primary');
+                                        }
+                                        if (kontSub) kontSub.style.display = '';
+                                        if (kontSubNav) kontSubNav.style.display = '';
+                                        showSubIndex(0);
+                                    }catch(e){ console.error(e); }
                                     hideLoader();
                                     btn.disabled = false;
                                 }).catch(function(e){ console.error('Fetch error', e); status.textContent = 'Ralat mengambil data.'; btn.disabled = false; hideLoader(); alert('Gagal mendapatkan data atlet/pengurus: '+ (e && e.message ? e.message : 'Unknown')); });
@@ -1009,4 +1105,8 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 <?php
 $content = ob_get_clean();
+// Fallback for debugging: if content is empty, show a helpful message instead of blank page
+if (is_string($content) && trim($content) === '') {
+    $content = '<div class="container-fluid px-3"><div class="alert alert-warning">Halaman ini tidak memaparkan apa-apa — kandungan kosong (debug fallback).</div></div>';
+}
 require_once __DIR__ . '/../includes/layout.php';
