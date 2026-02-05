@@ -46,6 +46,10 @@ try {
 }
 // ensure $kod is defined (may be provided via GET when returning from form)
 $kod = strtoupper(trim((string)($_GET['kod'] ?? '')));
+// Default to UPNM kontinjen unless user explicitly chooses another
+if ($kod === '') {
+    $kod = 'UPNM';
+}
 
 // ensure template image URL variable exists to avoid PHP notices
     if (!isset($img_url_versioned) || !$img_url_versioned) {
@@ -145,6 +149,33 @@ if ($ajax === 'managers') {
     } catch (Exception $e) {
         $out['ok'] = false;
         $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint for committee members (used by SIJIL JAWATANKUASA PELAKSANA tab)
+if ($ajax === 'committee') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'rows' => [], 'elapsed_ms' => null, 'error' => null, 'count' => 0];
+    $type = strtoupper(trim((string)($_GET['type'] ?? '')));
+    if ($type === '') { echo json_encode($out); exit; }
+    $t0 = microtime(true);
+    try {
+        $db = getDB();
+        // Order differently depending on requested member_ref_type: STAF -> order by role_id then name; others -> order by name
+        if (strtoupper($type) === 'STAF') {
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.role_id, cm.member_name";
+        } else {
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.member_name";
+        }
+        $st = $db->prepare($sql);
+        $st->execute([':ref_type' => $type]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $out['ok'] = true; $out['rows'] = $rows; $out['count'] = count($rows);
+    } catch (Exception $e) {
+        $out['ok'] = false; $out['error'] = $e->getMessage();
     }
     $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
     echo json_encode($out);
@@ -563,7 +594,7 @@ ob_start();
                                             <div class="me-auto"></div>
                                             <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama</th><th style="width:20%">Email</th><th style="width:15%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Ketua Kontinjen</th><th style="width:20%">Email</th><th style="width:10%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="penyelarasPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="penyelarasPageInfo" class="me-2">Page 1/1</span>
@@ -576,7 +607,7 @@ ob_start();
                                             <div class="me-auto"></div>
                                             <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:75%">Nama Pengurus</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
@@ -589,7 +620,7 @@ ob_start();
                                             <div class="me-auto"></div>
                                             <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:75%">Nama Jurulatih</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
@@ -602,7 +633,7 @@ ob_start();
                                             <div class="me-auto"></div>
                                             <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Atlet</th><th style="width:30%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="athletePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="athletePageInfo" class="me-2">Page 1/1</span>
@@ -612,10 +643,94 @@ ob_start();
                                 </div>
                             </div>
                             <div class="tab-pane fade" id="pane-jawatankuasa" role="tabpanel">
-                                <div class="p-4 text-muted">Tiada data untuk <strong>SIJIL JAWATANKUASA PELAKSANA</strong> buat masa ini.</div>
+                                <div class="card mb-3">
+                                    <div class="card-body d-flex gap-3 align-items-end">
+                                        <div>
+                                            <label class="form-label small mb-1">Jenis Ahli</label>
+                                            <div class="d-flex align-items-center">
+                                                <select id="committeeType" class="form-select form-select-sm" style="min-width:220px;max-width:40%">
+                                                    <option value="">-- Pilih Jenis --</option>
+                                                    <option value="STAF">STAF</option>
+                                                    <option value="PELAJAR">PELAJAR</option>
+                                                </select>
+                                                <button type="button" id="btnLoadCommittee" class="btn btn-sm btn-secondary ms-2" style="min-width:120px">Papar Data</button>
+                                                <span id="committeeLoadStatus" class="ms-2 text-muted"></span>
+                                                <div id="committeeLoader" class="ms-auto align-self-center" style="display:none;">
+                                                    <div class="spinner-border text-primary" role="status" style="width:1.6rem;height:1.6rem;vertical-align:middle;"><span class="visually-hidden">Memuat...</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="committeeWrap" style="display:none;">
+                                    <div class="d-flex mb-2">
+                                        <div class="me-auto"></div>
+                                        <button type="button" id="printAllCommittee" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                    </div>
+                                        <div class="table-responsive">
+                                        <table class="table table-sm table-hover">
+                                            <thead class="table-light"><tr>
+                                                <th style="width:5%" class="text-center">No</th>
+                                                <th style="width:40%">Nama Jawatankuasa Pelaksana</th>
+                                                <th style="width:30%">Nama Jawatankuasa</th>
+                                                <th style="width:15%">Email</th>
+                                                <th style="width:10%" class="text-center">Tindakan</th>
+                                            </tr></thead>
+                                            <tbody id="committeeBody"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="d-flex justify-content-end align-items-center mt-2">
+                                        <button type="button" id="committeePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                        <span id="committeePageInfo" class="me-2">Page 1/1</span>
+                                        <button type="button" id="committeeNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="tab-pane fade" id="pane-sukarelawan" role="tabpanel">
-                                <div class="p-4 text-muted">Tiada data untuk <strong>SIJIL SUKARELAWAN</strong> buat masa ini.</div>
+                                <div class="card mb-3">
+                                    <div class="card-body d-flex gap-3 align-items-end">
+                                        <div>
+                                            <label class="form-label small mb-1">Jenis Ahli</label>
+                                            <div class="d-flex align-items-center">
+                                                <select id="volunteerType" class="form-select form-select-sm" style="min-width:220px;max-width:40%">
+                                                    <option value="">-- Pilih Jenis --</option>
+                                                    <option value="STAF">STAF</option>
+                                                    <option value="PELAJAR">PELAJAR</option>
+                                                </select>
+                                                <button type="button" id="btnLoadVolunteer" class="btn btn-sm btn-secondary ms-2" style="min-width:120px">Papar Data</button>
+                                                <span id="volunteerLoadStatus" class="ms-2 text-muted"></span>
+                                                <div id="volunteerLoader" class="ms-auto align-self-center" style="display:none;">
+                                                    <div class="spinner-border text-primary" role="status" style="width:1.6rem;height:1.6rem;vertical-align:middle;"><span class="visually-hidden">Memuat...</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="volunteerWrap" style="display:none;">
+                                    <div class="d-flex mb-2">
+                                        <div class="me-auto"></div>
+                                        <button type="button" id="printAllVolunteer" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                    </div>
+                                        <div class="table-responsive">
+                                        <table class="table table-sm table-hover">
+                                            <thead class="table-light"><tr>
+                                                <th style="width:5%" class="text-center">No</th>
+                                                <th style="width:40%">Nama Jawatankuasa Sukarelawan</th>
+                                                <th style="width:30%">Nama Jawatankuasa</th>
+                                                <th style="width:15%">Email</th>
+                                                <th style="width:10%" class="text-center">Tindakan</th>
+                                            </tr></thead>
+                                            <tbody id="volunteerBody"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="d-flex justify-content-end align-items-center mt-2">
+                                        <button type="button" id="volunteerPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
+                                        <span id="volunteerPageInfo" class="me-2">Page 1/1</span>
+                                        <button type="button" id="volunteerNext" class="btn btn-sm btn-outline-secondary">Next</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -630,6 +745,31 @@ ob_start();
                                 var pengurusBody = document.getElementById('pengurusBody');
                                 var jurulatihBody = document.getElementById('jurulatihBody');
                                 var penyelarasBody = document.getElementById('penyelarasBody');
+                                // committee elements
+                                var committeeType = document.getElementById('committeeType');
+                                var btnLoadCommittee = document.getElementById('btnLoadCommittee');
+                                var committeeLoadStatus = document.getElementById('committeeLoadStatus');
+                                var committeeLoader = document.getElementById('committeeLoader');
+                                var committeeWrap = document.getElementById('committeeWrap');
+                                var committeeBody = document.getElementById('committeeBody');
+                                var printAllCommittee = document.getElementById('printAllCommittee');
+                                var committeePrev = document.getElementById('committeePrev');
+                                var committeeNext = document.getElementById('committeeNext');
+                                var committeePageInfo = document.getElementById('committeePageInfo');
+                                // volunteer elements
+                                var volunteerType = document.getElementById('volunteerType');
+                                var btnLoadVolunteer = document.getElementById('btnLoadVolunteer');
+                                var volunteerLoadStatus = document.getElementById('volunteerLoadStatus');
+                                var volunteerLoader = document.getElementById('volunteerLoader');
+                                var volunteerWrap = document.getElementById('volunteerWrap');
+                                var volunteerBody = document.getElementById('volunteerBody');
+                                var printAllVolunteer = document.getElementById('printAllVolunteer');
+                                var volunteerPrev = document.getElementById('volunteerPrev');
+                                var volunteerNext = document.getElementById('volunteerNext');
+                                var volunteerPageInfo = document.getElementById('volunteerPageInfo');
+                                var lastRows = { athletes: [], pengurus: [], jurulatih: [], penyelaras: [], committee: [], volunteer: [] };
+                                var committeeLoaded = false;
+                                var volunteerLoaded = false;
                                 var loader = document.getElementById('tableLoader');
                                 var printAllPengurus = document.getElementById('printAllPengurus');
                                 var printAllJurulatih = document.getElementById('printAllJurulatih');
@@ -813,6 +953,70 @@ ob_start();
                             if (printAllPenyelaras) printAllPenyelaras.disabled = total === 0;
                         }
 
+                        // Committee render (single table)
+                        var currentCommitteePage = 1;
+                        function renderCommitteePage(){
+                            var list = lastRows.committee || [];
+                            var total = list.length;
+                            var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+                            if (currentCommitteePage > pages) currentCommitteePage = pages;
+                            var start = (currentCommitteePage - 1) * PAGE_SIZE;
+                            var slice = list.slice(start, start + PAGE_SIZE);
+                            if (!committeeBody) return;
+                            committeeBody.innerHTML = '';
+                            slice.forEach(function(r, idx){
+                                var nIdx = start + idx + 1;
+                                var tr = document.createElement('tr');
+                                var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
+                                    (function(){ return cellHtml(name, false); })() +
+                                    (function(){ return cellHtml(role, false); })() +
+                                    (function(){ return cellHtml(email, false); })() +
+                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-committee">Cetak</button></td>';
+                                committeeBody.appendChild(tr);
+                                var btn = tr.querySelector('.do-print-committee');
+                                if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
+                            });
+                            try{ if (committeePageInfo) committeePageInfo.textContent = 'Page ' + currentCommitteePage + '/' + pages; }catch(e){}
+                            try{ if (committeePrev) committeePrev.disabled = currentCommitteePage <= 1; }catch(e){}
+                            try{ if (committeeNext) committeeNext.disabled = currentCommitteePage >= pages; }catch(e){}
+                            if (printAllCommittee) printAllCommittee.disabled = total === 0;
+                        }
+
+                        // Volunteer render (single table) - same as committee but separate storage
+                        var currentVolunteerPage = 1;
+                        function renderVolunteerPage(){
+                            var list = lastRows.volunteer || [];
+                            var total = list.length;
+                            var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+                            if (currentVolunteerPage > pages) currentVolunteerPage = pages;
+                            var start = (currentVolunteerPage - 1) * PAGE_SIZE;
+                            var slice = list.slice(start, start + PAGE_SIZE);
+                            if (!volunteerBody) return;
+                            volunteerBody.innerHTML = '';
+                            slice.forEach(function(r, idx){
+                                var nIdx = start + idx + 1;
+                                var tr = document.createElement('tr');
+                                var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
+                                    (function(){ return cellHtml(name, false); })() +
+                                    (function(){ return cellHtml(role, false); })() +
+                                    (function(){ return cellHtml(email, false); })() +
+                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-volunteer">Cetak</button></td>';
+                                volunteerBody.appendChild(tr);
+                                var btn = tr.querySelector('.do-print-volunteer');
+                                if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
+                            });
+                            try{ if (volunteerPageInfo) volunteerPageInfo.textContent = 'Page ' + currentVolunteerPage + '/' + pages; }catch(e){}
+                            try{ if (volunteerPrev) volunteerPrev.disabled = currentVolunteerPage <= 1; }catch(e){}
+                            try{ if (volunteerNext) volunteerNext.disabled = currentVolunteerPage >= pages; }catch(e){}
+                            if (printAllVolunteer) printAllVolunteer.disabled = total === 0;
+                        }
+
                         // wire prev/next buttons
                         try{
                             document.getElementById('penyelarasPrev').addEventListener('click', function(){ if (currentPenyelarasPage>1){ currentPenyelarasPage--; renderPenyelarasPage(); } });
@@ -823,6 +1027,11 @@ ob_start();
                             document.getElementById('jurulatihNext').addEventListener('click', function(){ currentJurulatihPage++; renderJurulatihPage(); });
                             document.getElementById('athletePrev').addEventListener('click', function(){ if (currentAthletePage>1){ currentAthletePage--; renderAthletePage(); } });
                             document.getElementById('athleteNext').addEventListener('click', function(){ currentAthletePage++; renderAthletePage(); });
+                            // committee paging
+                            if (committeePrev) committeePrev.addEventListener('click', function(){ if (currentCommitteePage>1){ currentCommitteePage--; renderCommitteePage(); } });
+                            if (committeeNext) committeeNext.addEventListener('click', function(){ currentCommitteePage++; renderCommitteePage(); });
+                            if (volunteerPrev) volunteerPrev.addEventListener('click', function(){ if (currentVolunteerPage>1){ currentVolunteerPage--; renderVolunteerPage(); } });
+                            if (volunteerNext) volunteerNext.addEventListener('click', function(){ currentVolunteerPage++; renderVolunteerPage(); });
                         }catch(e){}
 
                         // subtabs: show/hide the .tab-pane-inner sections inside #kontinjenSubtabs
@@ -860,6 +1069,20 @@ ob_start();
                                         } else {
                                             if (kontSubNav) kontSubNav.style.display = 'none';
                                             if (kontSub) kontSub.style.display = 'none';
+                                        }
+                                        // when user opens jawatankuasa tab, lock to STAF and auto-load once
+                                        if (sel === '#pane-jawatankuasa'){
+                                            try{
+                                                if (committeeType) { committeeType.value = 'STAF'; committeeType.disabled = true; }
+                                                if (btnLoadCommittee && !committeeLoaded) { btnLoadCommittee.click(); }
+                                            }catch(ex2){ console.error(ex2); }
+                                        }
+                                        // when user opens sukarelawan tab, lock to PELAJAR and auto-load once
+                                        if (sel === '#pane-sukarelawan'){
+                                            try{
+                                                if (volunteerType) { volunteerType.value = 'PELAJAR'; volunteerType.disabled = true; }
+                                                if (btnLoadVolunteer && !volunteerLoaded) { btnLoadVolunteer.click(); }
+                                            }catch(ex3){ console.error(ex3); }
                                         }
                                     }catch(er){ console.error(er); }
                                 });
@@ -931,6 +1154,18 @@ ob_start();
                             if (printAllPenyelaras) printAllPenyelaras.addEventListener('click', function(){
                                 if (!lastRows.penyelaras || lastRows.penyelaras.length===0){ alert('Tiada penyelaras untuk dicetak.'); return; }
                                 var html = buildMultiHtml(lastRows.penyelaras, 'penyelaras');
+                                printDirectHtml(html);
+                            });
+                            if (printAllCommittee) printAllCommittee.addEventListener('click', function(){
+                                if (!lastRows.committee || lastRows.committee.length===0){ alert('Tiada rekod untuk dicetak.'); return; }
+                                var rows = lastRows.committee.map(function(r){ return { nama: r.member_name || '', sukan: r.role_name || '', acara: '' }; });
+                                var html = buildMultiHtml(rows, 'penyelaras');
+                                printDirectHtml(html);
+                            });
+                            if (printAllVolunteer) printAllVolunteer.addEventListener('click', function(){
+                                if (!lastRows.volunteer || lastRows.volunteer.length===0){ alert('Tiada rekod untuk dicetak.'); return; }
+                                var rows = lastRows.volunteer.map(function(r){ return { nama: r.member_name || '', sukan: r.role_name || '', acara: '' }; });
+                                var html = buildMultiHtml(rows, 'penyelaras');
                                 printDirectHtml(html);
                             });
                         }catch(e){}
@@ -1046,8 +1281,65 @@ ob_start();
                                     }catch(e){ console.error(e); }
                                     hideLoader();
                                     btn.disabled = false;
+                                    // mark kontinjen as loaded to avoid auto-triggering again
+                                    try{ window.kontinjenLoaded = true; }catch(e){}
                                 }).catch(function(e){ console.error('Fetch error', e); status.textContent = 'Ralat mengambil data.'; btn.disabled = false; hideLoader(); alert('Gagal mendapatkan data atlet/pengurus: '+ (e && e.message ? e.message : 'Unknown')); });
                         });
+
+                        // Auto-load default kontinjen (UPNM) on page load if select present
+                        try{
+                            var selKont = document.getElementById('selectKont');
+                            if (selKont && selKont.value && selKont.value.toUpperCase() === 'UPNM'){
+                                // trigger click once after short delay so DOM settles
+                                setTimeout(function(){ if (!window.kontinjenLoaded) btn.click(); }, 250);
+                            }
+                        }catch(e){ console.error(e); }
+
+                                // Committee load handler for SIJIL JAWATANKUASA PELAKSANA tab
+                                if (btnLoadCommittee){
+                                    btnLoadCommittee.addEventListener('click', function(){
+                                        var t = (committeeType && committeeType.value) ? committeeType.value : '';
+                                        if (!t){ committeeLoadStatus.textContent = 'Sila pilih jenis ahli.'; return; }
+                                        committeeLoadStatus.textContent = ''; btnLoadCommittee.disabled = true; if (committeeLoader) committeeLoader.style.display = 'inline-block';
+                                        var url = window.location.pathname + '?ajax=committee&type=' + encodeURIComponent(t);
+                                        fetch(url, { credentials: 'same-origin' }).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function(text){
+                                            try{
+                                                var j = JSON.parse(text);
+                                                if (!j || !j.ok){ throw new Error(j && j.error ? j.error : 'Empty response'); }
+                                                lastRows.committee = j.rows || [];
+                                                currentCommitteePage = 1;
+                                                renderCommitteePage();
+                                                if (committeeWrap) committeeWrap.style.display = '';
+                                                committeeLoadStatus.textContent = '';
+                                                committeeLoaded = true;
+                                            } catch(err){ console.error('Committee parse error', err, text); committeeLoadStatus.textContent = 'Ralat memproses data.'; alert('Gagal mendapatkan data jawatankuasa.'); }
+                                            btnLoadCommittee.disabled = false; if (committeeLoader) committeeLoader.style.display = 'none';
+                                        }).catch(function(err){ console.error('Committee fetch error', err); committeeLoadStatus.textContent = 'Ralat mengambil data.'; btnLoadCommittee.disabled = false; if (committeeLoader) committeeLoader.style.display = 'none'; alert('Gagal mendapatkan data jawatankuasa: '+ (err && err.message ? err.message : 'Unknown')); });
+                                    });
+                                }
+
+                                // Volunteer load handler (PELAJAR) - same as committee but stores into lastRows.volunteer
+                                if (btnLoadVolunteer){
+                                    btnLoadVolunteer.addEventListener('click', function(){
+                                        var t = (volunteerType && volunteerType.value) ? volunteerType.value : '';
+                                        if (!t){ volunteerLoadStatus.textContent = 'Sila pilih jenis ahli.'; return; }
+                                        volunteerLoadStatus.textContent = ''; btnLoadVolunteer.disabled = true; if (volunteerLoader) volunteerLoader.style.display = 'inline-block';
+                                        var url = window.location.pathname + '?ajax=committee&type=' + encodeURIComponent(t);
+                                        fetch(url, { credentials: 'same-origin' }).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function(text){
+                                            try{
+                                                var j = JSON.parse(text);
+                                                if (!j || !j.ok){ throw new Error(j && j.error ? j.error : 'Empty response'); }
+                                                lastRows.volunteer = j.rows || [];
+                                                currentVolunteerPage = 1;
+                                                renderVolunteerPage();
+                                                if (volunteerWrap) volunteerWrap.style.display = '';
+                                                volunteerLoadStatus.textContent = '';
+                                                volunteerLoaded = true;
+                                            } catch(err){ console.error('Volunteer parse error', err, text); volunteerLoadStatus.textContent = 'Ralat memproses data.'; alert('Gagal mendapatkan data sukarelawan.'); }
+                                            btnLoadVolunteer.disabled = false; if (volunteerLoader) volunteerLoader.style.display = 'none';
+                                        }).catch(function(err){ console.error('Volunteer fetch error', err); volunteerLoadStatus.textContent = 'Ralat mengambil data.'; btnLoadVolunteer.disabled = false; if (volunteerLoader) volunteerLoader.style.display = 'none'; alert('Gagal mendapatkan data sukarelawan: '+ (err && err.message ? err.message : 'Unknown')); });
+                                    });
+                                }
 
                         
                     })();
