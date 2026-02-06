@@ -137,14 +137,66 @@ if ($ajax === 'penyelaras') {
     $t0 = microtime(true);
     try {
         $db = getDB();
-        $sql = "SELECT id, TRIM(nama_pegawai_untuk_dihubungi) AS nama, TRIM(emel) AS emel, TRIM(no_telefon) AS telefon
-            FROM table_kontinjen
-            WHERE UPPER(COALESCE(kod_universiti,'')) = :kod_val
-              AND deleted_at IS NULL
-            ORDER BY nama_pegawai_untuk_dihubungi";
+        // Use normalized UNION of table_kontinjen and users, dedupe by cleaned key_name
+        $sql = <<<'SQL'
+SELECT
+    MIN(id) AS id,
+    MAX(nama) AS nama,
+    MAX(emel) AS emel,
+    MAX(telefon) AS telefon
+FROM (
+    SELECT
+        id,
+        UPPER(
+            REGEXP_REPLACE(TRIM(nama), '[^A-Z0-9 ]', '')
+        ) AS key_name,
+        TRIM(nama) AS nama,
+        TRIM(emel) AS emel,
+        REGEXP_REPLACE(TRIM(telefon), '[^0-9]', '') AS telefon
+    FROM (
+        -- table_kontinjen
+        SELECT
+            id,
+            nama_pegawai_untuk_dihubungi AS nama,
+            emel,
+            no_telefon AS telefon
+        FROM table_kontinjen
+        WHERE UPPER(COALESCE(kod_universiti,'')) = ?
+          AND deleted_at IS NULL
+
+        UNION ALL
+
+        -- users (join kontingen)
+        SELECT
+            u.id,
+            u.full_name AS nama,
+            u.email AS emel,
+            u.phone AS telefon
+        FROM users u
+        JOIN table_kontinjen k ON k.id = u.kontinjen_id
+        WHERE UPPER(COALESCE(k.kod_universiti,'')) = ?
+          AND u.deleted_at IS NULL
+          AND k.deleted_at IS NULL
+    ) x
+) y
+GROUP BY key_name
+ORDER BY nama
+SQL;
         $st = $db->prepare($sql);
-        $st->execute([':kod_val' => $k]);
+        $st->execute([$k, $k]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // fallback to simple table_kontinjen query if no rows returned
+        if (empty($rows)) {
+            try {
+                $sql2 = "SELECT id, TRIM(nama_pegawai_untuk_dihubungi) AS nama, TRIM(emel) AS emel, TRIM(no_telefon) AS telefon FROM table_kontinjen WHERE UPPER(COALESCE(kod_universiti,'')) = ? AND deleted_at IS NULL ORDER BY nama_pegawai_untuk_dihubungi";
+                $st2 = $db->prepare($sql2);
+                $st2->execute([$k]);
+                $rows2 = $st2->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                if (!empty($rows2)) $rows = $rows2;
+            } catch (Exception $e2) {
+                // keep $rows as empty
+            }
+        }
         $out['ok'] = true;
         $out['rows'] = $rows;
         $out['count'] = count($rows);

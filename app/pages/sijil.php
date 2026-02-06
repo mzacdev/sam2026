@@ -108,15 +108,68 @@ if ($ajax === 'penyelaras') {
     }
     $t0 = microtime(true);
     try {
-        $db = getDB();
-        $sql = "SELECT id, TRIM(nama_pegawai_untuk_dihubungi) AS nama, TRIM(emel) AS emel, TRIM(no_telefon) AS telefon
-            FROM table_kontinjen
-            WHERE UPPER(COALESCE(kod_universiti,'')) = :kod_val
-              AND deleted_at IS NULL
-            ORDER BY nama_pegawai_untuk_dihubungi";
+                $db = getDB();
+                // Combine kontak dari table_kontinjen dan users, normalize and dedupe by key_name
+                $sql = <<<SQL
+SELECT
+    MIN(id) AS id,
+    MAX(nama) AS nama,
+    MAX(emel) AS emel,
+    MAX(telefon) AS telefon
+FROM (
+    SELECT
+        id,
+        UPPER(
+            REGEXP_REPLACE(TRIM(nama), '[^A-Z0-9 ]', '')
+        ) AS key_name,
+        TRIM(nama) AS nama,
+        TRIM(emel) AS emel,
+        REGEXP_REPLACE(TRIM(telefon), '[^0-9]', '') AS telefon
+    FROM (
+                -- table_kontinjen
+                SELECT
+                        id,
+                        nama_pegawai_untuk_dihubungi AS nama,
+                        emel,
+                        no_telefon AS telefon
+                FROM table_kontinjen
+                WHERE UPPER(COALESCE(kod_universiti,'')) = ?
+                    AND deleted_at IS NULL
+
+        UNION ALL
+
+        -- users (join kontingen)
+        SELECT
+            u.id,
+            u.full_name AS nama,
+            u.email AS emel,
+            u.phone AS telefon
+        FROM users u
+        JOIN table_kontinjen k ON k.id = u.kontinjen_id
+        WHERE UPPER(COALESCE(k.kod_universiti,'')) = ?
+          AND u.deleted_at IS NULL
+          AND k.deleted_at IS NULL
+    ) x
+) y
+GROUP BY key_name
+ORDER BY nama
+SQL;
         $st = $db->prepare($sql);
-        $st->execute([':kod_val' => $k]);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // two occurrences of kod_val in the UNION -> bind twice positionally
+        $st->execute([$k, $k]);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                // If union returned no rows (or users table absent), fallback to table_kontinjen-only query
+                if (empty($rows)) {
+                    try {
+                        $sql2 = "SELECT id, TRIM(nama_pegawai_untuk_dihubungi) AS nama, TRIM(emel) AS emel, TRIM(no_telefon) AS telefon FROM table_kontinjen WHERE UPPER(COALESCE(kod_universiti,'')) = ? AND deleted_at IS NULL ORDER BY nama_pegawai_untuk_dihubungi";
+                        $st2 = $db->prepare($sql2);
+                        $st2->execute([$k]);
+                        $rows2 = $st2->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        if (!empty($rows2)) $rows = $rows2;
+                    } catch (Exception $e2) {
+                        // ignore fallback error, keep original empty result
+                    }
+                }
         $out['ok'] = true;
         $out['rows'] = $rows;
         $out['count'] = count($rows);
@@ -156,24 +209,147 @@ if ($ajax === 'managers') {
 }
 
 // AJAX endpoint for committee members (used by SIJIL JAWATANKUASA PELAKSANA tab)
-if ($ajax === 'committee') {
+    if ($ajax === 'committee') {
     header('Content-Type: application/json; charset=utf-8');
     $out = ['ok' => false, 'rows' => [], 'elapsed_ms' => null, 'error' => null, 'count' => 0];
     $type = strtoupper(trim((string)($_GET['type'] ?? '')));
     if ($type === '') { echo json_encode($out); exit; }
     $t0 = microtime(true);
-    try {
+        try {
         $db = getDB();
         // Order differently depending on requested member_ref_type: STAF -> order by role_id then name; others -> order by name
         if (strtoupper($type) === 'STAF') {
-            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.role_id, cm.member_name";
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.role_id, cm.member_name";
         } else {
-            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.member_name";
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.member_name";
         }
         $st = $db->prepare($sql);
         $st->execute([':ref_type' => $type]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         $out['ok'] = true; $out['rows'] = $rows; $out['count'] = count($rows);
+    } catch (Exception $e) {
+        $out['ok'] = false; $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: list committee roles for dropdown
+if ($ajax === 'committee_roles') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'rows' => [], 'elapsed_ms' => null, 'error' => null];
+    $t0 = microtime(true);
+    try {
+        $db = getDB();
+        $sql = "SELECT id, TRIM(role_name) AS role_name FROM committee_roles WHERE deleted_at IS NULL ORDER BY role_name";
+        $st = $db->prepare($sql);
+        $st->execute();
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $out['ok'] = true; $out['rows'] = $rows;
+    } catch (Exception $e) {
+        $out['ok'] = false; $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: add a new committee member (POST)
+if ($ajax === 'add_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'error' => null, 'exists' => false, 'id' => null];
+    $t0 = microtime(true);
+    try {
+        $name = trim((string)($_POST['member_name'] ?? ''));
+        $role_id = intval($_POST['role_id'] ?? 0);
+        $ref_type = strtoupper(trim((string)($_POST['member_ref_type'] ?? '')));
+        $ref_id = trim((string)($_POST['member_ref_id'] ?? ''));
+        $email = trim((string)($_POST['member_email'] ?? ''));
+        $phone = trim((string)($_POST['member_phone'] ?? ''));
+        if ($name === '' || $role_id <= 0 || ($ref_type !== 'STAF' && $ref_type !== 'PELAJAR') || $ref_id === '') {
+            throw new Exception('Data tidak lengkap. Sila isi semua medan yang diperlukan.');
+        }
+        $db = getDB();
+        // check duplicate by ref_id + ref_type
+        $sqlChk = "SELECT id FROM committee_members WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id)) AND UPPER(COALESCE(member_ref_type,'')) = :ref_type AND deleted_at IS NULL LIMIT 1";
+        $stChk = $db->prepare($sqlChk);
+        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type]);
+        $found = $stChk->fetch(PDO::FETCH_ASSOC);
+        if ($found) {
+            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod dengan nombor ini telah wujud.';
+            $out['conflict_id'] = isset($found['id']) ? (int)$found['id'] : null;
+            echo json_encode($out); exit;
+        }
+        // include program_id defaulting to 1 to avoid missing default DB error
+        $sqlIns = "INSERT INTO committee_members (program_id, role_id, member_name, member_ref_type, member_ref_id, member_email, member_phone) VALUES (:program_id, :role_id, :name, :ref_type, :ref_id, :email, :phone)";
+        $stIns = $db->prepare($sqlIns);
+        $stIns->execute([':program_id' => 1, ':role_id' => $role_id, ':name' => $name, ':ref_type' => $ref_type, ':ref_id' => $ref_id, ':email' => $email, ':phone' => $phone]);
+        $out['ok'] = true; $out['id'] = (int)$db->lastInsertId();
+    } catch (Exception $e) {
+        $out['ok'] = false; $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: update an existing committee member (POST)
+if ($ajax === 'update_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'error' => null, 'exists' => false, 'id' => null];
+    $t0 = microtime(true);
+    try {
+        $id = intval($_POST['member_id'] ?? 0);
+        $name = trim((string)($_POST['member_name'] ?? ''));
+        $role_id = intval($_POST['role_id'] ?? 0);
+        $ref_type = strtoupper(trim((string)($_POST['member_ref_type'] ?? '')));
+        $ref_id = trim((string)($_POST['member_ref_id'] ?? ''));
+        $email = trim((string)($_POST['member_email'] ?? ''));
+        $phone = trim((string)($_POST['member_phone'] ?? ''));
+        if ($id <= 0 || $name === '' || $role_id <= 0 || ($ref_type !== 'STAF' && $ref_type !== 'PELAJAR') || $ref_id === '') {
+            throw new Exception('Data tidak lengkap untuk kemaskini.');
+        }
+        $db = getDB();
+        // duplicate check excluding current id
+        $sqlChk = "SELECT id FROM committee_members WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id)) AND UPPER(COALESCE(member_ref_type,'')) = :ref_type AND deleted_at IS NULL AND id != :id LIMIT 1";
+        $stChk = $db->prepare($sqlChk);
+        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type, ':id' => $id]);
+        $found = $stChk->fetch(PDO::FETCH_ASSOC);
+        if ($found) {
+            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod dengan nombor ini telah wujud.';
+            $out['conflict_id'] = isset($found['id']) ? (int)$found['id'] : null;
+            echo json_encode($out); exit;
+        }
+        $sqlUpd = "UPDATE committee_members SET role_id = :role_id, member_name = :name, member_ref_type = :ref_type, member_ref_id = :ref_id, member_email = :email, member_phone = :phone, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL";
+        $stUpd = $db->prepare($sqlUpd);
+        $stUpd->execute([':role_id' => $role_id, ':name' => $name, ':ref_type' => $ref_type, ':ref_id' => $ref_id, ':email' => $email, ':phone' => $phone, ':id' => $id]);
+        $out['ok'] = true; $out['id'] = $id;
+    } catch (Exception $e) {
+        $out['ok'] = false; $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)( (microtime(true) - $t0) * 1000 );
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: soft-delete a committee member (POST)
+if ($ajax === 'delete_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'error' => null];
+    $t0 = microtime(true);
+    try {
+        $id = intval($_POST['id'] ?? 0);
+        if ($id <= 0) throw new Exception('ID tidak sah');
+        $db = getDB();
+        $sql = "UPDATE committee_members SET deleted_at = NOW() WHERE id = :id AND deleted_at IS NULL";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $id]);
+        if ($st->rowCount() > 0) {
+            $out['ok'] = true;
+        } else {
+            $out['ok'] = false; $out['error'] = 'Rekod tidak ditemui atau telah dipadam.';
+        }
     } catch (Exception $e) {
         $out['ok'] = false; $out['error'] = $e->getMessage();
     }
@@ -532,18 +708,29 @@ ob_start();
 
     <div class="row">
             <div class="col-12">
+                <!-- Font Awesome for tab icons (safe to include here if not globally present) -->
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+                <style>
+                    .sijil-tab-icon { margin-right:0.5rem; font-size:1.05rem; vertical-align:-0.08em; }
+                    .nav-tabs .nav-link { display:inline-flex; align-items:center; gap:0.25rem; }
+                </style>
                 <div id="tabsWrap">
+                    <div class="d-flex align-items-start">
                         <ul class="nav nav-tabs" id="sijilTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="tab-kontinjen" data-bs-toggle="tab" data-bs-target="#pane-kontinjen" type="button" role="tab">SIJIL KONTINJEN</button>
+                                <button class="nav-link active" id="tab-kontinjen" data-bs-toggle="tab" data-bs-target="#pane-kontinjen" type="button" role="tab"><i class="fa-solid fa-flag sijil-tab-icon" aria-hidden="true"></i>SIJIL KONTINJEN</button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-jawatankuasa" data-bs-toggle="tab" data-bs-target="#pane-jawatankuasa" type="button" role="tab">SIJIL JAWATANKUASA PELAKSANA</button>
+                                <button class="nav-link" id="tab-jawatankuasa" data-bs-toggle="tab" data-bs-target="#pane-jawatankuasa" type="button" role="tab"><i class="fa-solid fa-users-gear sijil-tab-icon" aria-hidden="true"></i>SIJIL JAWATANKUASA PELAKSANA</button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-sukarelawan" data-bs-toggle="tab" data-bs-target="#pane-sukarelawan" type="button" role="tab">SIJIL SUKARELAWAN</button>
+                                <button class="nav-link" id="tab-sukarelawan" data-bs-toggle="tab" data-bs-target="#pane-sukarelawan" type="button" role="tab"><i class="fa-solid fa-hands-helping sijil-tab-icon" aria-hidden="true"></i>SIJIL SUKARELAWAN</button>
                             </li>
                         </ul>
+                        <div class="ms-auto ps-3">
+                            <button type="button" id="btnAddMember" class="btn btn-sm btn-success">+ Tambah Data</button>
+                        </div>
+                    </div>
                         <div class="tab-content border border-top-0 p-3" id="sijilTabContent">
                             <div class="tab-pane fade show active" id="pane-kontinjen" role="tabpanel">
                                 <!-- Filter for kontinjen (moved here) -->
@@ -734,6 +921,58 @@ ob_start();
                             </div>
                         </div>
                     </div>
+                <!-- Add Member Modal -->
+                <div class="modal fade" id="addMemberModal" tabindex="-1" aria-labelledby="addMemberModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="addMemberModalLabel">Tambah Penerima Sijil</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="addMemberForm">
+                                    <input type="hidden" id="memberId" name="member_id" value="" />
+                                    <div class="mb-2">
+                                        <label class="form-label small">Nama Penuh <span class="text-danger">*</span></label>
+                                        <input type="text" id="memberName" name="member_name" class="form-control form-control-sm" required />
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">Nama Jawatankuasa <span class="text-danger">*</span></label>
+                                        <select id="memberRoleId" name="role_id" class="form-select form-select-sm" required>
+                                            <option value="">-- Pilih Jawatankuasa --</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">Jenis (STAF / PELAJAR) <span class="text-danger">*</span></label>
+                                        <select id="memberRefType" name="member_ref_type" class="form-select form-select-sm" required>
+                                            <option value="">-- Pilih Jenis --</option>
+                                            <option value="STAF">STAF</option>
+                                            <option value="PELAJAR">PELAJAR</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">No Staf / No Matrik <span class="text-danger">*</span></label>
+                                        <input type="text" id="memberRefId" name="member_ref_id" class="form-control form-control-sm" required />
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">Email</label>
+                                        <input type="email" id="memberEmail" name="member_email" class="form-control form-control-sm" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">No Telefon</label>
+                                        <input type="text" id="memberPhone" name="member_phone" class="form-control form-control-sm" />
+                                    </div>
+                                </form>
+                                <div id="addMemberStatus" class="small text-danger" style="display:none;"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                                <button type="button" id="addMemberSave" class="btn btn-sm btn-primary">Simpan</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                     (function(){
                                 var btn = document.getElementById('btnLoadList');
@@ -921,6 +1160,223 @@ ob_start();
                                     btnEl.addEventListener('click', function(e){ e.preventDefault(); printDirect(pid); });
                                 }
                             });
+
+                        // Add Member modal wiring
+                        try{
+                            var btnAddMember = document.getElementById('btnAddMember');
+                            var addMemberModalEl = document.getElementById('addMemberModal');
+                            var addMemberModal = (typeof bootstrap !== 'undefined' && addMemberModalEl) ? new bootstrap.Modal(addMemberModalEl, { backdrop: false }) : null;
+                            var roleSelect = document.getElementById('memberRoleId');
+                            var addMemberStatus = document.getElementById('addMemberStatus');
+                            var addMemberSave = document.getElementById('addMemberSave');
+
+                            function loadRolesIfNeeded(){
+                                if (!roleSelect) return Promise.resolve();
+                                if (roleSelect.dataset.loaded) return Promise.resolve();
+                                var url = window.location.pathname + '?ajax=committee_roles';
+                                return fetch(url, { credentials: 'same-origin' }).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function(t){ var j = JSON.parse(t); if (!j.ok) throw new Error(j.error || 'Gagal memuat jawatan'); roleSelect.innerHTML = '<option value="">-- Pilih Jawatankuasa --</option>'; j.rows.forEach(function(r){ var opt = document.createElement('option'); opt.value = r.id; opt.textContent = r.role_name; roleSelect.appendChild(opt); }); roleSelect.dataset.loaded = '1'; });
+                            }
+                            try{ window.loadRolesIfNeeded = loadRolesIfNeeded; }catch(e){}
+
+                            // Helper to show/hide modal even if Bootstrap Modal isn't available
+                            function showAddMemberModal(){
+                                try{
+                                    if (addMemberModal && typeof addMemberModal.show === 'function') return addMemberModal.show();
+                                }catch(e){}
+                                try{
+                                    if (addMemberModalEl){
+                                        addMemberModalEl.classList.add('show');
+                                        addMemberModalEl.style.display = 'block';
+                                        document.body.classList.add('modal-open');
+                                        // add light backdrop if not present
+                                        if (!document.getElementById('addMemberLightBackdrop')){
+                                            var lb = document.createElement('div'); lb.id = 'addMemberLightBackdrop'; lb.style.position='fixed'; lb.style.left='0'; lb.style.top='0'; lb.style.right='0'; lb.style.bottom='0'; lb.style.background='rgba(0,0,0,0.06)'; lb.style.zIndex='1040'; document.body.appendChild(lb);
+                                        }
+                                    }
+                                }catch(e){ }
+                            }
+                            try{ window.showAddMemberModal = showAddMemberModal; }catch(e){}
+                            function hideAddMemberModal(){
+                                try{
+                                    if (addMemberModal && typeof addMemberModal.hide === 'function') return addMemberModal.hide();
+                                }catch(e){}
+                                try{
+                                    if (addMemberModalEl){
+                                        addMemberModalEl.classList.remove('show');
+                                        addMemberModalEl.style.display = 'none';
+                                        document.body.classList.remove('modal-open');
+                                        var lb = document.getElementById('addMemberLightBackdrop'); if (lb && lb.parentNode) lb.parentNode.removeChild(lb);
+                                    }
+                                }catch(e){}
+                            }
+                            try{ window.hideAddMemberModal = hideAddMemberModal; }catch(e){}
+
+                            // initialize select2 if available (after roles loaded)
+                            function initRoleSelect2(){
+                                try{
+                                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && roleSelect){
+                                        var $sel = jQuery(roleSelect);
+                                        // destroy if previously initialized
+                                        if ($sel.data('select2')) { $sel.select2('destroy'); }
+                                        // limit dropdown height to ~10 items and enable scrolling
+                                        $sel.select2({ dropdownParent: addMemberModalEl ? jQuery(addMemberModalEl) : undefined, width: '100%', dropdownCss: { 'max-height': '360px', 'overflow-y': 'auto' } });
+                                    } else {
+                                        // Fallback for native select: show 10 items on focus (size attribute)
+                                        try{
+                                            if (roleSelect){
+                                                roleSelect.addEventListener('focus', function(){ try{ roleSelect.size = 10; }catch(e){} });
+                                                roleSelect.addEventListener('blur', function(){ try{ roleSelect.size = 0; }catch(e){} });
+                                                // also adjust on mousedown for some browsers
+                                                roleSelect.addEventListener('mousedown', function(){ try{ roleSelect.size = 10; }catch(e){} });
+                                            }
+                                        }catch(e){}
+                                    }
+                                }catch(e){ console.warn('select2 init failed', e); }
+                            }
+                            try{ window.initRoleSelect2 = initRoleSelect2; }catch(e){}
+
+                            if (btnAddMember){
+                                btnAddMember.addEventListener('click', function(){
+                                    // reset form
+                                    try{ document.getElementById('addMemberForm').reset(); }catch(e){}
+                                    if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; }
+                                    try{ if (addMemberSave) { addMemberSave.textContent = 'Simpan'; addMemberSave.dataset.editing = '0'; } }catch(e){}
+                                    loadRolesIfNeeded().then(function(){
+                                        try{ initRoleSelect2(); }catch(e){}
+                                        if (addMemberModalEl) {
+                                            showAddMemberModal();
+                                            // create a light backdrop element under the modal
+                                            try{
+                                                if (!document.getElementById('addMemberLightBackdrop')){
+                                                    var lb = document.createElement('div');
+                                                    lb.id = 'addMemberLightBackdrop';
+                                                    lb.style.position = 'fixed';
+                                                    lb.style.left = '0'; lb.style.top = '0'; lb.style.right = '0'; lb.style.bottom = '0';
+                                                    lb.style.background = 'rgba(0,0,0,0.06)';
+                                                    lb.style.zIndex = '1040';
+                                                    document.body.appendChild(lb);
+                                                }
+                                            }catch(ignore){}
+                                        }
+                                    }).catch(function(err){ alert('Gagal memuat senarai jawatankuasa: ' + err.message); });
+                                });
+                            }
+
+                            // Ensure any leftover backdrop or modal-open class is cleared when modal is hidden
+                            try{
+                                    if (addMemberModalEl) {
+                                    addMemberModalEl.addEventListener('hidden.bs.modal', function(){
+                                        try{
+                                            document.body.classList.remove('modal-open');
+                                            var backs = document.querySelectorAll('.modal-backdrop');
+                                            backs.forEach(function(b){ if (b && b.parentNode) b.parentNode.removeChild(b); });
+                                            var lb = document.getElementById('addMemberLightBackdrop');
+                                            if (lb && lb.parentNode) lb.parentNode.removeChild(lb);
+                                            // reset edit state
+                                            try{ var mid = document.getElementById('memberId'); if (mid) mid.value = ''; }catch(e){}
+                                            try{ if (addMemberSave) { addMemberSave.textContent = 'Simpan'; addMemberSave.dataset.editing = '0'; } }catch(e){}
+                                            try{ var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Tambah Penerima Sijil'; }catch(e){}
+                                        }catch(e){}
+                                    });
+                                }
+                            }catch(ex){ console.error('modal cleanup listener error', ex); }
+
+                            if (addMemberSave){
+                                addMemberSave.addEventListener('click', function(){
+                                    var form = document.getElementById('addMemberForm');
+                                    var name = (document.getElementById('memberName')||{value:''}).value.trim();
+                                    var roleId = (document.getElementById('memberRoleId')||{value:''}).value;
+                                    var refType = (document.getElementById('memberRefType')||{value:''}).value;
+                                    var refId = (document.getElementById('memberRefId')||{value:''}).value.trim();
+                                    var email = (document.getElementById('memberEmail')||{value:''}).value.trim();
+                                    var phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
+                                    if (!name || !roleId || !refType || !refId){
+                                        if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Sila lengkapkan semua medan bertanda.'; }
+                                        return;
+                                    }
+
+                                    // validate email if provided
+                                    if (email){
+                                        var emRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                        if (!emRe.test(email)){
+                                            if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Sila masukkan emel sah.'; }
+                                            try{ document.getElementById('memberEmail').focus(); }catch(e){}
+                                            return;
+                                        }
+                                    }
+
+                                    var fd = new URLSearchParams();
+                                    fd.append('member_name', name);
+                                    fd.append('role_id', roleId);
+                                    fd.append('member_ref_type', refType);
+                                    fd.append('member_ref_id', refId);
+                                    fd.append('member_email', email);
+                                    fd.append('member_phone', phone);
+
+                                    addMemberSave.disabled = true;
+
+                                    function showSweetSuccess(msg){
+                                        msg = msg || 'Rekod berjaya disimpan.';
+                                        var showFn = function(){
+                                            // require user to click OK (no auto timer)
+                                            return Swal.fire({ icon: 'success', title: 'Berjaya', text: msg, showConfirmButton: true, confirmButtonText: 'OK', position: 'center' });
+                                        };
+                                        if (window.Swal){
+                                            return showFn();
+                                        } else {
+                                            var s = document.createElement('script');
+                                            s.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js';
+                                            s.onload = function(){ try{ showFn(); }catch(e){ alert(msg); } };
+                                            document.head.appendChild(s);
+                                            var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css'; document.head.appendChild(l);
+                                        }
+                                    }
+
+                                    // decide add vs update: prefer explicit editing flag on save button, fallback to hidden memberId
+                                    var memberIdEl = document.getElementById('memberId');
+                                    var memberIdVal = memberIdEl ? memberIdEl.value : '';
+                                    var editingFlag = (addMemberSave && addMemberSave.dataset && addMemberSave.dataset.editing === '1');
+                                    var isEditing = editingFlag || (memberIdVal && parseInt(memberIdVal,10) > 0);
+                                    var endpoint = isEditing ? '?ajax=update_member' : '?ajax=add_member';
+                                    if (isEditing) {
+                                        // ensure member_id is sent; prefer hidden input but send fallback value
+                                        var midToSend = (memberIdVal && parseInt(memberIdVal,10) > 0) ? memberIdVal : ((addMemberSave && addMemberSave.dataset && addMemberSave.dataset.memberId) ? addMemberSave.dataset.memberId : '');
+                                        if (midToSend) fd.append('member_id', midToSend);
+                                    }
+                                    try{ console.debug('Submitting member form', { memberId: memberIdVal, endpoint: endpoint, form: Array.from(fd.entries()) }); }catch(e){}
+                                    fetch(window.location.pathname + endpoint, { method: 'POST', body: fd, credentials: 'same-origin' })
+                                    .then(function(res){ if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+                                    .then(function(txt){
+                                        var j = null;
+                                        try { j = JSON.parse(txt); } catch(e){ throw new Error('Invalid server response'); }
+                                        if (j && j.ok){
+                                            if (addMemberModalEl) hideAddMemberModal();
+                                            try{
+                                                var typeLabel = (refType === 'STAF') ? 'Staf' : 'Pelajar';
+                                                var idLabel = refId ? ('(' + refId + ')') : '';
+                                                var nameLabel = name ? (' - ' + name) : '';
+                                                showSweetSuccess('Rekod ' + typeLabel + ' ' + idLabel + nameLabel + ' berjaya disimpan.');
+                                            }catch(e){ alert('Rekod berjaya disimpan.'); }
+                                            try{ if (committeeLoaded && btnLoadCommittee) btnLoadCommittee.click(); }catch(e){}
+                                            try{ if (volunteerLoaded && btnLoadVolunteer) btnLoadVolunteer.click(); }catch(e){}
+                                        } else {
+                                            if (j && j.exists){
+                                                if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Rekod dengan nombor ini telah wujud.'; }
+                                                else { try{ if (window.Swal) Swal.fire({ icon: 'warning', title: 'Wujud', text: 'Rekod dengan nombor ini telah wujud.' }); else alert('Rekod wujud.'); }catch(e){ alert('Rekod wujud.'); } }
+                                            } else {
+                                                if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = (j && j.error) ? j.error : 'Gagal menyimpan rekod.'; }
+                                                else { try{ if (window.Swal) Swal.fire({ icon: 'error', title: 'Gagal', text: (j && j.error) ? j.error : 'Gagal menyimpan rekod.' }); else alert((j && j.error) ? j.error : 'Gagal menyimpan rekod.'); }catch(e){ alert((j && j.error) ? j.error : 'Gagal menyimpan rekod.'); } }
+                                            }
+                                        }
+                                    })
+                                    .catch(function(err){
+                                        if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = err.message; }
+                                        else { try{ if (window.Swal) Swal.fire({ icon: 'error', title: 'Ralat', text: err.message }); else alert('Ralat: ' + err.message); }catch(e){ alert('Ralat: ' + err.message); } }
+                                    })
+                                        .finally(function(){ addMemberSave.disabled = false; });
+                                    });
+                                }
+                            }catch(e){ console.error('addMember wiring error', e); }
                             try{ document.getElementById('athletePageInfo').textContent = 'Page ' + currentAthletePage + '/' + pages; }catch(e){}
                             try{ document.getElementById('athletePrev').disabled = currentAthletePage <= 1; }catch(e){}
                             try{ document.getElementById('athleteNext').disabled = currentAthletePage >= pages; }catch(e){}
@@ -979,10 +1435,80 @@ ob_start();
                                     (function(){ return cellHtml(name, false); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-committee">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 do-edit-committee" title="Edit">✏️</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 do-delete-committee" title="Padam">🗑️</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary do-print-committee">Cetak</button>'
+                                    + '</td>';
                                 committeeBody.appendChild(tr);
-                                var btn = tr.querySelector('.do-print-committee');
-                                if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
+                                // action buttons: edit, delete, print
+                                var editBtn = tr.querySelector('.do-edit-committee');
+                                var delBtn = tr.querySelector('.do-delete-committee');
+                                var prBtn = tr.querySelector('.do-print-committee');
+                                if (editBtn) editBtn.addEventListener('click', function(){
+                                    try{
+                                        // populate modal with member data AFTER roles loaded
+                                        var fillAndShow = function(){
+                                            try{ document.getElementById('memberId').value = r.id || ''; }catch(e){}
+                                            try{ document.getElementById('memberName').value = r.member_name || ''; }catch(e){}
+                                            try{ document.getElementById('memberEmail').value = r.member_email || ''; }catch(e){}
+                                            try{ document.getElementById('memberRefType').value = r.member_ref_type || ''; }catch(e){}
+                                            try{ document.getElementById('memberRefId').value = r.member_ref_id || ''; }catch(e){}
+                                            try{ document.getElementById('memberPhone').value = r.member_phone || ''; }catch(e){}
+                                            try{ document.getElementById('memberRoleId').value = r.role_id || ''; }catch(e){}
+                                            // if select2 is present, update it
+                                            try{
+                                                if (window.jQuery && typeof jQuery.fn.select2 === 'function'){
+                                                    var $sel = jQuery('#memberRoleId');
+                                                    $sel.val(r.role_id || '').trigger('change');
+                                                }
+                                            }catch(e){}
+                                            var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Kemaskini Penerima Sijil';
+                                            try{ if (addMemberSave) { addMemberSave.textContent = 'Kemaskini'; addMemberSave.dataset.editing = '1'; } }catch(e){}
+                                            if (addMemberModal) showAddMemberModal();
+                                        };
+                                        loadRolesIfNeeded().then(function(){ try{ initRoleSelect2(); }catch(e){} fillAndShow(); }).catch(function(err){ console.error('load roles for edit failed', err); fillAndShow(); });
+                                    }catch(ex){ console.error('edit open error', ex); }
+                                });
+                                if (delBtn) delBtn.addEventListener('click', function(){
+                                    try{
+                                        var sid = r.id;
+                                        if (!sid) return;
+                                        var title = 'Padam rekod?';
+                                        var text = 'Rekod akan dipadamkan (disembunyikan). Teruskan?';
+                                        var callDelete = function(){
+                                            var urlDel = window.location.pathname + '?ajax=delete_member';
+                                            fetch(urlDel, { method: 'POST', body: new URLSearchParams({ id: sid }), credentials: 'same-origin' })
+                                            .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+                                            .then(function(t){
+                                                try{
+                                                    var j = JSON.parse(t);
+                                                }catch(parseErr){
+                                                    alert('Gagal memadam rekod. (Invalid server response)');
+                                                    return;
+                                                }
+                                                if (j && j.ok){
+                                                    try{
+                                                        var detail = (r.member_name ? r.member_name : '') + (r.member_ref_id ? ' ('+r.member_ref_id+')' : '');
+                                                        if (window.Swal) { Swal.fire({ icon: 'success', title: 'Dipadam', text: 'Rekod ' + detail + ' telah dipadam.' }); }
+                                                        else { alert('Rekod ' + detail + ' telah dipadam.'); }
+                                                    }catch(e){ }
+                                                    try{ if (btnLoadCommittee) btnLoadCommittee.click(); }catch(e){}
+                                                } else {
+                                                    alert('Gagal memadam rekod.');
+                                                }
+                                            })
+                                            .catch(function(err){ alert('Ralat padam: ' + (err && err.message ? err.message : 'Unknown')); });
+                                        };
+                                        if (window.Swal){
+                                            Swal.fire({ title: title, text: text, icon: 'warning', showCancelButton: true, confirmButtonText: 'Padam', cancelButtonText: 'Batal' }).then(function(res){ if (res && res.isConfirmed) {
+                                                callDelete();
+                                                // show success after deletion inside callDelete's then
+                                            } });
+                                        } else if (confirm(text)) callDelete();
+                                    }catch(ex){ console.error('delete error', ex); }
+                                });
+                                if (prBtn) prBtn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
                             });
                             try{ if (committeePageInfo) committeePageInfo.textContent = 'Page ' + currentCommitteePage + '/' + pages; }catch(e){}
                             try{ if (committeePrev) committeePrev.disabled = currentCommitteePage <= 1; }catch(e){}
@@ -1011,10 +1537,74 @@ ob_start();
                                     (function(){ return cellHtml(name, false); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-volunteer">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 do-edit-volunteer" title="Edit">✏️</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 do-delete-volunteer" title="Padam">🗑️</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary do-print-volunteer">Cetak</button>'
+                                    + '</td>';
                                 volunteerBody.appendChild(tr);
-                                var btn = tr.querySelector('.do-print-volunteer');
-                                if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
+                                var editBtn = tr.querySelector('.do-edit-volunteer');
+                                var delBtn = tr.querySelector('.do-delete-volunteer');
+                                var prBtn = tr.querySelector('.do-print-volunteer');
+                                if (editBtn) editBtn.addEventListener('click', function(){
+                                    try{
+                                        console.debug('Edit volunteer clicked', r || {});
+                                        var desiredRole = r.role_id || '';
+                                        var midEl = document.getElementById('memberId'); if (midEl) midEl.value = r.id || '';
+                                        var mn = document.getElementById('memberName'); if (mn) mn.value = r.member_name || '';
+                                        var me = document.getElementById('memberEmail'); if (me) me.value = r.member_email || '';
+                                        try{ var mtype = document.getElementById('memberRefType'); if (mtype) mtype.value = r.member_ref_type || ''; }catch(e){}
+                                        try{ var mid = document.getElementById('memberRefId'); if (mid) mid.value = r.member_ref_id || ''; }catch(e){}
+                                        try{ var mph = document.getElementById('memberPhone'); if (mph) mph.value = r.member_phone || ''; }catch(e){}
+                                        var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Kemaskini Penerima Sijil';
+                                        try{ if (addMemberSave) { addMemberSave.textContent = 'Kemaskini'; addMemberSave.dataset.editing = '1'; } }catch(e){}
+                                        // load roles then set selected value, then show modal even if roles fail
+                                        loadRolesIfNeeded().then(function(){ try{ initRoleSelect2(); }catch(e){}
+                                            try{
+                                                var mrole = document.getElementById('memberRoleId');
+                                                if (mrole){
+                                                    mrole.value = desiredRole || '';
+                                                    try{ if (window.jQuery && typeof jQuery.fn.select2 === 'function'){ jQuery(mrole).val(desiredRole||'').trigger('change'); } }catch(e){}
+                                                }
+                                            }catch(e){ console.warn('set desired role failed', e); }
+                                        }).catch(function(err){ console.warn('loadRolesIfNeeded failed for edit', err); }).finally(function(){ try{ showAddMemberModal(); }catch(e){ console.error('showAddMemberModal failed', e); } });
+                                    }catch(ex){ console.error('edit open error', ex); }
+                                });
+                                if (delBtn) delBtn.addEventListener('click', function(){
+                                    try{
+                                        var sid = r.id;
+                                        if (!sid) return;
+                                        var title = 'Padam rekod?';
+                                        var text = 'Rekod akan dipadamkan (disembunyikan). Teruskan?';
+                                        var callDelete = function(){
+                                            var urlDel = window.location.pathname + '?ajax=delete_member';
+                                            fetch(urlDel, { method: 'POST', body: new URLSearchParams({ id: sid }), credentials: 'same-origin' })
+                                            .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+                                            .then(function(t){
+                                                try{
+                                                    var j = JSON.parse(t);
+                                                }catch(parseErr){
+                                                    alert('Gagal memadam rekod. (Invalid server response)');
+                                                    return;
+                                                }
+                                                if (j && j.ok){
+                                                    try{
+                                                        var detail = (r.member_name ? r.member_name : '') + (r.member_ref_id ? ' ('+r.member_ref_id+')' : '');
+                                                        if (window.Swal) { Swal.fire({ icon: 'success', title: 'Dipadam', text: 'Rekod ' + detail + ' telah dipadam.' }); }
+                                                        else { alert('Rekod ' + detail + ' telah dipadam.'); }
+                                                    }catch(e){ }
+                                                    try{ if (btnLoadVolunteer) btnLoadVolunteer.click(); }catch(e){}
+                                                } else {
+                                                    alert('Gagal memadam rekod.');
+                                                }
+                                            })
+                                            .catch(function(err){ alert('Ralat padam: ' + (err && err.message ? err.message : 'Unknown')); });
+                                        };
+                                        if (window.Swal){ Swal.fire({ title: title, text: text, icon: 'warning', showCancelButton: true, confirmButtonText: 'Padam', cancelButtonText: 'Batal' }).then(function(res){ if (res && res.isConfirmed) callDelete(); }); }
+                                        else if (confirm(text)) callDelete();
+                                    }catch(ex){ console.error('delete error', ex); }
+                                });
+                                if (prBtn) prBtn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
                             });
                             try{ if (volunteerPageInfo) volunteerPageInfo.textContent = 'Page ' + currentVolunteerPage + '/' + pages; }catch(e){}
                             try{ if (volunteerPrev) volunteerPrev.disabled = currentVolunteerPage <= 1; }catch(e){}
