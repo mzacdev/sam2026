@@ -46,7 +46,7 @@ try {
 }
 // ensure $kod is defined (may be provided via GET when returning from form)
 $kod = strtoupper(trim((string)($_GET['kod'] ?? '')));
-// Default to UPNM kontinjen unless user explicitly chooses another
+// Default to UPNM kontinjen unlupdate config file new database credential. view only and configure json for default databaseess user explicitly chooses another
 if ($kod === '') {
     $kod = 'UPNM';
 }
