@@ -554,7 +554,7 @@ function fetch_managers_from_ringkasan($kod) {
                     COALESCE(
                         GROUP_CONCAT(
                             DISTINCT CONCAT(
-                                COALESCE(pp.nama, ''),
+                                COALESCE(NULLIF(TRIM(pp.nama), ''), ''),
                                 ' @@JAWATAN@@ ', COALESCE(pp.jawatan, ''),
                                 ' @@TEL@@ ', COALESCE(pp.no_telefon, ''),
                                 ' @@EMEL@@ ', COALESCE(pp.emel, '')
@@ -568,7 +568,7 @@ function fetch_managers_from_ringkasan($kod) {
                     COALESCE(
                         GROUP_CONCAT(
                             DISTINCT CONCAT(
-                                COALESCE(j.nama, ''),
+                                COALESCE(NULLIF(TRIM(j.nama), ''), ''),
                                 ' @@JAWATAN@@ ', COALESCE(j.jawatan, ''),
                                 ' @@TEL@@ ', COALESCE(j.no_telefon, ''),
                                 ' @@EMEL@@ ', COALESCE(j.emel, '')
@@ -582,8 +582,8 @@ function fetch_managers_from_ringkasan($kod) {
             LEFT JOIN table_kontinjen k ON k.id = p.kontinjen_id
             LEFT JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
             LEFT JOIN table_sukan s ON s.id = p.sukan_id
-            LEFT JOIN table_pasukan_pengurus pp ON pp.pasukan_id = p.id AND pp.deleted_at IS NULL
-            LEFT JOIN table_pasukan_jurulatih j ON j.pasukan_id = p.id AND j.deleted_at IS NULL
+            LEFT JOIN table_pasukan_pengurus pp ON pp.pasukan_id = p.id AND pp.deleted_at IS NULL AND NULLIF(TRIM(pp.nama), '') IS NOT NULL
+            LEFT JOIN table_pasukan_jurulatih j ON j.pasukan_id = p.id AND j.deleted_at IS NULL AND NULLIF(TRIM(j.nama), '') IS NOT NULL
             WHERE (:kod_empty = '' OR UPPER(COALESCE(k.kod_universiti, '')) = :kod_val)
               AND p.deleted_at IS NULL
             GROUP BY p.id, s.nama_sukan, k.kod_universiti, r.nama_pendek
@@ -1159,6 +1159,8 @@ ob_start();
                                                     tel = m ? m[1].trim() : '';
                                                     nama = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
                                                 }
+                                                if (!nama) return;
+                                                if (p.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var key = (nama || p).toLowerCase();
                                                 if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel };
                                                 else {
@@ -1185,6 +1187,8 @@ ob_start();
                                                     jtTel = mj ? mj[1].trim() : '';
                                                     namaj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
                                                 }
+                                                if (!namaj) return;
+                                                if (j.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var keyj = (namaj || j).toLowerCase();
                                                 if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel };
                                                 else {

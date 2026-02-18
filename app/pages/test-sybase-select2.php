@@ -19,9 +19,8 @@ if ($ajax === 'staff_lookup') {
     if ($limit <= 0 || $limit > 500) $limit = 100;
 
     $t0 = microtime(true);
-    $conn = null;
     try {
-        $conn = getSybaseConnection();
+        $sybasePdo = getSybasePdoConnection('default');
 
         if ($q !== '') {
             $like = '%' . $q . '%';
@@ -39,11 +38,8 @@ if ($ajax === 'staff_lookup') {
                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(gelar_nama, ''))) LIKE ?
                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(email, ''))) LIKE ?
                     ORDER BY gelar_nama";
-            $stmt = sybaseOdbcPrepare($conn, $sql);
-            if (!$stmt) {
-                throw new Exception('Gagal sediakan query: ' . getSybaseOdbcErrorMessage($conn));
-            }
-            $okExec = sybaseOdbcExecute($stmt, [$like, $like, $like]);
+            $stmt = $sybasePdo->prepare($sql);
+            $okExec = $stmt->execute([$like, $like, $like]);
         } else {
             $sql = "SELECT TOP {$limit}
                         CONVERT(VARCHAR(50), ISNULL(nopekerja, '')) AS nopekerja,
@@ -56,16 +52,16 @@ if ($ajax === 'staff_lookup') {
                         CONVERT(VARCHAR(200), ISNULL(jabatansemasa, '')) AS jabatansemasa
                     FROM v630staf_service_skim_all
                     ORDER BY gelar_nama";
-            $stmt = sybaseOdbcExec($conn, $sql);
+            $stmt = $sybasePdo->query($sql);
             $okExec = ($stmt !== false);
         }
 
         if (!$okExec || !$stmt) {
-            throw new Exception('Gagal load data staf: ' . getSybaseOdbcErrorMessage($conn));
+            throw new Exception('Gagal load data staf.');
         }
 
         $rows = [];
-        while ($r = sybaseOdbcFetchArray($stmt)) {
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $nopekerja = trim((string)($r['nopekerja'] ?? ''));
             $gelarNama = trim((string)($r['gelar_nama'] ?? ''));
             $email = trim((string)($r['email'] ?? ''));
@@ -102,8 +98,6 @@ if ($ajax === 'staff_lookup') {
     } catch (Exception $e) {
         $out['ok'] = false;
         $out['error'] = $e->getMessage();
-    } finally {
-        if ($conn) sybaseOdbcClose($conn);
     }
 
     $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);

@@ -3,18 +3,122 @@
  * Database Configuration
  * SAM 2026 - Role-Based Access Control System
  */
+require_once __DIR__ . '/SybaseConnector.php';
+
+/**
+ * Minimal .env loader for app/config/.ENV (or .env).
+ * Existing process env vars are not overridden.
+ */
+function loadConfigEnvFiles(array $paths): void {
+    foreach ($paths as $path) {
+        if (!is_file($path)) {
+            continue;
+        }
+        $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!$lines) {
+            continue;
+        }
+        foreach ($lines as $line) {
+            $line = trim((string)$line);
+            if ($line === '' || $line[0] === '#') {
+                continue;
+            }
+            $eqPos = strpos($line, '=');
+            if ($eqPos === false) {
+                continue;
+            }
+            $key = trim(substr($line, 0, $eqPos));
+            $val = trim(substr($line, $eqPos + 1));
+            if ($key === '') {
+                continue;
+            }
+            if ((str_starts_with($val, '"') && str_ends_with($val, '"')) || (str_starts_with($val, "'") && str_ends_with($val, "'"))) {
+                $val = substr($val, 1, -1);
+            }
+            if (getenv($key) !== false) {
+                continue;
+            }
+            putenv($key . '=' . $val);
+            $_ENV[$key] = $val;
+            $_SERVER[$key] = $val;
+        }
+    }
+}
+
+function envValue(string $key, string $default = ''): string {
+    $val = getenv($key);
+    if ($val === false || $val === '') {
+        return $default;
+    }
+    return (string)$val;
+}
+
+function requiredEnv(string $key): string {
+    $val = getenv($key);
+    if ($val === false || trim((string)$val) === '') {
+        throw new RuntimeException("Konfigurasi wajib tiada dalam .ENV: {$key}");
+    }
+    return (string)$val;
+}
+
+function isWindowsEnv(): bool {
+    return strcasecmp((string)PHP_OS_FAMILY, 'Windows') === 0;
+}
+
+function isDockerEnv(): bool {
+    if (is_file('/.dockerenv')) return true;
+    $cg = @file_get_contents('/proc/1/cgroup');
+    if ($cg === false) return false;
+    return (strpos($cg, 'docker') !== false || strpos($cg, 'containerd') !== false);
+}
+
+function resolveMysqlProfile(): string {
+    $profileRaw = getenv('MYSQL_PROFILE');
+    $profile = strtolower(trim($profileRaw === false ? 'auto' : (string)$profileRaw));
+    if ($profile === 'dev' || $profile === 'prod') return $profile;
+    if (isWindowsEnv()) return 'prod';
+    if (isDockerEnv()) return 'dev';
+    return 'dev';
+}
+
+function envProfileValue(string $profile, string $name): string {
+    $key = strtoupper($profile) . '_' . $name;
+    return requiredEnv($key);
+}
+
+loadConfigEnvFiles([
+    __DIR__ . '/.ENV',
+    __DIR__ . '/.env',
+]);
 
 // Database configuration
-define('DB_HOST', '172.16.2.141');
-define('DB_USER', 'pendaftar');
-define('DB_PASS', 'Pend@ftar@2025?');
-define('DB_NAME', 'esportsdb');
-define('DB_CHARSET', 'utf8mb4');
+$MYSQL_PROFILE = resolveMysqlProfile();
+$DB_HOST_DEFAULT = envProfileValue($MYSQL_PROFILE, 'DB_HOST');
+$DB_USER_DEFAULT = envProfileValue($MYSQL_PROFILE, 'DB_USER');
+$DB_PASS_DEFAULT = envProfileValue($MYSQL_PROFILE, 'DB_PASS');
+$DB_NAME_DEFAULT = envProfileValue($MYSQL_PROFILE, 'DB_NAME');
+$DB_CHARSET_DEFAULT = envProfileValue($MYSQL_PROFILE, 'DB_CHARSET');
+
+define('DB_HOST', envValue('DB_HOST', $DB_HOST_DEFAULT));
+define('DB_USER', envValue('DB_USER', $DB_USER_DEFAULT));
+define('DB_PASS', envValue('DB_PASS', $DB_PASS_DEFAULT));
+define('DB_NAME', envValue('DB_NAME', $DB_NAME_DEFAULT));
+define('DB_CHARSET', envValue('DB_CHARSET', $DB_CHARSET_DEFAULT));
 
 // Sybase ODBC defaults (can be overridden by env vars)
-define('SYBASE_ESPORTS_DSN', 'SYBASE_ESPORTS_STAF');
-define('SYBASE_ESPORTS_USER', 'expdir');
-define('SYBASE_ESPORTS_PASS', 'X@directory1');ak
+define('SYBASE_ESPORTS_DSN', requiredEnv('SYBASE_ESPORTS_DSN'));
+define('SYBASE_ESPORTS_USER', requiredEnv('SYBASE_ESPORTS_USER'));
+define('SYBASE_ESPORTS_PASS', requiredEnv('SYBASE_ESPORTS_PASS'));
+define('SYBASE_ESPORTS_HOST', requiredEnv('SYBASE_ESPORTS_HOST'));
+define('SYBASE_ESPORTS_PORT', requiredEnv('SYBASE_ESPORTS_PORT'));
+define('SYBASE_ESPORTS_DB', requiredEnv('SYBASE_ESPORTS_DB'));
+
+define('SYBASE_STUDENT_DSN', requiredEnv('SYBASE_STUDENT_DSN'));
+define('SYBASE_STUDENT_USER', requiredEnv('SYBASE_STUDENT_USER'));
+define('SYBASE_STUDENT_PASS', requiredEnv('SYBASE_STUDENT_PASS'));
+define('SYBASE_STUDENT_HOST', requiredEnv('SYBASE_STUDENT_HOST'));
+define('SYBASE_STUDENT_PORT', requiredEnv('SYBASE_STUDENT_PORT'));
+define('SYBASE_STUDENT_DB', requiredEnv('SYBASE_STUDENT_DB'));
 
 // Database connection class
 class Database {
@@ -63,6 +167,15 @@ function getDB() {
     return Database::getInstance()->getConnection();
 }
 
+// New dynamic Sybase PDO helpers (recommended for new code)
+function getSybasePdoConnection(string $connectionName = 'default'): PDO {
+    return SybaseConnector::connect($connectionName);
+}
+
+function getSybaseStudentPdoConnection(): PDO {
+    return SybaseConnector::connect('student');
+}
+
 // Helper function to get Sybase (ODBC) connection
 function getSybaseConnection($dsn = null, $user = null, $pass = null) {
     $dsn = $dsn ?: (getenv('SYBASE_ESPORTS_DSN') ?: SYBASE_ESPORTS_DSN);
@@ -80,6 +193,25 @@ function getSybaseConnection($dsn = null, $user = null, $pass = null) {
         throw new Exception('Sambungan Sybase gagal' . ($code ? ' [' . $code . ']' : '') . ($msg ? ': ' . $msg : '.'));
     }
 
+    return $conn;
+}
+
+// Legacy ODBC helper for student DSN (existing ODBC code path compatibility)
+function getSybaseStudentConnection($dsn = null, $user = null, $pass = null) {
+    $dsn = $dsn ?: (getenv('SYBASE_STUDENT_DSN') ?: (defined('SYBASE_STUDENT_DSN') ? SYBASE_STUDENT_DSN : ''));
+    $user = $user ?: (getenv('SYBASE_STUDENT_USER') ?: (defined('SYBASE_STUDENT_USER') ? SYBASE_STUDENT_USER : ''));
+    $pass = ($pass !== null) ? $pass : (getenv('SYBASE_STUDENT_PASS') ?: (defined('SYBASE_STUDENT_PASS') ? SYBASE_STUDENT_PASS : ''));
+
+    if (!function_exists('odbc_connect')) {
+        throw new Exception('ODBC extension tidak tersedia pada server PHP.');
+    }
+
+    $conn = @odbc_connect($dsn, $user, $pass);
+    if (!$conn) {
+        $code = function_exists('odbc_error') ? @odbc_error() : '';
+        $msg = function_exists('odbc_errormsg') ? @odbc_errormsg() : '';
+        throw new Exception('Sambungan Sybase Student gagal' . ($code ? ' [' . $code . ']' : '') . ($msg ? ': ' . $msg : '.'));
+    }
     return $conn;
 }
 

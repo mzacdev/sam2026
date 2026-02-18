@@ -229,9 +229,8 @@ if ($ajax === 'managers') {
 
         // Flag rows where member_name is not found in authoritative Sybase sources.
         if (!empty($rows) && in_array($type, ['STAF', 'PELAJAR'], true)) {
-            $connRef = null;
             try {
-                $connRef = ($type === 'STAF') ? getSybaseConnection() : getSybaseStudentConnection();
+                $sybasePdo = ($type === 'STAF') ? getSybasePdoConnection('default') : getSybaseStudentPdoConnection();
                 $nameExistsCache = [];
                 foreach ($rows as &$rowRef) {
                     $refIdRaw = trim((string)($rowRef['member_ref_id'] ?? ''));
@@ -281,12 +280,12 @@ if ($ajax === 'managers') {
                     }
 
                     if (!array_key_exists($cacheKey, $nameExistsCache)) {
-                        $stmtName = sybaseOdbcPrepare($connRef, $sqlName);
+                        $stmtName = $sybasePdo->prepare($sqlName);
                         $found = false;
                         if ($stmtName) {
-                            $okName = sybaseOdbcExecute($stmtName, $params);
+                            $okName = $stmtName->execute($params);
                             if ($okName) {
-                                $foundRow = sybaseOdbcFetchArray($stmtName);
+                                $foundRow = $stmtName->fetch(PDO::FETCH_ASSOC);
                                 $found = ($foundRow !== false);
                             }
                         }
@@ -302,8 +301,6 @@ if ($ajax === 'managers') {
                     $rowRef['name_not_found'] = 0;
                 }
                 unset($rowRef);
-            } finally {
-                if ($connRef) sybaseOdbcClose($connRef);
             }
         }
         $out['ok'] = true; $out['rows'] = $rows; $out['count'] = count($rows);
@@ -335,7 +332,7 @@ if ($ajax === 'committee_roles') {
     exit;
 }
 
-// AJAX endpoint: select2 lookup for STAF from Sybase (ODBC DSN: SYBASE_ESPORTS)
+// AJAX endpoint: select2 lookup for STAF from Sybase
 if ($ajax === 'staff_lookup') {
     header('Content-Type: application/json; charset=utf-8');
     $out = ['ok' => false, 'results' => [], 'error' => null];
@@ -343,9 +340,8 @@ if ($ajax === 'staff_lookup') {
     $limit = (int)($_GET['limit'] ?? 100);
     if ($limit <= 0 || $limit > 500) $limit = 100;
     $t0 = microtime(true);
-    $conn = null;
     try {
-        $conn = getSybaseConnection();
+        $sybasePdo = getSybasePdoConnection('default');
 
         if ($q !== '') {
             $like = '%' . $q . '%';
@@ -366,11 +362,8 @@ if ($ajax === 'staff_lookup') {
                         OR UPPER(CONVERT(VARCHAR(200), ISNULL(email, ''))) LIKE ?
                       )
                     ORDER BY gelar_nama";
-            $stmt = sybaseOdbcPrepare($conn, $sql);
-            if (!$stmt) {
-                throw new Exception('Gagal sediakan query lookup staf: ' . getSybaseOdbcErrorMessage($conn));
-            }
-            $okExec = sybaseOdbcExecute($stmt, [$like, $like, $like]);
+            $stmt = $sybasePdo->prepare($sql);
+            $okExec = $stmt->execute([$like, $like, $like]);
         } else {
             $sql = "SELECT TOP {$limit}
                         CONVERT(VARCHAR(50), ISNULL(nopekerja, '')) AS nopekerja,
@@ -384,16 +377,16 @@ if ($ajax === 'staff_lookup') {
                     FROM v630staf_service_skim_all
                     WHERE CONVERT(VARCHAR(10), ISNULL(kodstatus, '')) <> '9'
                     ORDER BY gelar_nama";
-            $stmt = sybaseOdbcExec($conn, $sql);
+            $stmt = $sybasePdo->query($sql);
             $okExec = ($stmt !== false);
         }
 
         if (!$okExec || !$stmt) {
-            throw new Exception('Gagal dapatkan data staf dari Sybase: ' . getSybaseOdbcErrorMessage($conn));
+            throw new Exception('Gagal dapatkan data staf dari Sybase.');
         }
 
         $rows = [];
-        while ($r = sybaseOdbcFetchArray($stmt)) {
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $nopekerja = trim((string)($r['nopekerja'] ?? ''));
             $gelarNama = trim((string)($r['gelar_nama'] ?? ''));
             $email = trim((string)($r['email'] ?? ''));
@@ -424,10 +417,6 @@ if ($ajax === 'staff_lookup') {
     } catch (Exception $e) {
         $out['ok'] = false;
         $out['error'] = $e->getMessage();
-    } finally {
-        if ($conn) {
-            sybaseOdbcClose($conn);
-        }
     }
     $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);
     echo json_encode($out);
@@ -442,9 +431,8 @@ if ($ajax === 'student_lookup') {
     $limit = (int)($_GET['limit'] ?? 100);
     if ($limit <= 0 || $limit > 500) $limit = 100;
     $t0 = microtime(true);
-    $conn = null;
     try {
-        $conn = getSybaseStudentConnection();
+        $sybasePdo = getSybaseStudentPdoConnection();
 
         if ($q !== '') {
             $like = '%' . $q . '%';
@@ -463,11 +451,8 @@ if ($ajax === 'student_lookup') {
                         OR UPPER(CONVERT(VARCHAR(200), ISNULL(email, ''))) LIKE ?
                       )
                     ORDER BY nama";
-            $stmt = sybaseOdbcPrepare($conn, $sql);
-            if (!$stmt) {
-                throw new Exception('Gagal sediakan query lookup student: ' . getSybaseOdbcErrorMessage($conn));
-            }
-            $okExec = sybaseOdbcExecute($stmt, [$like, $like, $like]);
+            $stmt = $sybasePdo->prepare($sql);
+            $okExec = $stmt->execute([$like, $like, $like]);
         } else {
             $sql = "SELECT TOP {$limit}
                         ISNULL(CONVERT(VARCHAR(50), matrik), '') AS matrik,
@@ -479,16 +464,16 @@ if ($ajax === 'student_lookup') {
                     FROM v210
                     WHERE ISNULL(CONVERT(VARCHAR(10), status), '') <> '04'
                     ORDER BY nama";
-            $stmt = sybaseOdbcExec($conn, $sql);
+            $stmt = $sybasePdo->query($sql);
             $okExec = ($stmt !== false);
         }
 
         if (!$okExec || !$stmt) {
-            throw new Exception('Gagal dapatkan data student dari Sybase: ' . getSybaseOdbcErrorMessage($conn));
+            throw new Exception('Gagal dapatkan data student dari Sybase.');
         }
 
         $rows = [];
-        while ($r = sybaseOdbcFetchArray($stmt)) {
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $matrik = trim((string)($r['matrik'] ?? ''));
             $nama = trim((string)($r['nama'] ?? ''));
             $email = trim((string)($r['email'] ?? ''));
@@ -512,8 +497,6 @@ if ($ajax === 'student_lookup') {
     } catch (Exception $e) {
         $out['ok'] = false;
         $out['error'] = $e->getMessage();
-    } finally {
-        if ($conn) sybaseOdbcClose($conn);
     }
     $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);
     echo json_encode($out);
@@ -1036,7 +1019,7 @@ function fetch_managers_from_ringkasan($kod) {
                     COALESCE(
                         GROUP_CONCAT(
                             DISTINCT CONCAT(
-                                COALESCE(pp.nama, ''),
+                                COALESCE(NULLIF(TRIM(pp.nama), ''), ''),
                                 ' @@JAWATAN@@ ', COALESCE(pp.jawatan, ''),
                                 ' @@TEL@@ ', COALESCE(pp.no_telefon, ''),
                                 ' @@EMEL@@ ', COALESCE(pp.emel, '')
@@ -1050,7 +1033,7 @@ function fetch_managers_from_ringkasan($kod) {
                     COALESCE(
                         GROUP_CONCAT(
                             DISTINCT CONCAT(
-                                COALESCE(j.nama, ''),
+                                COALESCE(NULLIF(TRIM(j.nama), ''), ''),
                                 ' @@JAWATAN@@ ', COALESCE(j.jawatan, ''),
                                 ' @@TEL@@ ', COALESCE(j.no_telefon, ''),
                                 ' @@EMEL@@ ', COALESCE(j.emel, '')
@@ -1064,8 +1047,8 @@ function fetch_managers_from_ringkasan($kod) {
             LEFT JOIN table_kontinjen k ON k.id = p.kontinjen_id
             LEFT JOIN table_ref_universiti r ON r.kod_universiti = k.kod_universiti AND r.status = 1
             LEFT JOIN table_sukan s ON s.id = p.sukan_id
-            LEFT JOIN table_pasukan_pengurus pp ON pp.pasukan_id = p.id AND pp.deleted_at IS NULL
-            LEFT JOIN table_pasukan_jurulatih j ON j.pasukan_id = p.id AND j.deleted_at IS NULL
+            LEFT JOIN table_pasukan_pengurus pp ON pp.pasukan_id = p.id AND pp.deleted_at IS NULL AND NULLIF(TRIM(pp.nama), '') IS NOT NULL
+            LEFT JOIN table_pasukan_jurulatih j ON j.pasukan_id = p.id AND j.deleted_at IS NULL AND NULLIF(TRIM(j.nama), '') IS NOT NULL
             WHERE (:kod_empty = '' OR UPPER(COALESCE(k.kod_universiti, '')) = :kod_val)
               AND p.deleted_at IS NULL
             GROUP BY p.id, s.nama_sukan, k.kod_universiti, r.nama_pendek
@@ -3255,6 +3238,8 @@ ob_start();
                                                     tel = m ? m[1].trim() : '';
                                                     nama = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
                                                 }
+                                                if (!nama) return;
+                                                if (p.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var key = (nama || p).toLowerCase();
                                                 if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel };
                                                 else {
@@ -3281,6 +3266,8 @@ ob_start();
                                                     jtTel = mj ? mj[1].trim() : '';
                                                     namaj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
                                                 }
+                                                if (!namaj) return;
+                                                if (j.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var keyj = (namaj || j).toLowerCase();
                                                 if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel };
                                                 else {

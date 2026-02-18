@@ -9,8 +9,21 @@ RUN a2enmod rewrite ssl
 # Disable default site
 RUN a2dissite 000-default.conf
 
+# System deps for Sybase (pdo_dblib / pdo_odbc)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    unixodbc-dev \
+    freetds-dev \
+    freetds-bin \
+    tdsodbc \
+    && rm -rf /var/lib/apt/lists/*
+
 # PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql
+RUN docker-php-ext-configure pdo_odbc --with-pdo-odbc=unixODBC,/usr \
+    && docker-php-ext-install -j"$(nproc)" \
+       pdo \
+       pdo_mysql \
+       pdo_odbc \
+       pdo_dblib
 
 # Enable our site
 COPY apache/esports.dev.conf /etc/apache2/sites-available/esports.dev.conf
