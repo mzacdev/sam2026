@@ -76,8 +76,8 @@ try {
     // Define allowed fields for each participant type
     $allowedFields = [
         'atlet' => ['nama', 'no_kad_pengenalan', 'no_matrik', 'pasukan_id', 'kategori_id'],
-        'pengurus' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'pasukan_id'],
-        'jurulatih' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'pasukan_id']
+        'pengurus' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'jawatan', 'pasukan_id'],
+        'jurulatih' => ['nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'jawatan', 'pasukan_id']
     ];
     
     if (!in_array($field_name, $allowedFields[$participant_type])) {
@@ -175,6 +175,7 @@ try {
         'no_matrik' => 'no_matrik',
         'no_telefon' => 'no_telefon',
         'emel' => 'emel',
+        'jawatan' => 'jawatan',
         'pasukan_id' => 'pasukan_id',
         'kategori_id' => 'kategori_id'
     ];
@@ -236,6 +237,20 @@ try {
             throw new Exception('Format emel tidak sah.');
         }
     }
+
+    if ($field_name === 'jawatan') {
+        $field_value = mb_strtoupper(trim((string)$field_value), 'UTF-8');
+        if ($participant_type === 'pengurus') {
+            $allowedJawatan = ['PENGURUS', 'PENOLONG PENGURUS'];
+        } elseif ($participant_type === 'jurulatih') {
+            $allowedJawatan = ['JURULATIH', 'PENOLONG JURULATIH'];
+        } else {
+            throw new Exception('Jawatan hanya terpakai untuk Pengurus/Jurulatih.');
+        }
+        if ($field_value === '' || !in_array($field_value, $allowedJawatan, true)) {
+            throw new Exception('Jawatan tidak sah.');
+        }
+    }
     
     // Update the field (handle clearing kategori when pasukan changes)
     if ($field_name === 'pasukan_id' && $participant_type === 'atlet' && empty($participant['kategori_id'])) {
@@ -284,4 +299,3 @@ try {
         'message' => $e->getMessage()
     ]);
 }
-

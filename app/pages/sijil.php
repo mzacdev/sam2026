@@ -12,9 +12,9 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/rbac.php';
 
-// DEV: enable error display to help diagnose blank-page issues during testing
-@ini_set('display_errors', 1);
-@ini_set('display_startup_errors', 1);
+// Keep AJAX responses JSON-clean in production (avoid HTML warnings breaking JSON.parse)
+@ini_set('display_errors', 0);
+@ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
 Session::start();
@@ -226,6 +226,86 @@ if ($ajax === 'managers') {
         $st = $db->prepare($sql);
         $st->execute([':ref_type' => $type]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        // Flag rows where member_name is not found in authoritative Sybase sources.
+        if (!empty($rows) && in_array($type, ['STAF', 'PELAJAR'], true)) {
+            $connRef = null;
+            try {
+                $connRef = ($type === 'STAF') ? getSybaseConnection() : getSybaseStudentConnection();
+                $nameExistsCache = [];
+                foreach ($rows as &$rowRef) {
+                    $refIdRaw = trim((string)($rowRef['member_ref_id'] ?? ''));
+                    $nameRaw = trim((string)($rowRef['member_name'] ?? ''));
+                    $nameKey = function_exists('mb_strtoupper') ? mb_strtoupper($nameRaw, 'UTF-8') : strtoupper($nameRaw);
+
+                    // Primary check by unique ref_id (no staf / no matrik), fallback to name if ref_id missing.
+                    $cacheKey = '';
+                    $sqlName = '';
+                    $params = [];
+
+                    if ($refIdRaw !== '') {
+                        if ($type === 'STAF') {
+                            $cacheKey = 'RID:STAF:' . strtoupper($refIdRaw);
+                            $sqlName = "SELECT TOP 1 1 AS found
+                                        FROM v630staf_service_skim_all
+                                        WHERE CONVERT(VARCHAR(10), ISNULL(kodstatus, '')) <> '9'
+                                          AND UPPER(LTRIM(RTRIM(CONVERT(VARCHAR(50), ISNULL(nopekerja, ''))))) = ?";
+                            $params = [strtoupper($refIdRaw)];
+                        } else {
+                            $cacheKey = 'RID:PELAJAR:' . strtoupper($refIdRaw);
+                            $sqlName = "SELECT TOP 1 1 AS found
+                                        FROM v210
+                                        WHERE ISNULL(CONVERT(VARCHAR(10), status), '') <> '04'
+                                          AND UPPER(LTRIM(RTRIM(ISNULL(CONVERT(VARCHAR(50), matrik), '')))) = ?";
+                            $params = [strtoupper($refIdRaw)];
+                        }
+                    } elseif ($nameKey !== '') {
+                        if ($type === 'STAF') {
+                            $cacheKey = 'NAME:STAF:' . $nameKey;
+                            $sqlName = "SELECT TOP 1 1 AS found
+                                        FROM v630staf_service_skim_all
+                                        WHERE CONVERT(VARCHAR(10), ISNULL(kodstatus, '')) <> '9'
+                                          AND UPPER(LTRIM(RTRIM(CONVERT(VARCHAR(200), ISNULL(gelar_nama, ''))))) = ?";
+                            $params = [$nameKey];
+                        } else {
+                            $cacheKey = 'NAME:PELAJAR:' . $nameKey;
+                            $sqlName = "SELECT TOP 1 1 AS found
+                                        FROM v210
+                                        WHERE ISNULL(CONVERT(VARCHAR(10), status), '') <> '04'
+                                          AND UPPER(LTRIM(RTRIM(CONVERT(VARCHAR(200), ISNULL(nama, ''))))) = ?";
+                            $params = [$nameKey];
+                        }
+                    } else {
+                        $rowRef['name_not_found'] = 0;
+                        continue;
+                    }
+
+                    if (!array_key_exists($cacheKey, $nameExistsCache)) {
+                        $stmtName = sybaseOdbcPrepare($connRef, $sqlName);
+                        $found = false;
+                        if ($stmtName) {
+                            $okName = sybaseOdbcExecute($stmtName, $params);
+                            if ($okName) {
+                                $foundRow = sybaseOdbcFetchArray($stmtName);
+                                $found = ($foundRow !== false);
+                            }
+                        }
+                        $nameExistsCache[$cacheKey] = $found ? 1 : 0;
+                    }
+
+                    $rowRef['name_not_found'] = ($nameExistsCache[$cacheKey] === 1) ? 0 : 1;
+                }
+                unset($rowRef);
+            } catch (Exception $eNameCheck) {
+                // If name-check fails, do not falsely highlight all rows as missing.
+                foreach ($rows as &$rowRef) {
+                    $rowRef['name_not_found'] = 0;
+                }
+                unset($rowRef);
+            } finally {
+                if ($connRef) sybaseOdbcClose($connRef);
+            }
+        }
         $out['ok'] = true; $out['rows'] = $rows; $out['count'] = count($rows);
     } catch (Exception $e) {
         $out['ok'] = false; $out['error'] = $e->getMessage();
@@ -255,6 +335,191 @@ if ($ajax === 'committee_roles') {
     exit;
 }
 
+// AJAX endpoint: select2 lookup for STAF from Sybase (ODBC DSN: SYBASE_ESPORTS)
+if ($ajax === 'staff_lookup') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'results' => [], 'error' => null];
+    $q = strtoupper(trim((string)($_GET['q'] ?? $_GET['term'] ?? '')));
+    $limit = (int)($_GET['limit'] ?? 100);
+    if ($limit <= 0 || $limit > 500) $limit = 100;
+    $t0 = microtime(true);
+    $conn = null;
+    try {
+        $conn = getSybaseConnection();
+
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $sql = "SELECT TOP {$limit}
+                        CONVERT(VARCHAR(50), ISNULL(nopekerja, '')) AS nopekerja,
+                        CONVERT(VARCHAR(200), ISNULL(gelar_nama, '')) AS gelar_nama,
+                        CONVERT(VARCHAR(200), ISNULL(email, '')) AS email,
+                        CONVERT(VARCHAR(50), ISNULL(handphone, '')) AS handphone,
+                        CONVERT(VARCHAR(50), ISNULL(telefon_surat, '')) AS telefon_surat,
+                        CONVERT(VARCHAR(50), ISNULL(telefon_pej, '')) AS telefon_pej,
+                        CONVERT(VARCHAR(200), ISNULL(jawatansemasa, '')) AS jawatansemasa,
+                        CONVERT(VARCHAR(200), ISNULL(jabatansemasa, '')) AS jabatansemasa
+                    FROM v630staf_service_skim_all
+                    WHERE CONVERT(VARCHAR(10), ISNULL(kodstatus, '')) <> '9'
+                      AND (
+                           UPPER(CONVERT(VARCHAR(50), ISNULL(nopekerja, ''))) LIKE ?
+                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(gelar_nama, ''))) LIKE ?
+                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(email, ''))) LIKE ?
+                      )
+                    ORDER BY gelar_nama";
+            $stmt = sybaseOdbcPrepare($conn, $sql);
+            if (!$stmt) {
+                throw new Exception('Gagal sediakan query lookup staf: ' . getSybaseOdbcErrorMessage($conn));
+            }
+            $okExec = sybaseOdbcExecute($stmt, [$like, $like, $like]);
+        } else {
+            $sql = "SELECT TOP {$limit}
+                        CONVERT(VARCHAR(50), ISNULL(nopekerja, '')) AS nopekerja,
+                        CONVERT(VARCHAR(200), ISNULL(gelar_nama, '')) AS gelar_nama,
+                        CONVERT(VARCHAR(200), ISNULL(email, '')) AS email,
+                        CONVERT(VARCHAR(50), ISNULL(handphone, '')) AS handphone,
+                        CONVERT(VARCHAR(50), ISNULL(telefon_surat, '')) AS telefon_surat,
+                        CONVERT(VARCHAR(50), ISNULL(telefon_pej, '')) AS telefon_pej,
+                        CONVERT(VARCHAR(200), ISNULL(jawatansemasa, '')) AS jawatansemasa,
+                        CONVERT(VARCHAR(200), ISNULL(jabatansemasa, '')) AS jabatansemasa
+                    FROM v630staf_service_skim_all
+                    WHERE CONVERT(VARCHAR(10), ISNULL(kodstatus, '')) <> '9'
+                    ORDER BY gelar_nama";
+            $stmt = sybaseOdbcExec($conn, $sql);
+            $okExec = ($stmt !== false);
+        }
+
+        if (!$okExec || !$stmt) {
+            throw new Exception('Gagal dapatkan data staf dari Sybase: ' . getSybaseOdbcErrorMessage($conn));
+        }
+
+        $rows = [];
+        while ($r = sybaseOdbcFetchArray($stmt)) {
+            $nopekerja = trim((string)($r['nopekerja'] ?? ''));
+            $gelarNama = trim((string)($r['gelar_nama'] ?? ''));
+            $email = trim((string)($r['email'] ?? ''));
+            $handphone = trim((string)($r['handphone'] ?? ''));
+            $telefonSurat = trim((string)($r['telefon_surat'] ?? ''));
+            $telefonPej = trim((string)($r['telefon_pej'] ?? ''));
+            $phone = $handphone !== '' ? $handphone : ($telefonSurat !== '' ? $telefonSurat : $telefonPej);
+            $jawatan = trim((string)($r['jawatansemasa'] ?? ''));
+            $jabatan = trim((string)($r['jabatansemasa'] ?? ''));
+
+            $id = $nopekerja;
+            if ($id === '' || $gelarNama === '') continue;
+
+            $rows[] = [
+                'id' => $id,
+                'text' => ($gelarNama . ($nopekerja !== '' ? (' (' . $nopekerja . ')') : '')),
+                'nopekerja' => $nopekerja,
+                'gelar_nama' => $gelarNama,
+                'email' => $email,
+                'phone' => $phone,
+                'jawatan' => $jawatan,
+                'jabatansemasa' => $jabatan
+            ];
+        }
+
+        $out['ok'] = true;
+        $out['results'] = $rows;
+    } catch (Exception $e) {
+        $out['ok'] = false;
+        $out['error'] = $e->getMessage();
+    } finally {
+        if ($conn) {
+            sybaseOdbcClose($conn);
+        }
+    }
+    $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: select2 lookup for STUDENT from Sybase Student DB
+if ($ajax === 'student_lookup') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'results' => [], 'error' => null];
+    $q = strtoupper(trim((string)($_GET['q'] ?? $_GET['term'] ?? '')));
+    $limit = (int)($_GET['limit'] ?? 100);
+    if ($limit <= 0 || $limit > 500) $limit = 100;
+    $t0 = microtime(true);
+    $conn = null;
+    try {
+        $conn = getSybaseStudentConnection();
+
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $sql = "SELECT TOP {$limit}
+                        ISNULL(CONVERT(VARCHAR(50), matrik), '') AS matrik,
+                        CONVERT(VARCHAR(200), ISNULL(nama, '')) AS nama,
+                        CONVERT(VARCHAR(200), ISNULL(email, '')) AS email,
+                        CONVERT(VARCHAR(50), ISNULL(notel_terkini, '')) AS notel_terkini,
+                        ISNULL(CONVERT(VARCHAR(10), status), '') AS status,
+                        CONVERT(VARCHAR(200), ISNULL(statusketerangan, '')) AS statusketerangan
+                    FROM v210
+                    WHERE ISNULL(CONVERT(VARCHAR(10), status), '') <> '04'
+                      AND (
+                           UPPER(ISNULL(CONVERT(VARCHAR(50), matrik), '')) LIKE ?
+                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(nama, ''))) LIKE ?
+                        OR UPPER(CONVERT(VARCHAR(200), ISNULL(email, ''))) LIKE ?
+                      )
+                    ORDER BY nama";
+            $stmt = sybaseOdbcPrepare($conn, $sql);
+            if (!$stmt) {
+                throw new Exception('Gagal sediakan query lookup student: ' . getSybaseOdbcErrorMessage($conn));
+            }
+            $okExec = sybaseOdbcExecute($stmt, [$like, $like, $like]);
+        } else {
+            $sql = "SELECT TOP {$limit}
+                        ISNULL(CONVERT(VARCHAR(50), matrik), '') AS matrik,
+                        CONVERT(VARCHAR(200), ISNULL(nama, '')) AS nama,
+                        CONVERT(VARCHAR(200), ISNULL(email, '')) AS email,
+                        CONVERT(VARCHAR(50), ISNULL(notel_terkini, '')) AS notel_terkini,
+                        ISNULL(CONVERT(VARCHAR(10), status), '') AS status,
+                        CONVERT(VARCHAR(200), ISNULL(statusketerangan, '')) AS statusketerangan
+                    FROM v210
+                    WHERE ISNULL(CONVERT(VARCHAR(10), status), '') <> '04'
+                    ORDER BY nama";
+            $stmt = sybaseOdbcExec($conn, $sql);
+            $okExec = ($stmt !== false);
+        }
+
+        if (!$okExec || !$stmt) {
+            throw new Exception('Gagal dapatkan data student dari Sybase: ' . getSybaseOdbcErrorMessage($conn));
+        }
+
+        $rows = [];
+        while ($r = sybaseOdbcFetchArray($stmt)) {
+            $matrik = trim((string)($r['matrik'] ?? ''));
+            $nama = trim((string)($r['nama'] ?? ''));
+            $email = trim((string)($r['email'] ?? ''));
+            $phone = trim((string)($r['notel_terkini'] ?? ''));
+            $statusKeterangan = trim((string)($r['statusketerangan'] ?? ''));
+            if ($matrik === '' || $nama === '') continue;
+
+            $rows[] = [
+                'id' => $matrik,
+                'text' => ($nama . ' (' . $matrik . ')'),
+                'matrik' => $matrik,
+                'nama' => $nama,
+                'email' => $email,
+                'phone' => $phone,
+                'statusketerangan' => $statusKeterangan
+            ];
+        }
+
+        $out['ok'] = true;
+        $out['results'] = $rows;
+    } catch (Exception $e) {
+        $out['ok'] = false;
+        $out['error'] = $e->getMessage();
+    } finally {
+        if ($conn) sybaseOdbcClose($conn);
+    }
+    $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);
+    echo json_encode($out);
+    exit;
+}
+
 // AJAX endpoint: add a new committee member (POST)
 if ($ajax === 'add_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
@@ -262,22 +527,63 @@ if ($ajax === 'add_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $t0 = microtime(true);
     try {
         $name = trim((string)($_POST['member_name'] ?? ''));
+        $name = strip_tags($name);
+        $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name);
+        $name = preg_replace('/\s+/u', ' ', $name);
+        $name = trim($name);
+        if (function_exists('mb_strtoupper')) {
+            $name = mb_strtoupper($name, 'UTF-8');
+        } else {
+            $name = strtoupper($name);
+        }
         $role_id = intval($_POST['role_id'] ?? 0);
         $ref_type = strtoupper(trim((string)($_POST['member_ref_type'] ?? '')));
+        $entry_mode = strtoupper(trim((string)($_POST['member_entry_mode'] ?? '')));
         $ref_id = trim((string)($_POST['member_ref_id'] ?? ''));
         $email = trim((string)($_POST['member_email'] ?? ''));
         $phone = trim((string)($_POST['member_phone'] ?? ''));
-        if ($name === '' || $role_id <= 0 || ($ref_type !== 'STAF' && $ref_type !== 'PELAJAR') || $ref_id === '') {
+        if ($ref_type === 'STUDENT') $ref_type = 'PELAJAR';
+        if ($entry_mode === '') $entry_mode = ($ref_type === 'MANUAL') ? 'MANUAL' : 'BARU';
+        if ($role_id <= 0 || !in_array($ref_type, ['STAF', 'PELAJAR', 'MANUAL'], true)) {
             throw new Exception('Data tidak lengkap. Sila isi semua medan yang diperlukan.');
         }
+        if ($entry_mode === 'MANUAL') {
+            if (!in_array($ref_type, ['STAF', 'PELAJAR'], true)) {
+                throw new Exception('Sila pilih kategori manual STAF / PELAJAR.');
+            }
+            if ($name === '' || $ref_id === '' || $email === '' || $phone === '') {
+                throw new Exception('Semua medan dalam borang adalah wajib diisi.');
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Sila masukkan emel sah.');
+            }
+        } else {
+            if (!in_array($ref_type, ['STAF', 'PELAJAR'], true)) {
+                throw new Exception('Sila pilih jenis BARU STAF / PELAJAR.');
+            }
+            // For BARU STAF/PELAJAR, missing data from Sybase should fallback to default text
+            if ($name === '') $name = 'Tiada Rekod';
+            if ($ref_id === '') $ref_id = 'Tiada Rekod';
+            if ($email === '') $email = 'Tiada Rekod';
+            if ($phone === '') $phone = 'Tiada Rekod';
+            // Email validation: allow placeholder default text for auto-filled BARU mode
+            if (strtoupper($email) !== 'TIADA REKOD' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Sila masukkan emel sah.');
+            }
+        }
         $db = getDB();
-        // check duplicate by ref_id + ref_type
-        $sqlChk = "SELECT id FROM committee_members WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id)) AND UPPER(COALESCE(member_ref_type,'')) = :ref_type AND deleted_at IS NULL LIMIT 1";
+        // check duplicate by ref_id + ref_type + role_id (allow same person in different roles)
+        $sqlChk = "SELECT id FROM committee_members
+                   WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id))
+                     AND UPPER(COALESCE(member_ref_type,'')) = :ref_type
+                     AND role_id = :role_id
+                     AND deleted_at IS NULL
+                   LIMIT 1";
         $stChk = $db->prepare($sqlChk);
-        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type]);
+        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type, ':role_id' => $role_id]);
         $found = $stChk->fetch(PDO::FETCH_ASSOC);
         if ($found) {
-            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod dengan nombor ini telah wujud.';
+            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod untuk jawatankuasa ini telah wujud.';
             $out['conflict_id'] = isset($found['id']) ? (int)$found['id'] : null;
             echo json_encode($out); exit;
         }
@@ -285,7 +591,20 @@ if ($ajax === 'add_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $sqlIns = "INSERT INTO committee_members (program_id, role_id, member_name, member_ref_type, member_ref_id, member_email, member_phone) VALUES (:program_id, :role_id, :name, :ref_type, :ref_id, :email, :phone)";
         $stIns = $db->prepare($sqlIns);
         $stIns->execute([':program_id' => 1, ':role_id' => $role_id, ':name' => $name, ':ref_type' => $ref_type, ':ref_id' => $ref_id, ':email' => $email, ':phone' => $phone]);
-        $out['ok'] = true; $out['id'] = (int)$db->lastInsertId();
+
+        $newId = (int)$db->lastInsertId();
+        if ($newId <= 0) {
+            throw new Exception('Rekod tidak dapat dipastikan selepas simpan (insert id tiada).');
+        }
+        $stVerify = $db->prepare("SELECT id FROM committee_members WHERE id = :id AND deleted_at IS NULL LIMIT 1");
+        $stVerify->execute([':id' => $newId]);
+        $v = $stVerify->fetch(PDO::FETCH_ASSOC);
+        if (!$v) {
+            throw new Exception('Rekod tidak ditemui selepas simpan. Sila semak semula pangkalan data.');
+        }
+        $out['ok'] = true;
+        $out['id'] = $newId;
+        $out['saved_db'] = DB_NAME;
     } catch (Exception $e) {
         $out['ok'] = false; $out['error'] = $e->getMessage();
     }
@@ -302,22 +621,62 @@ if ($ajax === 'update_member' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $id = intval($_POST['member_id'] ?? 0);
         $name = trim((string)($_POST['member_name'] ?? ''));
+        $name = strip_tags($name);
+        $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name);
+        $name = preg_replace('/\s+/u', ' ', $name);
+        $name = trim($name);
+        if (function_exists('mb_strtoupper')) {
+            $name = mb_strtoupper($name, 'UTF-8');
+        } else {
+            $name = strtoupper($name);
+        }
         $role_id = intval($_POST['role_id'] ?? 0);
         $ref_type = strtoupper(trim((string)($_POST['member_ref_type'] ?? '')));
+        $entry_mode = strtoupper(trim((string)($_POST['member_entry_mode'] ?? '')));
         $ref_id = trim((string)($_POST['member_ref_id'] ?? ''));
         $email = trim((string)($_POST['member_email'] ?? ''));
         $phone = trim((string)($_POST['member_phone'] ?? ''));
-        if ($id <= 0 || $name === '' || $role_id <= 0 || ($ref_type !== 'STAF' && $ref_type !== 'PELAJAR') || $ref_id === '') {
+        if ($ref_type === 'STUDENT') $ref_type = 'PELAJAR';
+        if ($entry_mode === '') $entry_mode = ($ref_type === 'MANUAL') ? 'MANUAL' : 'BARU';
+        if ($id <= 0 || $role_id <= 0 || !in_array($ref_type, ['STAF', 'PELAJAR', 'MANUAL'], true)) {
             throw new Exception('Data tidak lengkap untuk kemaskini.');
         }
+        if ($entry_mode === 'MANUAL') {
+            if (!in_array($ref_type, ['STAF', 'PELAJAR'], true)) {
+                throw new Exception('Sila pilih kategori manual STAF / PELAJAR.');
+            }
+            if ($name === '' || $ref_id === '' || $email === '' || $phone === '') {
+                throw new Exception('Semua medan dalam borang adalah wajib diisi.');
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Sila masukkan emel sah.');
+            }
+        } else {
+            if (!in_array($ref_type, ['STAF', 'PELAJAR'], true)) {
+                throw new Exception('Sila pilih jenis BARU STAF / PELAJAR.');
+            }
+            if ($name === '') $name = 'Tiada Rekod';
+            if ($ref_id === '') $ref_id = 'Tiada Rekod';
+            if ($email === '') $email = 'Tiada Rekod';
+            if ($phone === '') $phone = 'Tiada Rekod';
+            if (strtoupper($email) !== 'TIADA REKOD' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Sila masukkan emel sah.');
+            }
+        }
         $db = getDB();
-        // duplicate check excluding current id
-        $sqlChk = "SELECT id FROM committee_members WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id)) AND UPPER(COALESCE(member_ref_type,'')) = :ref_type AND deleted_at IS NULL AND id != :id LIMIT 1";
+        // duplicate check excluding current id, scoped by role_id as well
+        $sqlChk = "SELECT id FROM committee_members
+                   WHERE TRIM(UPPER(member_ref_id)) = TRIM(UPPER(:ref_id))
+                     AND UPPER(COALESCE(member_ref_type,'')) = :ref_type
+                     AND role_id = :role_id
+                     AND deleted_at IS NULL
+                     AND id != :id
+                   LIMIT 1";
         $stChk = $db->prepare($sqlChk);
-        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type, ':id' => $id]);
+        $stChk->execute([':ref_id' => $ref_id, ':ref_type' => $ref_type, ':role_id' => $role_id, ':id' => $id]);
         $found = $stChk->fetch(PDO::FETCH_ASSOC);
         if ($found) {
-            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod dengan nombor ini telah wujud.';
+            $out['ok'] = false; $out['exists'] = true; $out['error'] = 'Rekod untuk jawatankuasa ini telah wujud.';
             $out['conflict_id'] = isset($found['id']) ? (int)$found['id'] : null;
             echo json_encode($out); exit;
         }
@@ -395,7 +754,18 @@ if ($printAll !== '') {
                         $parts = explode(' ||| ', $m['pengurus']);
                         foreach ($parts as $p) {
                             $p = trim($p);
-                            if ($p !== '') $rowsAll[] = ['nama' => $p, 'sukan' => '', 'acara' => $acara];
+                            if ($p !== '') {
+                                $nama = $p;
+                                $jawatan = '';
+                                if (strpos($p, '@@JAWATAN@@') !== false) {
+                                    $segNama = explode('@@JAWATAN@@', $p, 2);
+                                    $nama = trim((string)($segNama[0] ?? ''));
+                                    $rest1 = (string)($segNama[1] ?? '');
+                                    $segTel = explode('@@TEL@@', $rest1, 2);
+                                    $jawatan = trim((string)($segTel[0] ?? ''));
+                                }
+                                $rowsAll[] = ['nama' => $nama, 'jawatan' => $jawatan, 'sukan' => '', 'acara' => $acara];
+                            }
                         }
                     }
                 } else if ($type === 'jurulatih') {
@@ -403,7 +773,18 @@ if ($printAll !== '') {
                         $parts = explode(' ||| ', $m['jurulatih']);
                         foreach ($parts as $p) {
                             $p = trim($p);
-                            if ($p !== '') $rowsAll[] = ['nama' => $p, 'sukan' => '', 'acara' => $acara];
+                            if ($p !== '') {
+                                $nama = $p;
+                                $jawatan = '';
+                                if (strpos($p, '@@JAWATAN@@') !== false) {
+                                    $segNama = explode('@@JAWATAN@@', $p, 2);
+                                    $nama = trim((string)($segNama[0] ?? ''));
+                                    $rest1 = (string)($segNama[1] ?? '');
+                                    $segTel = explode('@@TEL@@', $rest1, 2);
+                                    $jawatan = trim((string)($segTel[0] ?? ''));
+                                }
+                                $rowsAll[] = ['nama' => $nama, 'jawatan' => $jawatan, 'sukan' => '', 'acara' => $acara];
+                            }
                         }
                     }
                 }
@@ -454,11 +835,15 @@ if ($printAll !== '') {
             // uppercase sport/event for printed certificates
             $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
         } else {
-            // For non-athletes, show fixed role label in the same position
+            // For non-athletes, show role label in the same position
             if ($type === 'pengurus') {
-                $sukan_combo = mb_strtoupper('PENGURUS', 'UTF-8');
+                $sukan_combo = trim((string)($ra['jawatan'] ?? ''));
+                if ($sukan_combo === '') $sukan_combo = 'PENGURUS';
+                $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
             } else if ($type === 'jurulatih') {
-                $sukan_combo = mb_strtoupper('JURULATIH', 'UTF-8');
+                $sukan_combo = trim((string)($ra['jawatan'] ?? ''));
+                if ($sukan_combo === '') $sukan_combo = 'JURULATIH';
+                $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
             } else if ($type === 'penyelaras') {
                 $sukan_combo = mb_strtoupper('KETUA KONTINJEN', 'UTF-8');
             } else {
@@ -649,13 +1034,29 @@ function fetch_managers_from_ringkasan($kod) {
                 COALESCE(r.nama_pendek, r.nama_universiti, k.kod_universiti) AS kontinjen,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(pp.nama, IFNULL(CONCAT(' (', pp.no_telefon, ')'), ''), IF(pp.emel IS NOT NULL AND pp.emel <> '', CONCAT(' ', pp.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(
+                            DISTINCT CONCAT(
+                                COALESCE(pp.nama, ''),
+                                ' @@JAWATAN@@ ', COALESCE(pp.jawatan, ''),
+                                ' @@TEL@@ ', COALESCE(pp.no_telefon, ''),
+                                ' @@EMEL@@ ', COALESCE(pp.emel, '')
+                            )
+                            SEPARATOR ' ||| '
+                        ),
                         ''
                     )
                 ) AS pengurus,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(j.nama, IFNULL(CONCAT(' (', j.no_telefon, ')'), ''), IF(j.emel IS NOT NULL AND j.emel <> '', CONCAT(' ', j.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(
+                            DISTINCT CONCAT(
+                                COALESCE(j.nama, ''),
+                                ' @@JAWATAN@@ ', COALESCE(j.jawatan, ''),
+                                ' @@TEL@@ ', COALESCE(j.no_telefon, ''),
+                                ' @@EMEL@@ ', COALESCE(j.emel, '')
+                            )
+                            SEPARATOR ' ||| '
+                        ),
                         ''
                     )
                 ) AS jurulatih
@@ -713,6 +1114,17 @@ ob_start();
                 <style>
                     .sijil-tab-icon { margin-right:0.5rem; font-size:1.05rem; vertical-align:-0.08em; }
                     .nav-tabs .nav-link { display:inline-flex; align-items:center; gap:0.25rem; }
+                    .no-data-badge{
+                        display:inline-block;
+                        padding:0.18rem 0.5rem;
+                        border-radius:0.35rem;
+                        background:#fdecea;
+                        color:#842029;
+                        border:1px solid #f5c2c7;
+                        font-size:0.8rem;
+                        font-weight:600;
+                        line-height:1.2;
+                    }
                 </style>
                 <div id="tabsWrap">
                     <div class="d-flex align-items-start">
@@ -737,7 +1149,6 @@ ob_start();
                                 <div class="card mb-3">
                                     <div class="card-body d-flex gap-3 align-items-end">
                                         <div>
-                                            <label class="form-label small mb-1">Pilih Kontinjen</label>
                                             <form method="get" id="frmKont">
                                                 <div class="d-flex align-items-center">
                                                     <select id="selectKont" name="kod" class="form-select form-select-sm" style="min-width:360px;max-width:60%">
@@ -779,6 +1190,7 @@ ob_start();
                                     <div class="tab-pane-inner">
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
+                                            <input type="search" id="searchPenyelaras" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                             <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Ketua Kontinjen</th><th style="width:20%">Email</th><th style="width:10%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
@@ -792,9 +1204,10 @@ ob_start();
                                     <div class="tab-pane-inner mt-4">
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
+                                            <input type="search" id="searchPengurus" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                             <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:75%">Nama Pengurus</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Pengurus</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
@@ -805,9 +1218,10 @@ ob_start();
                                     <div class="tab-pane-inner mt-4">
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
+                                            <input type="search" id="searchJurulatih" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                             <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
-                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:75%">Nama Jurulatih</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
+                                        <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Jurulatih</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
                                             <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                             <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
@@ -818,6 +1232,7 @@ ob_start();
                                     <div class="tab-pane-inner mt-4">
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
+                                            <input type="search" id="searchAtlet" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                             <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Atlet</th><th style="width:30%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
@@ -831,9 +1246,8 @@ ob_start();
                             </div>
                             <div class="tab-pane fade" id="pane-jawatankuasa" role="tabpanel">
                                 <div class="card mb-3">
-                                    <div class="card-body d-flex gap-3 align-items-end">
+                                    <div class="card-body d-flex gap-3 align-items-end justify-content-between flex-wrap">
                                         <div>
-                                            <label class="form-label small mb-1">Jenis Ahli</label>
                                             <div class="d-flex align-items-center">
                                                 <select id="committeeType" class="form-select form-select-sm" style="min-width:220px;max-width:40%">
                                                     <option value="">-- Pilih Jenis --</option>
@@ -847,13 +1261,21 @@ ob_start();
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="small text-muted d-flex align-items-center gap-2 flex-wrap ms-auto">
+                                            <span class="d-inline-block border rounded" style="width:16px;height:16px;background:#fff3cd;"></span>
+                                            <span>Mewakili &gt; 1 Jawatankuasa</span>
+                                            <span class="d-inline-block border rounded" style="width:16px;height:16px;background:#f8d7da;"></span>
+                                            <span>Bukan Staf UPNM</span>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div id="committeeWrap" style="display:none;">
-                                    <div class="d-flex mb-2">
-                                        <div class="me-auto"></div>
-                                        <button type="button" id="printAllCommittee" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                                        <div class="d-flex align-items-center ms-auto">
+                                            <input type="search" id="searchCommittee" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:320px;">
+                                            <button type="button" id="printAllCommittee" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;">Cetak Semua</button>
+                                        </div>
                                     </div>
                                         <div class="table-responsive">
                                         <table class="table table-sm table-hover">
@@ -876,9 +1298,8 @@ ob_start();
                             </div>
                             <div class="tab-pane fade" id="pane-sukarelawan" role="tabpanel">
                                 <div class="card mb-3">
-                                    <div class="card-body d-flex gap-3 align-items-end">
+                                    <div class="card-body d-flex gap-3 align-items-end justify-content-between flex-wrap">
                                         <div>
-                                            <label class="form-label small mb-1">Jenis Ahli</label>
                                             <div class="d-flex align-items-center">
                                                 <select id="volunteerType" class="form-select form-select-sm" style="min-width:220px;max-width:40%">
                                                     <option value="">-- Pilih Jenis --</option>
@@ -892,13 +1313,21 @@ ob_start();
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="small text-muted d-flex align-items-center gap-2 flex-wrap ms-auto">
+                                            <span class="d-inline-block border rounded" style="width:16px;height:16px;background:#fff3cd;"></span>
+                                            <span>Mewakili &gt; 1 Jawatankuasa</span>
+                                            <span class="d-inline-block border rounded" style="width:16px;height:16px;background:#f8d7da;"></span>
+                                            <span>Bukan Pelajar UPNM</span>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div id="volunteerWrap" style="display:none;">
-                                    <div class="d-flex mb-2">
-                                        <div class="me-auto"></div>
-                                        <button type="button" id="printAllVolunteer" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                                        <div class="d-flex align-items-center ms-auto">
+                                            <input type="search" id="searchVolunteer" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:320px;">
+                                            <button type="button" id="printAllVolunteer" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;">Cetak Semua</button>
+                                        </div>
                                     </div>
                                         <div class="table-responsive">
                                         <table class="table table-sm table-hover">
@@ -933,8 +1362,31 @@ ob_start();
                                 <form id="addMemberForm">
                                     <input type="hidden" id="memberId" name="member_id" value="" />
                                     <div class="mb-2">
-                                        <label class="form-label small">Nama Penuh <span class="text-danger">*</span></label>
-                                        <input type="text" id="memberName" name="member_name" class="form-control form-control-sm" required />
+                                        <label class="form-label small">Jenis (STAF / PELAJAR / MANUAL) <span class="text-danger">*</span></label>
+                                        <select id="memberRefType" name="member_ref_type" class="form-select form-select-sm" required>
+                                            <option value="">-- Pilih Jenis --</option>
+                                            <option value="STAF">STAF</option>
+                                            <option value="PELAJAR">PELAJAR</option>
+                                            <option value="MANUAL">MANUAL</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2" id="memberManualTypeWrap" style="display:none;">
+                                        <label class="form-label small">Kategori Manual (STAF / PELAJAR) <span class="text-danger">*</span></label>
+                                        <select id="memberManualType" class="form-select form-select-sm">
+                                            <option value="">-- Pilih Kategori --</option>
+                                            <option value="STAF">STAF</option>
+                                            <option value="PELAJAR">PELAJAR</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2" id="memberStaffSelectWrap" style="display:none;">
+                                        <label class="form-label small">Senarai Staf (Sybase) <span class="text-danger">*</span></label>
+                                        <select id="memberStaffSelect" class="form-select form-select-sm" data-placeholder="Cari nama / no staf..."></select>
+                                        <small class="text-muted">Pilih staf dari senarai untuk auto isi nama dan no staf.</small>
+                                    </div>
+                                    <div class="mb-2" id="memberStudentSelectWrap" style="display:none;">
+                                        <label class="form-label small">Senarai Pelajar (Sybase) <span class="text-danger">*</span></label>
+                                        <select id="memberStudentSelect" class="form-select form-select-sm" data-placeholder="Cari nama / no matrik..."></select>
+                                        <small class="text-muted">Pilih student dari senarai untuk auto isi nama dan no matrik.</small>
                                     </div>
                                     <div class="mb-2">
                                         <label class="form-label small">Nama Jawatankuasa <span class="text-danger">*</span></label>
@@ -943,24 +1395,20 @@ ob_start();
                                         </select>
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label small">Jenis (STAF / PELAJAR) <span class="text-danger">*</span></label>
-                                        <select id="memberRefType" name="member_ref_type" class="form-select form-select-sm" required>
-                                            <option value="">-- Pilih Jenis --</option>
-                                            <option value="STAF">STAF</option>
-                                            <option value="PELAJAR">PELAJAR</option>
-                                        </select>
+                                        <label class="form-label small">Nama Penuh <span class="text-danger">*</span></label>
+                                        <input type="text" id="memberName" name="member_name" class="form-control form-control-sm" required />
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label small">No Staf / No Matrik <span class="text-danger">*</span></label>
+                                        <label id="memberRefIdLabel" class="form-label small">No Staf / No Matrik <span class="text-danger">*</span></label>
                                         <input type="text" id="memberRefId" name="member_ref_id" class="form-control form-control-sm" required />
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label small">Email</label>
-                                        <input type="email" id="memberEmail" name="member_email" class="form-control form-control-sm" />
+                                        <label class="form-label small">Email <span class="text-danger">*</span></label>
+                                        <input type="email" id="memberEmail" name="member_email" class="form-control form-control-sm" required />
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label small">No Telefon</label>
-                                        <input type="text" id="memberPhone" name="member_phone" class="form-control form-control-sm" />
+                                        <label class="form-label small">No Telefon <span class="text-danger">*</span></label>
+                                        <input type="text" id="memberPhone" name="member_phone" class="form-control form-control-sm" required />
                                     </div>
                                 </form>
                                 <div id="addMemberStatus" class="small text-danger" style="display:none;"></div>
@@ -972,6 +1420,41 @@ ob_start();
                         </div>
                     </div>
                 </div>
+
+                <div class="modal fade" id="duplicateDetailModal" tabindex="-1" aria-labelledby="duplicateDetailModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg" style="max-width:55vw;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="duplicateDetailModalLabel">Butiran Jawatankuasa</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width:8%" class="text-center">No</th>
+                                                <th style="width:52%">Nama</th>
+                                                <th style="width:40%">Jawatankuasa</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="duplicateDetailBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+                <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
+                <style>
+                    #memberStaffSelectWrap.force-show,
+                    #memberStudentSelectWrap.force-show,
+                    #memberManualTypeWrap.force-show {
+                        display: block !important;
+                    }
+                </style>
 
                 <script>
                     (function(){
@@ -992,6 +1475,7 @@ ob_start();
                                 var committeeWrap = document.getElementById('committeeWrap');
                                 var committeeBody = document.getElementById('committeeBody');
                                 var printAllCommittee = document.getElementById('printAllCommittee');
+                                var searchCommittee = document.getElementById('searchCommittee');
                                 var committeePrev = document.getElementById('committeePrev');
                                 var committeeNext = document.getElementById('committeeNext');
                                 var committeePageInfo = document.getElementById('committeePageInfo');
@@ -1003,6 +1487,7 @@ ob_start();
                                 var volunteerWrap = document.getElementById('volunteerWrap');
                                 var volunteerBody = document.getElementById('volunteerBody');
                                 var printAllVolunteer = document.getElementById('printAllVolunteer');
+                                var searchVolunteer = document.getElementById('searchVolunteer');
                                 var volunteerPrev = document.getElementById('volunteerPrev');
                                 var volunteerNext = document.getElementById('volunteerNext');
                                 var volunteerPageInfo = document.getElementById('volunteerPageInfo');
@@ -1014,6 +1499,10 @@ ob_start();
                                 var printAllJurulatih = document.getElementById('printAllJurulatih');
                                 var printAllAtlet = document.getElementById('printAllAtlet');
                                 var printAllPenyelaras = document.getElementById('printAllPenyelaras');
+                                var searchPenyelaras = document.getElementById('searchPenyelaras');
+                                var searchPengurus = document.getElementById('searchPengurus');
+                                var searchJurulatih = document.getElementById('searchJurulatih');
+                                var searchAtlet = document.getElementById('searchAtlet');
                                 var countPengurus = document.getElementById('countPengurus');
                                 var countJurulatih = document.getElementById('countJurulatih');
                                 var countAtlet = document.getElementById('countAtlet');
@@ -1072,33 +1561,110 @@ ob_start();
 
                         // Render cell HTML with empty-value badge
                         function escHtml(s){ return (s===null||s===undefined)?'':String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-                        function cellHtml(val, center){
+                        function cellHtml(val, center, allowHtml){
                             var v = (val===null||val===undefined)?'' : String(val).trim();
                             var cls = center ? 'text-center' : 'text-truncate';
                             if (v === '') return '<td class="'+cls+'"><span class="no-data-badge">Tiada</span></td>'; 
+                            if (allowHtml) return '<td class="'+cls+'">'+v+'</td>';
                             return '<td class="'+cls+'" title="'+escHtml(v)+'">'+escHtml(v)+'</td>';
+                        }
+                        function appendNoDataRow(tbodyEl, colCount){
+                            if (!tbodyEl) return;
+                            var tr = document.createElement('tr');
+                            var html = '';
+                            for (var i = 0; i < colCount; i++) {
+                                html += '<td class="text-center"><span class="no-data-badge">Tiada</span></td>';
+                            }
+                            tr.innerHTML = html;
+                            tbodyEl.appendChild(tr);
                         }
 
                         function getSelectedKod(){ var sel = document.getElementById('selectKont'); return sel && sel.value ? sel.value : ''; }
+                        function matchSearch(texts, keyword){
+                            var q = (keyword || '').toString().trim().toLowerCase();
+                            if (!q) return true;
+                            for (var i = 0; i < texts.length; i++) {
+                                var t = (texts[i] || '').toString().toLowerCase();
+                                if (t.indexOf(q) !== -1) return true;
+                            }
+                            return false;
+                        }
+                        function normalizeRefKey(v){
+                            return String(v || '').trim().toUpperCase();
+                        }
+                        function openDuplicateDetailModal(scope, refId){
+                            try{
+                                var refKey = normalizeRefKey(refId);
+                                if (!refKey) return;
+                                var rowsSource = (scope === 'volunteer') ? (lastRows.volunteer || []) : (lastRows.committee || []);
+                                var rows = rowsSource.filter(function(r){
+                                    return normalizeRefKey(r && r.member_ref_id) === refKey;
+                                });
+                                var body = document.getElementById('duplicateDetailBody');
+                                if (!body) return;
+                                body.innerHTML = '';
+                                if (!rows.length) {
+                                    var trEmpty = document.createElement('tr');
+                                    trEmpty.innerHTML = '<td colspan="3" class="text-center text-muted">Tiada rekod</td>';
+                                    body.appendChild(trEmpty);
+                                } else {
+                                    rows.forEach(function(r, i){
+                                        var tr = document.createElement('tr');
+                                        var nm = String(r && r.member_name ? r.member_name : '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                        var rl = String(r && r.role_name ? r.role_name : '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                        tr.innerHTML = '<td class="text-center">' + (i + 1) + '</td>' +
+                                            '<td>' + (nm || '-') + '</td>' +
+                                            '<td>' + (rl || '-') + '</td>';
+                                        body.appendChild(tr);
+                                    });
+                                }
+                                var lbl = document.getElementById('duplicateDetailModalLabel');
+                                if (lbl) lbl.textContent = 'Butiran Jawatankuasa (' + refKey + ')';
+                                var modalEl = document.getElementById('duplicateDetailModal');
+                                if (!modalEl) return;
+                                if (window.bootstrap && window.bootstrap.Modal) {
+                                    window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                                } else {
+                                    modalEl.classList.add('show');
+                                    modalEl.style.display = 'block';
+                                    document.body.classList.add('modal-open');
+                                }
+                            }catch(e){
+                                console.error('openDuplicateDetailModal error', e);
+                            }
+                        }
 
                         function renderPengurusPage(){
-                            var list = lastRows.pengurus || [];
+                            var rawList = lastRows.pengurus || [];
+                            var q = searchPengurus ? searchPengurus.value : '';
+                            var list = rawList.filter(function(p){
+                                return matchSearch([p.nama, p.jawatan, p.tel], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentPengurusPage > pages) currentPengurusPage = pages;
                             var start = (currentPengurusPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             pengurusBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(pengurusBody, 5);
+                            }
                             slice.forEach(function(p, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
                                     (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-pengurus">Cetak</button></td>';
                                 pengurusBody.appendChild(tr);
-                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'PENGURUS', <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){
+                                    var roleText = (p.jawatan || '').toString().trim();
+                                    if (!roleText) roleText = 'PENGURUS';
+                                    roleText = roleText.toUpperCase();
+                                    printDirectHtml(buildCertHtml(p.nama, roleText, <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>));
+                                });
                             });
                             try{ document.getElementById('pengurusPageInfo').textContent = 'Page ' + currentPengurusPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('pengurusPrev').disabled = currentPengurusPage <= 1; }catch(e){}
@@ -1108,23 +1674,36 @@ ob_start();
                         }
 
                         function renderJurulatihPage(){
-                            var list = lastRows.jurulatih || [];
+                            var rawList = lastRows.jurulatih || [];
+                            var q = searchJurulatih ? searchJurulatih.value : '';
+                            var list = rawList.filter(function(p){
+                                return matchSearch([p.nama, p.jawatan, p.tel], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentJurulatihPage > pages) currentJurulatihPage = pages;
                             var start = (currentJurulatihPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             jurulatihBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(jurulatihBody, 5);
+                            }
                             slice.forEach(function(p, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
                                     (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-jurulatih">Cetak</button></td>';
                                 jurulatihBody.appendChild(tr);
-                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'JURULATIH', <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){
+                                    var roleText = (p.jawatan || '').toString().trim();
+                                    if (!roleText) roleText = 'JURULATIH';
+                                    roleText = roleText.toUpperCase();
+                                    printDirectHtml(buildCertHtml(p.nama, roleText, <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>));
+                                });
                             });
                             try{ document.getElementById('jurulatihPageInfo').textContent = 'Page ' + currentJurulatihPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('jurulatihPrev').disabled = currentJurulatihPage <= 1; }catch(e){}
@@ -1134,13 +1713,20 @@ ob_start();
                         }
 
                         function renderAthletePage(){
-                            var list = lastRows.athletes || [];
+                            var rawList = lastRows.athletes || [];
+                            var q = searchAtlet ? searchAtlet.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.nama, r.sukan, r.acara], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentAthletePage > pages) currentAthletePage = pages;
                             var start = (currentAthletePage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             athleteBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(athleteBody, 4);
+                            }
                             slice.forEach(function(r, idx){
                                 var pid = r.id || '';
                                 var name = (r.nama || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1166,9 +1752,64 @@ ob_start();
                             var btnAddMember = document.getElementById('btnAddMember');
                             var addMemberModalEl = document.getElementById('addMemberModal');
                             var addMemberModal = (typeof bootstrap !== 'undefined' && addMemberModalEl) ? new bootstrap.Modal(addMemberModalEl, { backdrop: false }) : null;
+                            var duplicateDetailModalEl = document.getElementById('duplicateDetailModal');
+                            var duplicateDetailModal = (typeof bootstrap !== 'undefined' && duplicateDetailModalEl) ? new bootstrap.Modal(duplicateDetailModalEl) : null;
                             var roleSelect = document.getElementById('memberRoleId');
                             var addMemberStatus = document.getElementById('addMemberStatus');
                             var addMemberSave = document.getElementById('addMemberSave');
+                            var memberRefTypeEl = document.getElementById('memberRefType');
+                            var memberManualTypeWrapEl = document.getElementById('memberManualTypeWrap');
+                            var memberManualTypeEl = document.getElementById('memberManualType');
+                            var memberNameEl = document.getElementById('memberName');
+                            var memberRefIdEl = document.getElementById('memberRefId');
+                            var memberRefIdLabelEl = document.getElementById('memberRefIdLabel');
+                            var memberStaffWrapEl = document.getElementById('memberStaffSelectWrap');
+                            var memberStaffSelectEl = document.getElementById('memberStaffSelect');
+                            var memberStudentWrapEl = document.getElementById('memberStudentSelectWrap');
+                            var memberStudentSelectEl = document.getElementById('memberStudentSelect');
+
+                            function normalizeRefKey(v){
+                                return String(v || '').trim().toUpperCase();
+                            }
+
+                            function openDuplicateDetail(scope, refId){
+                                try{
+                                    var refKey = normalizeRefKey(refId);
+                                    if (!refKey) return;
+                                    var rowsSource = [];
+                                    if (scope === 'volunteer') rowsSource = lastRows.volunteer || [];
+                                    else rowsSource = lastRows.committee || [];
+                                    var rows = rowsSource.filter(function(r){
+                                        return normalizeRefKey(r && r.member_ref_id) === refKey;
+                                    });
+                                    var body = document.getElementById('duplicateDetailBody');
+                                    if (!body) return;
+                                    body.innerHTML = '';
+                                    if (!rows.length) {
+                                        var trEmpty = document.createElement('tr');
+                                        trEmpty.innerHTML = '<td colspan="3" class="text-center text-muted">Tiada rekod</td>';
+                                        body.appendChild(trEmpty);
+                                    } else {
+                                        rows.forEach(function(r, i){
+                                            var tr = document.createElement('tr');
+                                            var nm = String(r && r.member_name ? r.member_name : '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                            var rl = String(r && r.role_name ? r.role_name : '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                            tr.innerHTML = '<td class="text-center">' + (i + 1) + '</td>' +
+                                                '<td>' + (nm || '-') + '</td>' +
+                                                '<td>' + (rl || '-') + '</td>';
+                                            body.appendChild(tr);
+                                        });
+                                    }
+                                    var lbl = document.getElementById('duplicateDetailModalLabel');
+                                    if (lbl) lbl.textContent = 'Butiran Jawatankuasa (' + refKey + ')';
+                                    if (duplicateDetailModal) duplicateDetailModal.show();
+                                    else if (duplicateDetailModalEl) {
+                                        duplicateDetailModalEl.classList.add('show');
+                                        duplicateDetailModalEl.style.display = 'block';
+                                        document.body.classList.add('modal-open');
+                                    }
+                                }catch(e){}
+                            }
 
                             function loadRolesIfNeeded(){
                                 if (!roleSelect) return Promise.resolve();
@@ -1179,6 +1820,25 @@ ob_start();
                             try{ window.loadRolesIfNeeded = loadRolesIfNeeded; }catch(e){}
 
                             // Helper to show/hide modal even if Bootstrap Modal isn't available
+                            function resetAddMemberModalState(){
+                                try{ var mid = document.getElementById('memberId'); if (mid) mid.value = ''; }catch(e){}
+                                try{ if (memberRefTypeEl) memberRefTypeEl.disabled = false; }catch(e){}
+                                try{
+                                    if (memberStaffWrapEl) memberStaffWrapEl.classList.remove('force-show');
+                                    if (memberStudentWrapEl) memberStudentWrapEl.classList.remove('force-show');
+                                    if (memberManualTypeWrapEl) memberManualTypeWrapEl.classList.remove('force-show');
+                                }catch(e){}
+                                try{
+                                    if (addMemberSave) {
+                                        addMemberSave.textContent = 'Simpan';
+                                        addMemberSave.dataset.editing = '0';
+                                        delete addMemberSave.dataset.memberId;
+                                    }
+                                }catch(e){}
+                                try{ var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Tambah Penerima Sijil'; }catch(e){}
+                            }
+                            try{ window.resetAddMemberModalState = resetAddMemberModalState; }catch(e){}
+
                             function showAddMemberModal(){
                                 try{
                                     if (addMemberModal && typeof addMemberModal.show === 'function') return addMemberModal.show();
@@ -1206,6 +1866,7 @@ ob_start();
                                         addMemberModalEl.style.display = 'none';
                                         document.body.classList.remove('modal-open');
                                         var lb = document.getElementById('addMemberLightBackdrop'); if (lb && lb.parentNode) lb.parentNode.removeChild(lb);
+                                        resetAddMemberModalState();
                                     }
                                 }catch(e){}
                             }
@@ -1214,33 +1875,546 @@ ob_start();
                             // initialize select2 if available (after roles loaded)
                             function initRoleSelect2(){
                                 try{
-                                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && roleSelect){
+                                    if (!roleSelect) return;
+                                    ensureSelect2Loaded(function(isLoaded){
+                                        if (!isLoaded) return;
                                         var $sel = jQuery(roleSelect);
-                                        // destroy if previously initialized
                                         if ($sel.data('select2')) { $sel.select2('destroy'); }
-                                        // limit dropdown height to ~10 items and enable scrolling
-                                        $sel.select2({ dropdownParent: addMemberModalEl ? jQuery(addMemberModalEl) : undefined, width: '100%', dropdownCss: { 'max-height': '360px', 'overflow-y': 'auto' } });
-                                    } else {
-                                        // Fallback for native select: show 10 items on focus (size attribute)
+                                        $sel.select2({
+                                            theme: 'bootstrap-5',
+                                            dropdownParent: addMemberModalEl ? jQuery(addMemberModalEl) : undefined,
+                                            width: '100%',
+                                            placeholder: '-- Pilih Jawatankuasa --',
+                                            allowClear: true
+                                        });
                                         try{
-                                            if (roleSelect){
-                                                roleSelect.addEventListener('focus', function(){ try{ roleSelect.size = 10; }catch(e){} });
-                                                roleSelect.addEventListener('blur', function(){ try{ roleSelect.size = 0; }catch(e){} });
-                                                // also adjust on mousedown for some browsers
-                                                roleSelect.addEventListener('mousedown', function(){ try{ roleSelect.size = 10; }catch(e){} });
-                                            }
+                                            var $c = $sel.next('.select2-container');
+                                            if ($c && $c.length) $c.css('width', '100%');
                                         }catch(e){}
-                                    }
+                                        $sel.off('select2:select.sijilrole select2:clear.sijilrole change.sijilrole')
+                                            .on('select2:select.sijilrole select2:clear.sijilrole change.sijilrole', function(){
+                                                updateAddMemberSaveState();
+                                            });
+                                    });
                                 }catch(e){ console.warn('select2 init failed', e); }
                             }
                             try{ window.initRoleSelect2 = initRoleSelect2; }catch(e){}
+
+                            function resetStaffSelect(){
+                                try{
+                                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && memberStaffSelectEl){
+                                        var $staff = jQuery(memberStaffSelectEl);
+                                        if ($staff.data('select2')) {
+                                            $staff.val(null).trigger('change');
+                                        }
+                                    } else if (memberStaffSelectEl) {
+                                        memberStaffSelectEl.value = '';
+                                    }
+                                }catch(e){}
+                            }
+
+                            function resetStudentSelect(){
+                                try{
+                                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && memberStudentSelectEl){
+                                        var $student = jQuery(memberStudentSelectEl);
+                                        if ($student.data('select2')) {
+                                            $student.val(null).trigger('change');
+                                        }
+                                    } else if (memberStudentSelectEl) {
+                                        memberStudentSelectEl.value = '';
+                                    }
+                                }catch(e){}
+                            }
+
+                            function normalizeRefTypeForSave(){
+                                var refType = (memberRefTypeEl && memberRefTypeEl.value ? memberRefTypeEl.value : '').toUpperCase();
+                                var manualType = (memberManualTypeEl && memberManualTypeEl.value ? memberManualTypeEl.value : '').toUpperCase();
+                                if (refType === 'MANUAL') return manualType;
+                                return refType;
+                            }
+
+                            function getSelectSingleValue(el){
+                                try{
+                                    if (!el) return '';
+                                    var raw = '';
+                                    if (window.jQuery && typeof jQuery === 'function'){
+                                        var $el = jQuery(el);
+                                        raw = $el.val();
+                                        if ((!raw || (Array.isArray(raw) && raw.length === 0)) && $el.data('select2') && typeof $el.select2 === 'function'){
+                                            var selectedData = $el.select2('data');
+                                            if (selectedData && selectedData.length && selectedData[0] && selectedData[0].id != null) raw = selectedData[0].id;
+                                        }
+                                    } else {
+                                        raw = el.value || '';
+                                    }
+                                    if (Array.isArray(raw)) raw = raw.length ? raw[0] : '';
+                                    return String(raw || '').trim();
+                                }catch(e){
+                                    return '';
+                                }
+                            }
+
+                            function applyDefaultIfEmpty(typeCode){
+                                var t = (typeCode || '').toUpperCase();
+                                if (t !== 'STAF' && t !== 'PELAJAR') return;
+                                try{
+                                    if (memberNameEl && String(memberNameEl.value || '').trim() === '') memberNameEl.value = 'Tiada Rekod';
+                                    if (memberRefIdEl && String(memberRefIdEl.value || '').trim() === '') memberRefIdEl.value = 'Tiada Rekod';
+                                    var memberEmailEl = document.getElementById('memberEmail');
+                                    var memberPhoneEl = document.getElementById('memberPhone');
+                                    if (memberEmailEl && String(memberEmailEl.value || '').trim() === '') memberEmailEl.value = 'Tiada Rekod';
+                                    if (memberPhoneEl && String(memberPhoneEl.value || '').trim() === '') memberPhoneEl.value = 'Tiada Rekod';
+                                }catch(e){}
+                            }
+
+                            function isValidEmailOrDefault(v){
+                                var s = String(v || '').trim();
+                                if (s.toUpperCase() === 'TIADA REKOD') return true;
+                                var emRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                return emRe.test(s);
+                            }
+
+                            function validateMemberForm(showMessage){
+                                showMessage = !!showMessage;
+                                var typeRaw = (memberRefTypeEl && memberRefTypeEl.value ? memberRefTypeEl.value : '').toUpperCase();
+                                var manualType = (memberManualTypeEl && memberManualTypeEl.value ? memberManualTypeEl.value : '').toUpperCase();
+                                var roleId = (document.getElementById('memberRoleId')||{value:''}).value;
+                                var name = (document.getElementById('memberName')||{value:''}).value.trim();
+                                var refId = (document.getElementById('memberRefId')||{value:''}).value.trim();
+                                var email = (document.getElementById('memberEmail')||{value:''}).value.trim();
+                                var phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
+                                var typeToSave = normalizeRefTypeForSave();
+
+                                var setErr = function(msg){
+                                    if (showMessage && addMemberStatus){
+                                        addMemberStatus.style.display = 'block';
+                                        addMemberStatus.textContent = msg;
+                                    }
+                                    return { ok: false, message: msg };
+                                };
+
+                                if (!typeRaw) return setErr('Sila pilih Jenis.');
+                                if (typeRaw === 'MANUAL'){
+                                    if (!typeToSave || (typeToSave !== 'STAF' && typeToSave !== 'PELAJAR')) {
+                                        return setErr('Sila pilih Kategori Manual (STAF / PELAJAR).');
+                                    }
+                                }
+
+                                if (!roleId) return setErr('Sila pilih Nama Jawatankuasa.');
+
+                                if (typeRaw === 'STAF'){
+                                    var staffVal = getSelectSingleValue(memberStaffSelectEl);
+                                    if (!staffVal) return setErr('Sila pilih staf dari senarai dahulu.');
+                                    applyDefaultIfEmpty('STAF');
+                                    name = (memberNameEl && memberNameEl.value ? memberNameEl.value : '').trim();
+                                    refId = (memberRefIdEl && memberRefIdEl.value ? memberRefIdEl.value : '').trim();
+                                    email = (document.getElementById('memberEmail')||{value:''}).value.trim();
+                                    phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
+                                } else if (typeRaw === 'PELAJAR'){
+                                    var studentVal = getSelectSingleValue(memberStudentSelectEl);
+                                    if (!studentVal) return setErr('Sila pilih pelajar dari senarai dahulu.');
+                                    applyDefaultIfEmpty('PELAJAR');
+                                    name = (memberNameEl && memberNameEl.value ? memberNameEl.value : '').trim();
+                                    refId = (memberRefIdEl && memberRefIdEl.value ? memberRefIdEl.value : '').trim();
+                                    email = (document.getElementById('memberEmail')||{value:''}).value.trim();
+                                    phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
+                                } else if (typeRaw === 'MANUAL'){
+                                    if (manualType !== 'STAF' && manualType !== 'PELAJAR') return setErr('Sila pilih Kategori Manual (STAF / PELAJAR).');
+                                }
+
+                                if (!name || !refId || !email || !phone) {
+                                    return setErr('Semua medan dalam borang adalah wajib diisi.');
+                                }
+                                if (!isValidEmailOrDefault(email)) {
+                                    return setErr('Sila masukkan emel sah.');
+                                }
+                                if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; }
+                                return { ok: true, typeToSave: typeToSave };
+                            }
+
+                            function updateAddMemberSaveState(){
+                                try{
+                                    if (!addMemberSave) return;
+                                    var check = validateMemberForm(false);
+                                    addMemberSave.disabled = !check.ok;
+                                }catch(e){}
+                            }
+
+                            function ensureSelect2Loaded(callback){
+                                callback = callback || function(){};
+                                try{
+                                    var cdnSelect2Js = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
+                                    var cdnSelect2Css = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+                                    var cdnSelect2ThemeCss = 'https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css';
+
+                                    if (!(window.jQuery && window.jQuery.fn)) {
+                                        var waitJqCount = 0;
+                                        var waitJqTimer = setInterval(function(){
+                                            waitJqCount++;
+                                            if (window.jQuery && window.jQuery.fn){
+                                                clearInterval(waitJqTimer);
+                                                ensureSelect2Loaded(callback);
+                                            } else if (waitJqCount > 50){
+                                                clearInterval(waitJqTimer);
+                                                callback(false);
+                                            }
+                                        }, 100);
+                                        return;
+                                    }
+
+                                    if (!document.getElementById('dyn-select2-css')){
+                                        var css = document.createElement('link');
+                                        css.id = 'dyn-select2-css';
+                                        css.rel = 'stylesheet';
+                                        css.href = cdnSelect2Css;
+                                        document.head.appendChild(css);
+                                    }
+                                    if (!document.getElementById('dyn-select2-theme-css')){
+                                        var css2 = document.createElement('link');
+                                        css2.id = 'dyn-select2-theme-css';
+                                        css2.rel = 'stylesheet';
+                                        css2.href = cdnSelect2ThemeCss;
+                                        document.head.appendChild(css2);
+                                    }
+
+                                    if (window.jQuery.fn.select2) return callback(true);
+
+                                    var oldJs = document.getElementById('dyn-select2-js');
+                                    if (oldJs && oldJs.parentNode) oldJs.parentNode.removeChild(oldJs);
+
+                                    var js = document.createElement('script');
+                                    js.id = 'dyn-select2-js';
+                                    js.src = cdnSelect2Js + '?v=' + Date.now();
+                                    js.onload = function(){
+                                        callback(!!(window.jQuery && window.jQuery.fn && window.jQuery.fn.select2));
+                                    };
+                                    js.onerror = function(){ callback(false); };
+                                    document.head.appendChild(js);
+                                }catch(e){ callback(false); }
+                            }
+
+                            function initStaffSelect2(){
+                                try{
+                                    if (!memberStaffSelectEl) return;
+                                    ensureSelect2Loaded(function(isLoaded){
+                                    if (!isLoaded) {
+                                        // fallback: native select with preloaded options
+                                        fetch(window.location.pathname + '?ajax=staff_lookup&limit=100', { credentials: 'same-origin' })
+                                            .then(function(res){ return res.json(); })
+                                            .then(function(data){
+                                                if (!data || !data.ok) {
+                                                    if (addMemberStatus) {
+                                                        addMemberStatus.style.display = 'block';
+                                                        addMemberStatus.textContent = (data && data.error) ? data.error : 'Gagal memuat senarai staf.';
+                                                    }
+                                                    return;
+                                                }
+                                                memberStaffSelectEl.innerHTML = '<option value=\"\">-- Pilih Staf --</option>';
+                                                (data.results || []).forEach(function(r){
+                                                    var opt = document.createElement('option');
+                                                    opt.value = r.id || '';
+                                                    opt.textContent = r.text || (r.gelar_nama || r.id || '');
+                                                    opt.dataset.nopekerja = r.nopekerja || '';
+                                                    opt.dataset.gelarNama = r.gelar_nama || '';
+                                                    opt.dataset.email = r.email || '';
+                                                    opt.dataset.phone = r.phone || '';
+                                                    memberStaffSelectEl.appendChild(opt);
+                                                });
+                                                if (addMemberStatus) {
+                                                    addMemberStatus.style.display = 'none';
+                                                    addMemberStatus.textContent = '';
+                                                }
+                                            })
+                                            .catch(function(err){
+                                                if (addMemberStatus) {
+                                                    addMemberStatus.style.display = 'block';
+                                                    addMemberStatus.textContent = 'Ralat memuat staf: ' + (err && err.message ? err.message : 'Unknown');
+                                                }
+                                            });
+                                        memberStaffSelectEl.onchange = function(){
+                                            var selected = memberStaffSelectEl.options[memberStaffSelectEl.selectedIndex];
+                                            if (!selected || !selected.value) return;
+                                            if (memberNameEl) memberNameEl.value = selected.dataset.gelarNama || '';
+                                            if (memberRefIdEl) memberRefIdEl.value = selected.dataset.nopekerja || selected.value || '';
+                                            var memberEmailEl = document.getElementById('memberEmail');
+                                            var memberPhoneEl = document.getElementById('memberPhone');
+                                            if (memberEmailEl) memberEmailEl.value = selected.dataset.email || '';
+                                            if (memberPhoneEl) memberPhoneEl.value = selected.dataset.phone || '';
+                                        };
+                                        return;
+                                    }
+
+                                    var $staff = jQuery(memberStaffSelectEl);
+                                    if ($staff.data('select2')) { $staff.select2('destroy'); }
+                                    $staff.empty();
+                                    $staff.select2({
+                                        theme: 'bootstrap-5',
+                                        dropdownParent: addMemberModalEl ? jQuery(addMemberModalEl) : undefined,
+                                        width: '100%',
+                                        placeholder: memberStaffSelectEl.getAttribute('data-placeholder') || 'Cari nama staf...',
+                                        allowClear: true,
+                                        minimumInputLength: 0,
+                                        ajax: {
+                                            delay: 250,
+                                            url: window.location.pathname + '?ajax=staff_lookup',
+                                            dataType: 'json',
+                                            data: function(params){
+                                                return { q: params.term || '', limit: 100 };
+                                            },
+                                            processResults: function(data){
+                                                if (!data || !data.ok){
+                                                    try{
+                                                        if (addMemberStatus){
+                                                            addMemberStatus.style.display = 'block';
+                                                            addMemberStatus.textContent = (data && data.error) ? data.error : 'Gagal memuat senarai staf.';
+                                                        }
+                                                    }catch(e){}
+                                                    return { results: [] };
+                                                }
+                                                try{
+                                                    if (addMemberStatus) {
+                                                        addMemberStatus.style.display = 'none';
+                                                        addMemberStatus.textContent = '';
+                                                    }
+                                                }catch(e){}
+                                                return { results: data.results || [] };
+                                            }
+                                        }
+                                    });
+                                    try{
+                                        var $c = $staff.next('.select2-container');
+                                        if ($c && $c.length) $c.css('width', '100%');
+                                    }catch(e){}
+                                    $staff.off('select2:select.sijilstaff').on('select2:select.sijilstaff', function(ev){
+                                        var d = ev && ev.params && ev.params.data ? ev.params.data : null;
+                                        if (!d) return;
+                                        try{
+                                            if (memberNameEl && d.gelar_nama) memberNameEl.value = d.gelar_nama;
+                                            if (memberRefIdEl) memberRefIdEl.value = (d.nopekerja || d.id || '').toString();
+                                            var memberEmailEl = document.getElementById('memberEmail');
+                                            var memberPhoneEl = document.getElementById('memberPhone');
+                                            if (memberEmailEl) memberEmailEl.value = d.email || '';
+                                            if (memberPhoneEl) memberPhoneEl.value = d.phone || '';
+                                            applyDefaultIfEmpty('STAF');
+                                            setTimeout(updateAddMemberSaveState, 0);
+                                        }catch(e){}
+                                    });
+                                    $staff.off('select2:clear.sijilstaff').on('select2:clear.sijilstaff', function(){
+                                        try{
+                                            if (memberNameEl) memberNameEl.value = '';
+                                            if (memberRefIdEl) memberRefIdEl.value = '';
+                                            var memberEmailEl = document.getElementById('memberEmail');
+                                            var memberPhoneEl = document.getElementById('memberPhone');
+                                            if (memberEmailEl) memberEmailEl.value = '';
+                                            if (memberPhoneEl) memberPhoneEl.value = '';
+                                            updateAddMemberSaveState();
+                                        }catch(e){}
+                                    });
+                                    });
+                                }catch(e){ console.warn('staff select2 init failed', e); }
+                            }
+
+                            function initStudentSelect2(){
+                                try{
+                                    if (!memberStudentSelectEl) return;
+                                    ensureSelect2Loaded(function(isLoaded){
+                                        if (!isLoaded) {
+                                            fetch(window.location.pathname + '?ajax=student_lookup&limit=100', { credentials: 'same-origin' })
+                                                .then(function(res){ return res.json(); })
+                                                .then(function(data){
+                                                    if (!data || !data.ok) {
+                                                        if (addMemberStatus) {
+                                                            addMemberStatus.style.display = 'block';
+                                                            addMemberStatus.textContent = (data && data.error) ? data.error : 'Gagal memuat senarai pelajar.';
+                                                        }
+                                                        return;
+                                                    }
+                                                    memberStudentSelectEl.innerHTML = '<option value="">-- Pilih Pelajar --</option>';
+                                                    (data.results || []).forEach(function(r){
+                                                        var opt = document.createElement('option');
+                                                        opt.value = r.id || '';
+                                                        opt.textContent = r.text || (r.nama || r.id || '');
+                                                        opt.dataset.matrik = r.matrik || '';
+                                                        opt.dataset.nama = r.nama || '';
+                                                        opt.dataset.email = r.email || '';
+                                                        opt.dataset.phone = r.phone || '';
+                                                        memberStudentSelectEl.appendChild(opt);
+                                                    });
+                                                    if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; }
+                                                })
+                                                .catch(function(err){
+                                                    if (addMemberStatus) {
+                                                        addMemberStatus.style.display = 'block';
+                                                        addMemberStatus.textContent = 'Ralat memuat pelajar: ' + (err && err.message ? err.message : 'Unknown');
+                                                    }
+                                                });
+                                            memberStudentSelectEl.onchange = function(){
+                                                var selected = memberStudentSelectEl.options[memberStudentSelectEl.selectedIndex];
+                                                if (!selected || !selected.value) return;
+                                                if (memberNameEl) memberNameEl.value = selected.dataset.nama || '';
+                                                if (memberRefIdEl) memberRefIdEl.value = selected.dataset.matrik || selected.value || '';
+                                                var memberEmailEl = document.getElementById('memberEmail');
+                                                var memberPhoneEl = document.getElementById('memberPhone');
+                                                if (memberEmailEl) memberEmailEl.value = selected.dataset.email || '';
+                                                if (memberPhoneEl) memberPhoneEl.value = selected.dataset.phone || '';
+                                                applyDefaultIfEmpty('PELAJAR');
+                                                updateAddMemberSaveState();
+                                            };
+                                            return;
+                                        }
+
+                                        var $student = jQuery(memberStudentSelectEl);
+                                        if ($student.data('select2')) { $student.select2('destroy'); }
+                                        $student.empty();
+                                        $student.select2({
+                                            theme: 'bootstrap-5',
+                                            dropdownParent: addMemberModalEl ? jQuery(addMemberModalEl) : undefined,
+                                            width: '100%',
+                                            placeholder: memberStudentSelectEl.getAttribute('data-placeholder') || 'Cari nama pelajar...',
+                                            allowClear: true,
+                                            minimumInputLength: 0,
+                                            ajax: {
+                                                delay: 250,
+                                                url: window.location.pathname + '?ajax=student_lookup',
+                                                dataType: 'json',
+                                                data: function(params){ return { q: params.term || '', limit: 100 }; },
+                                                processResults: function(data){
+                                                    if (!data || !data.ok){
+                                                        try{
+                                                            if (addMemberStatus){
+                                                                addMemberStatus.style.display = 'block';
+                                                                addMemberStatus.textContent = (data && data.error) ? data.error : 'Gagal memuat senarai pelajar.';
+                                                            }
+                                                        }catch(e){}
+                                                        return { results: [] };
+                                                    }
+                                                    try{
+                                                        if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; }
+                                                    }catch(e){}
+                                                    return { results: data.results || [] };
+                                                }
+                                            }
+                                        });
+                                        try{
+                                            var $c = $student.next('.select2-container');
+                                            if ($c && $c.length) $c.css('width', '100%');
+                                        }catch(e){}
+                                        $student.off('select2:select.sijilstudent').on('select2:select.sijilstudent', function(ev){
+                                            var d = ev && ev.params && ev.params.data ? ev.params.data : null;
+                                            if (!d) return;
+                                            try{
+                                                if (memberNameEl) memberNameEl.value = d.nama || '';
+                                                if (memberRefIdEl) memberRefIdEl.value = (d.matrik || d.id || '').toString();
+                                                var memberEmailEl = document.getElementById('memberEmail');
+                                                var memberPhoneEl = document.getElementById('memberPhone');
+                                                if (memberEmailEl) memberEmailEl.value = d.email || '';
+                                                if (memberPhoneEl) memberPhoneEl.value = d.phone || '';
+                                                applyDefaultIfEmpty('PELAJAR');
+                                                setTimeout(updateAddMemberSaveState, 0);
+                                            }catch(e){}
+                                        });
+                                        $student.off('select2:clear.sijilstudent').on('select2:clear.sijilstudent', function(){
+                                            try{
+                                                if (memberNameEl) memberNameEl.value = '';
+                                                if (memberRefIdEl) memberRefIdEl.value = '';
+                                                var memberEmailEl = document.getElementById('memberEmail');
+                                                var memberPhoneEl = document.getElementById('memberPhone');
+                                                if (memberEmailEl) memberEmailEl.value = '';
+                                                if (memberPhoneEl) memberPhoneEl.value = '';
+                                                updateAddMemberSaveState();
+                                            }catch(e){}
+                                        });
+                                    });
+                                }catch(e){ console.warn('student select2 init failed', e); }
+                            }
+
+                            function toggleRefInputByType(type){
+                                var t = (type || '').toString().toUpperCase();
+                                var isStaff = (t === 'STAF');
+                                var isStudent = (t === 'PELAJAR' || t === 'STUDENT');
+                                var isManual = (t === 'MANUAL');
+                                try{
+                                    if (memberManualTypeWrapEl) memberManualTypeWrapEl.style.display = isManual ? 'block' : 'none';
+                                    if (memberManualTypeEl) memberManualTypeEl.required = isManual;
+                                    if (memberRefIdLabelEl) {
+                                        if (isStaff) {
+                                            memberRefIdLabelEl.innerHTML = 'No Staf <span class=\"text-danger\">*</span>';
+                                        } else if (isStudent) {
+                                            memberRefIdLabelEl.innerHTML = 'No Matrik <span class=\"text-danger\">*</span>';
+                                        } else {
+                                            memberRefIdLabelEl.innerHTML = 'No Staf / No Matrik <span class=\"text-danger\">*</span>';
+                                        }
+                                    }
+                                    if (memberStaffWrapEl) memberStaffWrapEl.style.display = isStaff ? 'block' : 'none';
+                                    if (memberStaffSelectEl) memberStaffSelectEl.required = isStaff;
+                                    if (memberStudentWrapEl) memberStudentWrapEl.style.display = isStudent ? 'block' : 'none';
+                                    if (memberStudentSelectEl) memberStudentSelectEl.required = isStudent;
+                                    if (memberNameEl) memberNameEl.readOnly = (isStaff || isStudent);
+                                    if (memberRefIdEl) memberRefIdEl.readOnly = (isStaff || isStudent);
+                                    if (!isStaff) resetStaffSelect();
+                                    if (!isStudent) resetStudentSelect();
+                                    if (!isStaff && !isStudent && memberNameEl && memberNameEl.value === '') memberNameEl.readOnly = false;
+                                    if (!isStaff && !isStudent && memberRefIdEl && memberRefIdEl.value === '') memberRefIdEl.readOnly = false;
+                                    if (!isManual && memberManualTypeEl) memberManualTypeEl.value = '';
+                                }catch(e){}
+                                if (isStaff) {
+                                    initStaffSelect2();
+                                }
+                                if (isStudent) {
+                                    initStudentSelect2();
+                                }
+                            }
+
+                            if (memberRefTypeEl){
+                                memberRefTypeEl.addEventListener('change', function(){
+                                    var nextType = (memberRefTypeEl.value || '').toUpperCase();
+                                    if (nextType === 'STAF' || nextType === 'PELAJAR' || nextType === 'STUDENT'){
+                                        try{
+                                            if (memberNameEl) memberNameEl.value = '';
+                                            if (memberRefIdEl) memberRefIdEl.value = '';
+                                            var memberEmailEl = document.getElementById('memberEmail');
+                                            var memberPhoneEl = document.getElementById('memberPhone');
+                                            if (memberEmailEl) memberEmailEl.value = '';
+                                            if (memberPhoneEl) memberPhoneEl.value = '';
+                                            resetStaffSelect();
+                                            resetStudentSelect();
+                                        }catch(e){}
+                                    } else if (nextType === 'MANUAL'){
+                                        try{
+                                            if (memberNameEl) memberNameEl.value = '';
+                                            if (memberRefIdEl) memberRefIdEl.value = '';
+                                            var memberEmailEl2 = document.getElementById('memberEmail');
+                                            var memberPhoneEl2 = document.getElementById('memberPhone');
+                                            if (memberEmailEl2) memberEmailEl2.value = '';
+                                            if (memberPhoneEl2) memberPhoneEl2.value = '';
+                                            resetStaffSelect();
+                                            resetStudentSelect();
+                                        }catch(e){}
+                                    }
+                                    toggleRefInputByType(nextType);
+                                    updateAddMemberSaveState();
+                                });
+                            }
+                            if (memberManualTypeEl) memberManualTypeEl.addEventListener('change', function(){ updateAddMemberSaveState(); });
+                            try{
+                                ['memberRoleId','memberName','memberRefId','memberEmail','memberPhone'].forEach(function(id){
+                                    var el = document.getElementById(id);
+                                    if (el) {
+                                        el.addEventListener('input', updateAddMemberSaveState);
+                                        el.addEventListener('change', updateAddMemberSaveState);
+                                    }
+                                });
+                            }catch(e){}
 
                             if (btnAddMember){
                                 btnAddMember.addEventListener('click', function(){
                                     // reset form
                                     try{ document.getElementById('addMemberForm').reset(); }catch(e){}
+                                    try{ resetAddMemberModalState(); }catch(e){}
+                                    try{ resetStaffSelect(); }catch(e){}
+                                    try{ toggleRefInputByType((memberRefTypeEl && memberRefTypeEl.value) ? memberRefTypeEl.value : ''); }catch(e){}
                                     if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; }
-                                    try{ if (addMemberSave) { addMemberSave.textContent = 'Simpan'; addMemberSave.dataset.editing = '0'; } }catch(e){}
+                                    updateAddMemberSaveState();
                                     loadRolesIfNeeded().then(function(){
                                         try{ initRoleSelect2(); }catch(e){}
                                         if (addMemberModalEl) {
@@ -1262,20 +2436,39 @@ ob_start();
                                 });
                             }
 
-                            // Ensure any leftover backdrop or modal-open class is cleared when modal is hidden
+                            // Ensure modal state is re-initialized when shown and cleaned when hidden
                             try{
                                     if (addMemberModalEl) {
+                                    addMemberModalEl.addEventListener('shown.bs.modal', function(){
+                                        try{
+                                            var t = (addMemberModalEl && addMemberModalEl.dataset && addMemberModalEl.dataset.forceType)
+                                                ? String(addMemberModalEl.dataset.forceType).toUpperCase()
+                                                : (memberRefTypeEl && memberRefTypeEl.value ? memberRefTypeEl.value : '').toUpperCase();
+                                            // Hard-force wrapper visibility here to avoid stale hidden state.
+                                            try{
+                                                if (memberStaffWrapEl) memberStaffWrapEl.style.setProperty('display', (t === 'STAF') ? 'block' : 'none', 'important');
+                                                if (memberStudentWrapEl) memberStudentWrapEl.style.setProperty('display', (t === 'PELAJAR' || t === 'STUDENT') ? 'block' : 'none', 'important');
+                                                if (memberManualTypeWrapEl) memberManualTypeWrapEl.style.setProperty('display', (t === 'MANUAL') ? 'block' : 'none', 'important');
+                                            }catch(e){}
+                                            try{ forceEditTypeUI(t); }catch(e){}
+                                            if (t === 'STAF') { try{ initStaffSelect2(); }catch(e){} }
+                                            if (t === 'PELAJAR' || t === 'STUDENT') { try{ initStudentSelect2(); }catch(e){} }
+                                            updateAddMemberSaveState();
+                                        }catch(e){}
+                                    });
                                     addMemberModalEl.addEventListener('hidden.bs.modal', function(){
                                         try{
+                                            try{ if (addMemberModalEl && addMemberModalEl.dataset) delete addMemberModalEl.dataset.forceType; }catch(e){}
                                             document.body.classList.remove('modal-open');
                                             var backs = document.querySelectorAll('.modal-backdrop');
                                             backs.forEach(function(b){ if (b && b.parentNode) b.parentNode.removeChild(b); });
                                             var lb = document.getElementById('addMemberLightBackdrop');
                                             if (lb && lb.parentNode) lb.parentNode.removeChild(lb);
                                             // reset edit state
-                                            try{ var mid = document.getElementById('memberId'); if (mid) mid.value = ''; }catch(e){}
-                                            try{ if (addMemberSave) { addMemberSave.textContent = 'Simpan'; addMemberSave.dataset.editing = '0'; } }catch(e){}
-                                            try{ var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Tambah Penerima Sijil'; }catch(e){}
+                                            try{ resetAddMemberModalState(); }catch(e){}
+                                            try{ resetStaffSelect(); }catch(e){}
+                                            try{ toggleRefInputByType(''); }catch(e){}
+                                            updateAddMemberSaveState();
                                         }catch(e){}
                                     });
                                 }
@@ -1287,28 +2480,24 @@ ob_start();
                                     var name = (document.getElementById('memberName')||{value:''}).value.trim();
                                     var roleId = (document.getElementById('memberRoleId')||{value:''}).value;
                                     var refType = (document.getElementById('memberRefType')||{value:''}).value;
+                                    var manualType = (document.getElementById('memberManualType')||{value:''}).value;
                                     var refId = (document.getElementById('memberRefId')||{value:''}).value.trim();
                                     var email = (document.getElementById('memberEmail')||{value:''}).value.trim();
                                     var phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
-                                    if (!name || !roleId || !refType || !refId){
-                                        if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Sila lengkapkan semua medan bertanda.'; }
-                                        return;
-                                    }
-
-                                    // validate email if provided
-                                    if (email){
-                                        var emRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                                        if (!emRe.test(email)){
-                                            if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Sila masukkan emel sah.'; }
-                                            try{ document.getElementById('memberEmail').focus(); }catch(e){}
-                                            return;
-                                        }
-                                    }
+                                    var validated = validateMemberForm(true);
+                                    if (!validated.ok) return;
+                                    var refTypeToSave = validated.typeToSave || normalizeRefTypeForSave();
+                                    // re-read values after auto-default applied
+                                    name = (document.getElementById('memberName')||{value:''}).value.trim();
+                                    refId = (document.getElementById('memberRefId')||{value:''}).value.trim();
+                                    email = (document.getElementById('memberEmail')||{value:''}).value.trim();
+                                    phone = (document.getElementById('memberPhone')||{value:''}).value.trim();
 
                                     var fd = new URLSearchParams();
                                     fd.append('member_name', name);
                                     fd.append('role_id', roleId);
-                                    fd.append('member_ref_type', refType);
+                                    fd.append('member_ref_type', refTypeToSave);
+                                    fd.append('member_entry_mode', (String(refType || '').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'BARU');
                                     fd.append('member_ref_id', refId);
                                     fd.append('member_email', email);
                                     fd.append('member_phone', phone);
@@ -1338,6 +2527,7 @@ ob_start();
                                     var editingFlag = (addMemberSave && addMemberSave.dataset && addMemberSave.dataset.editing === '1');
                                     var isEditing = editingFlag || (memberIdVal && parseInt(memberIdVal,10) > 0);
                                     var endpoint = isEditing ? '?ajax=update_member' : '?ajax=add_member';
+                                    try{ if (addMemberSave) addMemberSave.textContent = isEditing ? 'Kemaskini' : 'Simpan'; }catch(e){}
                                     if (isEditing) {
                                         // ensure member_id is sent; prefer hidden input but send fallback value
                                         var midToSend = (memberIdVal && parseInt(memberIdVal,10) > 0) ? memberIdVal : ((addMemberSave && addMemberSave.dataset && addMemberSave.dataset.memberId) ? addMemberSave.dataset.memberId : '');
@@ -1352,17 +2542,28 @@ ob_start();
                                         if (j && j.ok){
                                             if (addMemberModalEl) hideAddMemberModal();
                                             try{
-                                                var typeLabel = (refType === 'STAF') ? 'Staf' : 'Pelajar';
+                                                var typeLabel = (refTypeToSave === 'STAF') ? 'Staf' : ((refTypeToSave === 'PELAJAR') ? 'Pelajar' : 'Manual Entry');
                                                 var idLabel = refId ? ('(' + refId + ')') : '';
                                                 var nameLabel = name ? (' - ' + name) : '';
                                                 showSweetSuccess('Rekod ' + typeLabel + ' ' + idLabel + nameLabel + ' berjaya disimpan.');
                                             }catch(e){ alert('Rekod berjaya disimpan.'); }
-                                            try{ if (committeeLoaded && btnLoadCommittee) btnLoadCommittee.click(); }catch(e){}
-                                            try{ if (volunteerLoaded && btnLoadVolunteer) btnLoadVolunteer.click(); }catch(e){}
+                                            try{
+                                                if (committeeLoaded && btnLoadCommittee) {
+                                                    preserveCommitteePage = currentCommitteePage;
+                                                    btnLoadCommittee.click();
+                                                }
+                                            }catch(e){}
+                                            try{
+                                                if (volunteerLoaded && btnLoadVolunteer) {
+                                                    preserveVolunteerPage = currentVolunteerPage;
+                                                    btnLoadVolunteer.click();
+                                                }
+                                            }catch(e){}
                                         } else {
                                             if (j && j.exists){
-                                                if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = 'Rekod dengan nombor ini telah wujud.'; }
-                                                else { try{ if (window.Swal) Swal.fire({ icon: 'warning', title: 'Wujud', text: 'Rekod dengan nombor ini telah wujud.' }); else alert('Rekod wujud.'); }catch(e){ alert('Rekod wujud.'); } }
+                                                var existsMsg = (j && j.error) ? j.error : 'Rekod untuk jawatankuasa ini telah wujud.';
+                                                if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = existsMsg; }
+                                                else { try{ if (window.Swal) Swal.fire({ icon: 'warning', title: 'Wujud', text: existsMsg }); else alert(existsMsg); }catch(e){ alert(existsMsg); } }
                                             } else {
                                                 if (addMemberStatus){ addMemberStatus.style.display='block'; addMemberStatus.textContent = (j && j.error) ? j.error : 'Gagal menyimpan rekod.'; }
                                                 else { try{ if (window.Swal) Swal.fire({ icon: 'error', title: 'Gagal', text: (j && j.error) ? j.error : 'Gagal menyimpan rekod.' }); else alert((j && j.error) ? j.error : 'Gagal menyimpan rekod.'); }catch(e){ alert((j && j.error) ? j.error : 'Gagal menyimpan rekod.'); } }
@@ -1385,13 +2586,20 @@ ob_start();
                         }
 
                         function renderPenyelarasPage(){
-                            var list = lastRows.penyelaras || [];
+                            var rawList = lastRows.penyelaras || [];
+                            var q = searchPenyelaras ? searchPenyelaras.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.nama, r.emel, r.telefon], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentPenyelarasPage > pages) currentPenyelarasPage = pages;
                             var start = (currentPenyelarasPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             penyelarasBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(penyelarasBody, 5);
+                            }
                             slice.forEach(function(r, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
@@ -1414,10 +2622,193 @@ ob_start();
                             if (printAllPenyelaras) printAllPenyelaras.disabled = total === 0;
                         }
 
+                        function normalizeStoredRefType(v){
+                            var t = String(v || '').trim().toUpperCase();
+                            if (t === 'STUDENT') t = 'PELAJAR';
+                            if (t !== 'STAF' && t !== 'PELAJAR' && t !== 'MANUAL') t = 'MANUAL';
+                            return t;
+                        }
+
+                        function forceEditTypeUI(type){
+                            var t = String(type || '').toUpperCase();
+                            try{
+                                if (memberRefTypeEl){
+                                    memberRefTypeEl.value = t;
+                                    memberRefTypeEl.disabled = (t === 'STAF' || t === 'PELAJAR');
+                                }
+                                if (memberStaffWrapEl) {
+                                    memberStaffWrapEl.hidden = false;
+                                    memberStaffWrapEl.classList.remove('d-none');
+                                    memberStaffWrapEl.classList.remove('force-show');
+                                    if (t === 'STAF') memberStaffWrapEl.classList.add('force-show');
+                                    memberStaffWrapEl.style.setProperty('display', (t === 'STAF') ? 'block' : 'none', 'important');
+                                }
+                                if (memberStudentWrapEl) {
+                                    memberStudentWrapEl.hidden = false;
+                                    memberStudentWrapEl.classList.remove('d-none');
+                                    memberStudentWrapEl.classList.remove('force-show');
+                                    if (t === 'PELAJAR') memberStudentWrapEl.classList.add('force-show');
+                                    memberStudentWrapEl.style.setProperty('display', (t === 'PELAJAR') ? 'block' : 'none', 'important');
+                                }
+                                if (memberManualTypeWrapEl) {
+                                    memberManualTypeWrapEl.hidden = false;
+                                    memberManualTypeWrapEl.classList.remove('d-none');
+                                    memberManualTypeWrapEl.classList.remove('force-show');
+                                    if (t === 'MANUAL') memberManualTypeWrapEl.classList.add('force-show');
+                                    memberManualTypeWrapEl.style.setProperty('display', (t === 'MANUAL') ? 'block' : 'none', 'important');
+                                }
+                                if (memberStaffSelectEl) memberStaffSelectEl.required = (t === 'STAF');
+                                if (memberStudentSelectEl) memberStudentSelectEl.required = (t === 'PELAJAR');
+                                if (memberManualTypeEl) memberManualTypeEl.required = (t === 'MANUAL');
+                                if (memberNameEl) memberNameEl.readOnly = (t === 'STAF' || t === 'PELAJAR');
+                                if (memberRefIdEl) memberRefIdEl.readOnly = (t === 'STAF' || t === 'PELAJAR');
+                            }catch(e){}
+                        }
+
+                        function openEditMemberModal(r, forcedType){
+                            try{
+                                if (!r) return;
+                                var type = normalizeStoredRefType(forcedType || r.member_ref_type || '');
+                                var desiredRole = r.role_id || '';
+                                var inferManualType = (function(){
+                                    var ref = String(r.member_ref_id || '').trim();
+                                    if (ref === '') return '';
+                                    return /-/.test(ref) ? 'STAF' : 'PELAJAR';
+                                })();
+
+                                try{ document.getElementById('addMemberForm').reset(); }catch(e){}
+                                try{ resetStaffSelect(); }catch(e){}
+                                try{ resetStudentSelect(); }catch(e){}
+                                try{ resetAddMemberModalState(); }catch(e){}
+                                try{ if (addMemberStatus) { addMemberStatus.style.display = 'none'; addMemberStatus.textContent = ''; } }catch(e){}
+
+                                try{ var midEl = document.getElementById('memberId'); if (midEl) midEl.value = r.id || ''; }catch(e){}
+                                try{ if (addMemberModalEl) addMemberModalEl.dataset.forceType = type; }catch(e){}
+                                try{ if (addMemberSave) { addMemberSave.textContent = 'Kemaskini'; addMemberSave.dataset.editing = '1'; addMemberSave.dataset.memberId = String(r.id || ''); } }catch(e){}
+                                try{ var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Kemaskini Penerima Sijil'; }catch(e){}
+
+                                try{
+                                    var rt = document.getElementById('memberRefType');
+                                    if (rt) rt.value = type;
+                                    if (rt) rt.disabled = (type === 'STAF' || type === 'PELAJAR');
+                                }catch(e){}
+                                try{
+                                    var mt = document.getElementById('memberManualType');
+                                    if (mt) mt.value = '';
+                                }catch(e){}
+
+                                try{ toggleRefInputByType(type); }catch(e){}
+                                try{ forceEditTypeUI(type); }catch(e){}
+
+                                try{ var mn = document.getElementById('memberName'); if (mn) mn.value = r.member_name || ''; }catch(e){}
+                                try{ var mr = document.getElementById('memberRefId'); if (mr) mr.value = r.member_ref_id || ''; }catch(e){}
+                                try{ var me = document.getElementById('memberEmail'); if (me) me.value = r.member_email || ''; }catch(e){}
+                                try{ var mp = document.getElementById('memberPhone'); if (mp) mp.value = r.member_phone || ''; }catch(e){}
+
+                                if (type === 'MANUAL'){
+                                    try{
+                                        var mm = document.getElementById('memberManualType');
+                                        var inferred = String(r.member_manual_type || '').toUpperCase();
+                                        if (!inferred) inferred = inferManualType;
+                                        if (mm && (inferred === 'STAF' || inferred === 'PELAJAR')) mm.value = inferred;
+                                    }catch(e){}
+                                }
+
+                                loadRolesIfNeeded().then(function(){
+                                    try{ initRoleSelect2(); }catch(e){}
+                                    try{
+                                        var roleEl = document.getElementById('memberRoleId');
+                                        if (roleEl){
+                                            roleEl.value = desiredRole || '';
+                                            if (window.jQuery && typeof jQuery.fn.select2 === 'function'){
+                                                jQuery(roleEl).val(desiredRole || '').trigger('change');
+                                            }
+                                        }
+                                    }catch(e){}
+                                }).catch(function(err){
+                                    console.warn('loadRolesIfNeeded failed for edit', err);
+                                }).finally(function(){
+                                    try{
+                                        if (memberStaffWrapEl) memberStaffWrapEl.style.setProperty('display', (type === 'STAF') ? 'block' : 'none', 'important');
+                                        if (memberStudentWrapEl) memberStudentWrapEl.style.setProperty('display', (type === 'PELAJAR') ? 'block' : 'none', 'important');
+                                        if (memberManualTypeWrapEl) memberManualTypeWrapEl.style.setProperty('display', (type === 'MANUAL') ? 'block' : 'none', 'important');
+                                    }catch(e){}
+                                    try{ showAddMemberModal(); }catch(e){ console.error('showAddMemberModal failed', e); }
+                                    // Select2 for STAF/PELAJAR is safer to initialize after modal is visible
+                                    setTimeout(function(){
+                                        try{ forceEditTypeUI(type); }catch(e){}
+                                        try{
+                                            if (type === 'STAF' && memberStaffSelectEl){
+                                                try{ initStaffSelect2(); }catch(e){}
+                                                setTimeout(function(){
+                                                    try{ forceEditTypeUI(type); }catch(e){}
+                                                    try{
+                                                        var optText = (r.member_name || '') + (r.member_ref_id ? ' (' + r.member_ref_id + ')' : '');
+                                                        if (window.jQuery && typeof jQuery.fn.select2 === 'function'){
+                                                            var $staff = jQuery(memberStaffSelectEl);
+                                                            $staff.empty();
+                                                            var opt = new Option(optText, r.member_ref_id || '', true, true);
+                                                            $staff.append(opt).trigger('change');
+                                                        } else {
+                                                            memberStaffSelectEl.innerHTML = '';
+                                                            var nopt = document.createElement('option');
+                                                            nopt.value = r.member_ref_id || '';
+                                                            nopt.textContent = optText;
+                                                            nopt.selected = true;
+                                                            memberStaffSelectEl.appendChild(nopt);
+                                                            memberStaffSelectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                                        }
+                                                    }catch(e){}
+                                                }, 260);
+                                            }
+                                            if (type === 'PELAJAR' && memberStudentSelectEl){
+                                                try{ initStudentSelect2(); }catch(e){}
+                                                setTimeout(function(){
+                                                    try{ forceEditTypeUI(type); }catch(e){}
+                                                    try{
+                                                        var optTextS = (r.member_name || '') + (r.member_ref_id ? ' (' + r.member_ref_id + ')' : '');
+                                                        if (window.jQuery && typeof jQuery.fn.select2 === 'function'){
+                                                            var $student = jQuery(memberStudentSelectEl);
+                                                            $student.empty();
+                                                            var optS = new Option(optTextS, r.member_ref_id || '', true, true);
+                                                            $student.append(optS).trigger('change');
+                                                        } else {
+                                                            memberStudentSelectEl.innerHTML = '';
+                                                            var noptS = document.createElement('option');
+                                                            noptS.value = r.member_ref_id || '';
+                                                            noptS.textContent = optTextS;
+                                                            noptS.selected = true;
+                                                            memberStudentSelectEl.appendChild(noptS);
+                                                            memberStudentSelectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                                        }
+                                                    }catch(e){}
+                                                }, 260);
+                                            }
+                                        }catch(e){}
+                                        try{ updateAddMemberSaveState(); }catch(e){}
+                                    }, 120);
+                                    try{ updateAddMemberSaveState(); }catch(e){}
+                                });
+                            }catch(ex){
+                                console.error('openEditMemberModal error', ex);
+                            }
+                        }
+
                         // Committee render (single table)
                         var currentCommitteePage = 1;
+                        var preserveCommitteePage = null;
                         function renderCommitteePage(){
-                            var list = lastRows.committee || [];
+                            var rawList = lastRows.committee || [];
+                            var dupRefMap = Object.create(null);
+                            rawList.forEach(function(r){
+                                var k = normalizeRefKey((r && r.member_ref_id) ? r.member_ref_id : '');
+                                if (!k) return;
+                                dupRefMap[k] = (dupRefMap[k] || 0) + 1;
+                            });
+                            var q = searchCommittee ? searchCommittee.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.member_name, r.role_name, r.member_email, r.member_ref_id], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentCommitteePage > pages) currentCommitteePage = pages;
@@ -1425,14 +2816,29 @@ ob_start();
                             var slice = list.slice(start, start + PAGE_SIZE);
                             if (!committeeBody) return;
                             committeeBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(committeeBody, 5);
+                            }
                             slice.forEach(function(r, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
+                                var refKey = normalizeRefKey((r && r.member_ref_id) ? r.member_ref_id : '');
+                                var missingName = String((r && r.name_not_found != null) ? r.name_not_found : '0') === '1';
+                                if (missingName) {
+                                    tr.classList.add('table-danger');
+                                } else if (refKey && (dupRefMap[refKey] || 0) > 1) {
+                                    tr.classList.add('table-warning');
+                                }
                                 var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
+                                var nameHtml = name;
+                                if (showLink) {
+                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="committee" data-ref="' + refKey.replace(/"/g, '&quot;') + '">papar</a>';
+                                }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
-                                    (function(){ return cellHtml(name, false); })() +
+                                    (function(){ return cellHtml(nameHtml, false, true); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
                                     '<td class="text-center">'
@@ -1445,30 +2851,13 @@ ob_start();
                                 var editBtn = tr.querySelector('.do-edit-committee');
                                 var delBtn = tr.querySelector('.do-delete-committee');
                                 var prBtn = tr.querySelector('.do-print-committee');
+                                var viewBtn = tr.querySelector('.dup-view-link');
+                                if (viewBtn) viewBtn.addEventListener('click', function(ev){
+                                    ev.preventDefault();
+                                    openDuplicateDetailModal('committee', refKey);
+                                });
                                 if (editBtn) editBtn.addEventListener('click', function(){
-                                    try{
-                                        // populate modal with member data AFTER roles loaded
-                                        var fillAndShow = function(){
-                                            try{ document.getElementById('memberId').value = r.id || ''; }catch(e){}
-                                            try{ document.getElementById('memberName').value = r.member_name || ''; }catch(e){}
-                                            try{ document.getElementById('memberEmail').value = r.member_email || ''; }catch(e){}
-                                            try{ document.getElementById('memberRefType').value = r.member_ref_type || ''; }catch(e){}
-                                            try{ document.getElementById('memberRefId').value = r.member_ref_id || ''; }catch(e){}
-                                            try{ document.getElementById('memberPhone').value = r.member_phone || ''; }catch(e){}
-                                            try{ document.getElementById('memberRoleId').value = r.role_id || ''; }catch(e){}
-                                            // if select2 is present, update it
-                                            try{
-                                                if (window.jQuery && typeof jQuery.fn.select2 === 'function'){
-                                                    var $sel = jQuery('#memberRoleId');
-                                                    $sel.val(r.role_id || '').trigger('change');
-                                                }
-                                            }catch(e){}
-                                            var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Kemaskini Penerima Sijil';
-                                            try{ if (addMemberSave) { addMemberSave.textContent = 'Kemaskini'; addMemberSave.dataset.editing = '1'; } }catch(e){}
-                                            if (addMemberModal) showAddMemberModal();
-                                        };
-                                        loadRolesIfNeeded().then(function(){ try{ initRoleSelect2(); }catch(e){} fillAndShow(); }).catch(function(err){ console.error('load roles for edit failed', err); fillAndShow(); });
-                                    }catch(ex){ console.error('edit open error', ex); }
+                                    openEditMemberModal(r, 'STAF');
                                 });
                                 if (delBtn) delBtn.addEventListener('click', function(){
                                     try{
@@ -1493,7 +2882,12 @@ ob_start();
                                                         if (window.Swal) { Swal.fire({ icon: 'success', title: 'Dipadam', text: 'Rekod ' + detail + ' telah dipadam.' }); }
                                                         else { alert('Rekod ' + detail + ' telah dipadam.'); }
                                                     }catch(e){ }
-                                                    try{ if (btnLoadCommittee) btnLoadCommittee.click(); }catch(e){}
+                                                    try{
+                                                        if (btnLoadCommittee) {
+                                                            preserveCommitteePage = currentCommitteePage;
+                                                            btnLoadCommittee.click();
+                                                        }
+                                                    }catch(e){}
                                                 } else {
                                                     alert('Gagal memadam rekod.');
                                                 }
@@ -1518,8 +2912,19 @@ ob_start();
 
                         // Volunteer render (single table) - same as committee but separate storage
                         var currentVolunteerPage = 1;
+                        var preserveVolunteerPage = null;
                         function renderVolunteerPage(){
-                            var list = lastRows.volunteer || [];
+                            var rawList = lastRows.volunteer || [];
+                            var dupRefMap = Object.create(null);
+                            rawList.forEach(function(r){
+                                var k = normalizeRefKey((r && r.member_ref_id) ? r.member_ref_id : '');
+                                if (!k) return;
+                                dupRefMap[k] = (dupRefMap[k] || 0) + 1;
+                            });
+                            var q = searchVolunteer ? searchVolunteer.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.member_name, r.role_name, r.member_email, r.member_ref_id], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentVolunteerPage > pages) currentVolunteerPage = pages;
@@ -1527,14 +2932,29 @@ ob_start();
                             var slice = list.slice(start, start + PAGE_SIZE);
                             if (!volunteerBody) return;
                             volunteerBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(volunteerBody, 5);
+                            }
                             slice.forEach(function(r, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
+                                var refKey = normalizeRefKey((r && r.member_ref_id) ? r.member_ref_id : '');
+                                var missingName = String((r && r.name_not_found != null) ? r.name_not_found : '0') === '1';
+                                if (missingName) {
+                                    tr.classList.add('table-danger');
+                                } else if (refKey && (dupRefMap[refKey] || 0) > 1) {
+                                    tr.classList.add('table-warning');
+                                }
                                 var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
+                                var nameHtml = name;
+                                if (showLink) {
+                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="volunteer" data-ref="' + refKey.replace(/"/g, '&quot;') + '">papar</a>';
+                                }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
-                                    (function(){ return cellHtml(name, false); })() +
+                                    (function(){ return cellHtml(nameHtml, false, true); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
                                     '<td class="text-center">'
@@ -1546,29 +2966,13 @@ ob_start();
                                 var editBtn = tr.querySelector('.do-edit-volunteer');
                                 var delBtn = tr.querySelector('.do-delete-volunteer');
                                 var prBtn = tr.querySelector('.do-print-volunteer');
+                                var viewBtn = tr.querySelector('.dup-view-link');
+                                if (viewBtn) viewBtn.addEventListener('click', function(ev){
+                                    ev.preventDefault();
+                                    openDuplicateDetailModal('volunteer', refKey);
+                                });
                                 if (editBtn) editBtn.addEventListener('click', function(){
-                                    try{
-                                        console.debug('Edit volunteer clicked', r || {});
-                                        var desiredRole = r.role_id || '';
-                                        var midEl = document.getElementById('memberId'); if (midEl) midEl.value = r.id || '';
-                                        var mn = document.getElementById('memberName'); if (mn) mn.value = r.member_name || '';
-                                        var me = document.getElementById('memberEmail'); if (me) me.value = r.member_email || '';
-                                        try{ var mtype = document.getElementById('memberRefType'); if (mtype) mtype.value = r.member_ref_type || ''; }catch(e){}
-                                        try{ var mid = document.getElementById('memberRefId'); if (mid) mid.value = r.member_ref_id || ''; }catch(e){}
-                                        try{ var mph = document.getElementById('memberPhone'); if (mph) mph.value = r.member_phone || ''; }catch(e){}
-                                        var lbl = document.getElementById('addMemberModalLabel'); if (lbl) lbl.textContent = 'Kemaskini Penerima Sijil';
-                                        try{ if (addMemberSave) { addMemberSave.textContent = 'Kemaskini'; addMemberSave.dataset.editing = '1'; } }catch(e){}
-                                        // load roles then set selected value, then show modal even if roles fail
-                                        loadRolesIfNeeded().then(function(){ try{ initRoleSelect2(); }catch(e){}
-                                            try{
-                                                var mrole = document.getElementById('memberRoleId');
-                                                if (mrole){
-                                                    mrole.value = desiredRole || '';
-                                                    try{ if (window.jQuery && typeof jQuery.fn.select2 === 'function'){ jQuery(mrole).val(desiredRole||'').trigger('change'); } }catch(e){}
-                                                }
-                                            }catch(e){ console.warn('set desired role failed', e); }
-                                        }).catch(function(err){ console.warn('loadRolesIfNeeded failed for edit', err); }).finally(function(){ try{ showAddMemberModal(); }catch(e){ console.error('showAddMemberModal failed', e); } });
-                                    }catch(ex){ console.error('edit open error', ex); }
+                                    openEditMemberModal(r, 'PELAJAR');
                                 });
                                 if (delBtn) delBtn.addEventListener('click', function(){
                                     try{
@@ -1593,7 +2997,12 @@ ob_start();
                                                         if (window.Swal) { Swal.fire({ icon: 'success', title: 'Dipadam', text: 'Rekod ' + detail + ' telah dipadam.' }); }
                                                         else { alert('Rekod ' + detail + ' telah dipadam.'); }
                                                     }catch(e){ }
-                                                    try{ if (btnLoadVolunteer) btnLoadVolunteer.click(); }catch(e){}
+                                                    try{
+                                                        if (btnLoadVolunteer) {
+                                                            preserveVolunteerPage = currentVolunteerPage;
+                                                            btnLoadVolunteer.click();
+                                                        }
+                                                    }catch(e){}
                                                 } else {
                                                     alert('Gagal memadam rekod.');
                                                 }
@@ -1622,6 +3031,12 @@ ob_start();
                             document.getElementById('jurulatihNext').addEventListener('click', function(){ currentJurulatihPage++; renderJurulatihPage(); });
                             document.getElementById('athletePrev').addEventListener('click', function(){ if (currentAthletePage>1){ currentAthletePage--; renderAthletePage(); } });
                             document.getElementById('athleteNext').addEventListener('click', function(){ currentAthletePage++; renderAthletePage(); });
+                            if (searchPenyelaras) searchPenyelaras.addEventListener('input', function(){ currentPenyelarasPage = 1; renderPenyelarasPage(); });
+                            if (searchPengurus) searchPengurus.addEventListener('input', function(){ currentPengurusPage = 1; renderPengurusPage(); });
+                            if (searchJurulatih) searchJurulatih.addEventListener('input', function(){ currentJurulatihPage = 1; renderJurulatihPage(); });
+                            if (searchAtlet) searchAtlet.addEventListener('input', function(){ currentAthletePage = 1; renderAthletePage(); });
+                            if (searchCommittee) searchCommittee.addEventListener('input', function(){ currentCommitteePage = 1; renderCommitteePage(); });
+                            if (searchVolunteer) searchVolunteer.addEventListener('input', function(){ currentVolunteerPage = 1; renderVolunteerPage(); });
                             // committee paging
                             if (committeePrev) committeePrev.addEventListener('click', function(){ if (currentCommitteePage>1){ currentCommitteePage--; renderCommitteePage(); } });
                             if (committeeNext) committeeNext.addEventListener('click', function(){ currentCommitteePage++; renderCommitteePage(); });
@@ -1713,9 +3128,9 @@ ob_start();
                                         // uppercase for athletes
                                         sukan_combo = (sukan_combo||'').toString().toUpperCase();
                                     } else {
-                                        // fixed labels for other types
-                                        if (type === 'pengurus') sukan_combo = 'PENGURUS';
-                                        else if (type === 'jurulatih') sukan_combo = 'JURULATIH';
+                                        // role label for other types
+                                        if (type === 'pengurus') sukan_combo = ((r.jawatan || '').toString().trim() || 'PENGURUS');
+                                        else if (type === 'jurulatih') sukan_combo = ((r.jawatan || '').toString().trim() || 'JURULATIH');
                                         else if (type === 'penyelaras') sukan_combo = 'KETUA KONTINJEN';
                                         else sukan_combo = '';
                                     }
@@ -1825,24 +3240,53 @@ ob_start();
                                         if (r.pengurus) {
                                             r.pengurus.split(' ||| ').forEach(function(praw){
                                                 var p = (praw||'').trim(); if(!p) return;
-                                                var m = p.match(/\(([^)]*)\)/);
-                                                var tel = m ? m[1].trim() : '';
-                                                // remove phone parentheses and trailing email
-                                                var clean = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
-                                                var key = (clean || p).toLowerCase();
-                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: clean || p, tel: tel };
-                                                else if (!pengurusMap[key].tel && tel) pengurusMap[key].tel = tel;
+                                                var nama = '', jawatan = '', tel = '';
+                                                if (p.indexOf('@@JAWATAN@@') !== -1) {
+                                                    var sNama = p.split('@@JAWATAN@@');
+                                                    nama = (sNama[0] || '').trim();
+                                                    var rest1 = (sNama[1] || '');
+                                                    var sTel = rest1.split('@@TEL@@');
+                                                    jawatan = (sTel[0] || '').trim();
+                                                    var rest2 = (sTel[1] || '');
+                                                    var sEmel = rest2.split('@@EMEL@@');
+                                                    tel = (sEmel[0] || '').trim();
+                                                } else {
+                                                    var m = p.match(/\(([^)]*)\)/);
+                                                    tel = m ? m[1].trim() : '';
+                                                    nama = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                }
+                                                var key = (nama || p).toLowerCase();
+                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel };
+                                                else {
+                                                    if (!pengurusMap[key].tel && tel) pengurusMap[key].tel = tel;
+                                                    if (!pengurusMap[key].jawatan && jawatan) pengurusMap[key].jawatan = jawatan;
+                                                }
                                             });
                                         }
                                         if (r.jurulatih) {
                                             r.jurulatih.split(' ||| ').forEach(function(jraw){
                                                 var j = (jraw||'').trim(); if(!j) return;
-                                                var mj = j.match(/\(([^)]*)\)/);
-                                                var jtTel = mj ? mj[1].trim() : '';
-                                                var cleanj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
-                                                var keyj = (cleanj || j).toLowerCase();
-                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: cleanj || j, tel: jtTel };
-                                                else if (!jurulatihMap[keyj].tel && jtTel) jurulatihMap[keyj].tel = jtTel;
+                                                var namaj = '', jawatanj = '', jtTel = '';
+                                                if (j.indexOf('@@JAWATAN@@') !== -1) {
+                                                    var sjNama = j.split('@@JAWATAN@@');
+                                                    namaj = (sjNama[0] || '').trim();
+                                                    var jRest1 = (sjNama[1] || '');
+                                                    var sjTel = jRest1.split('@@TEL@@');
+                                                    jawatanj = (sjTel[0] || '').trim();
+                                                    var jRest2 = (sjTel[1] || '');
+                                                    var sjEmel = jRest2.split('@@EMEL@@');
+                                                    jtTel = (sjEmel[0] || '').trim();
+                                                } else {
+                                                    var mj = j.match(/\(([^)]*)\)/);
+                                                    jtTel = mj ? mj[1].trim() : '';
+                                                    namaj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                }
+                                                var keyj = (namaj || j).toLowerCase();
+                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel };
+                                                else {
+                                                    if (!jurulatihMap[keyj].tel && jtTel) jurulatihMap[keyj].tel = jtTel;
+                                                    if (!jurulatihMap[keyj].jawatan && jawatanj) jurulatihMap[keyj].jawatan = jawatanj;
+                                                }
                                             });
                                         }
                                     });
@@ -1907,7 +3351,8 @@ ob_start();
                                                 var j = JSON.parse(text);
                                                 if (!j || !j.ok){ throw new Error(j && j.error ? j.error : 'Empty response'); }
                                                 lastRows.committee = j.rows || [];
-                                                currentCommitteePage = 1;
+                                                currentCommitteePage = (preserveCommitteePage && preserveCommitteePage > 0) ? preserveCommitteePage : 1;
+                                                preserveCommitteePage = null;
                                                 renderCommitteePage();
                                                 if (committeeWrap) committeeWrap.style.display = '';
                                                 committeeLoadStatus.textContent = '';
@@ -1930,7 +3375,8 @@ ob_start();
                                                 var j = JSON.parse(text);
                                                 if (!j || !j.ok){ throw new Error(j && j.error ? j.error : 'Empty response'); }
                                                 lastRows.volunteer = j.rows || [];
-                                                currentVolunteerPage = 1;
+                                                currentVolunteerPage = (preserveVolunteerPage && preserveVolunteerPage > 0) ? preserveVolunteerPage : 1;
+                                                preserveVolunteerPage = null;
                                                 renderVolunteerPage();
                                                 if (volunteerWrap) volunteerWrap.style.display = '';
                                                 volunteerLoadStatus.textContent = '';

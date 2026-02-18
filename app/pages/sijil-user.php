@@ -272,7 +272,18 @@ if ($printAll !== '') {
                         $parts = explode(' ||| ', $m['pengurus']);
                         foreach ($parts as $p) {
                             $p = trim($p);
-                            if ($p !== '') $rowsAll[] = ['nama' => $p, 'sukan' => '', 'acara' => $acara];
+                            if ($p !== '') {
+                                $nama = $p;
+                                $jawatan = '';
+                                if (strpos($p, '@@JAWATAN@@') !== false) {
+                                    $segNama = explode('@@JAWATAN@@', $p, 2);
+                                    $nama = trim((string)($segNama[0] ?? ''));
+                                    $rest1 = (string)($segNama[1] ?? '');
+                                    $segTel = explode('@@TEL@@', $rest1, 2);
+                                    $jawatan = trim((string)($segTel[0] ?? ''));
+                                }
+                                $rowsAll[] = ['nama' => $nama, 'jawatan' => $jawatan, 'sukan' => '', 'acara' => $acara];
+                            }
                         }
                     }
                 } else if ($type === 'jurulatih') {
@@ -280,7 +291,18 @@ if ($printAll !== '') {
                         $parts = explode(' ||| ', $m['jurulatih']);
                         foreach ($parts as $p) {
                             $p = trim($p);
-                            if ($p !== '') $rowsAll[] = ['nama' => $p, 'sukan' => '', 'acara' => $acara];
+                            if ($p !== '') {
+                                $nama = $p;
+                                $jawatan = '';
+                                if (strpos($p, '@@JAWATAN@@') !== false) {
+                                    $segNama = explode('@@JAWATAN@@', $p, 2);
+                                    $nama = trim((string)($segNama[0] ?? ''));
+                                    $rest1 = (string)($segNama[1] ?? '');
+                                    $segTel = explode('@@TEL@@', $rest1, 2);
+                                    $jawatan = trim((string)($segTel[0] ?? ''));
+                                }
+                                $rowsAll[] = ['nama' => $nama, 'jawatan' => $jawatan, 'sukan' => '', 'acara' => $acara];
+                            }
                         }
                     }
                 }
@@ -331,11 +353,15 @@ if ($printAll !== '') {
             // uppercase sport/event for printed certificates
             $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
         } else {
-            // For non-athletes, show fixed role label in the same position
+            // For non-athletes, show role label in the same position
             if ($type === 'pengurus') {
-                $sukan_combo = mb_strtoupper('PENGURUS', 'UTF-8');
+                $sukan_combo = trim((string)($ra['jawatan'] ?? ''));
+                if ($sukan_combo === '') $sukan_combo = 'PENGURUS';
+                $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
             } else if ($type === 'jurulatih') {
-                $sukan_combo = mb_strtoupper('JURULATIH', 'UTF-8');
+                $sukan_combo = trim((string)($ra['jawatan'] ?? ''));
+                if ($sukan_combo === '') $sukan_combo = 'JURULATIH';
+                $sukan_combo = mb_strtoupper($sukan_combo, 'UTF-8');
             } else if ($type === 'penyelaras') {
                 $sukan_combo = mb_strtoupper('KETUA KONTINJEN', 'UTF-8');
             } else {
@@ -526,13 +552,29 @@ function fetch_managers_from_ringkasan($kod) {
                 COALESCE(r.nama_pendek, r.nama_universiti, k.kod_universiti) AS kontinjen,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(pp.nama, IFNULL(CONCAT(' (', pp.no_telefon, ')'), ''), IF(pp.emel IS NOT NULL AND pp.emel <> '', CONCAT(' ', pp.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(
+                            DISTINCT CONCAT(
+                                COALESCE(pp.nama, ''),
+                                ' @@JAWATAN@@ ', COALESCE(pp.jawatan, ''),
+                                ' @@TEL@@ ', COALESCE(pp.no_telefon, ''),
+                                ' @@EMEL@@ ', COALESCE(pp.emel, '')
+                            )
+                            SEPARATOR ' ||| '
+                        ),
                         ''
                     )
                 ) AS pengurus,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(j.nama, IFNULL(CONCAT(' (', j.no_telefon, ')'), ''), IF(j.emel IS NOT NULL AND j.emel <> '', CONCAT(' ', j.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(
+                            DISTINCT CONCAT(
+                                COALESCE(j.nama, ''),
+                                ' @@JAWATAN@@ ', COALESCE(j.jawatan, ''),
+                                ' @@TEL@@ ', COALESCE(j.no_telefon, ''),
+                                ' @@EMEL@@ ', COALESCE(j.emel, '')
+                            )
+                            SEPARATOR ' ||| '
+                        ),
                         ''
                     )
                 ) AS jurulatih
@@ -653,6 +695,7 @@ ob_start();
                             <div class="tab-pane fade show active" id="pane-penyelaras" role="tabpanel">
                                 <div class="d-flex mb-2">
                                     <div class="me-auto"></div>
+                                    <input type="search" id="searchPenyelaras" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                     <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
                                 <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama</th><th style="width:20%">Email</th><th style="width:15%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
@@ -665,9 +708,10 @@ ob_start();
                             <div class="tab-pane fade" id="pane-pengurus" role="tabpanel">
                                 <div class="d-flex mb-2">
                                     <div class="me-auto"></div>
+                                    <input type="search" id="searchPengurus" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                     <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Pengurus</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Pengurus</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="pengurusPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="pengurusPageInfo" class="me-2">Page 1/1</span>
@@ -677,9 +721,10 @@ ob_start();
                             <div class="tab-pane fade" id="pane-jurulatih" role="tabpanel">
                                 <div class="d-flex mb-2">
                                     <div class="me-auto"></div>
+                                    <input type="search" id="searchJurulatih" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                     <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:80%">Nama Jurulatih</th><th style="width:15%">No Telefon</th><th style="width:12%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Jurulatih</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="jurulatihPrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="jurulatihPageInfo" class="me-2">Page 1/1</span>
@@ -689,6 +734,7 @@ ob_start();
                             <div class="tab-pane fade" id="pane-atlet" role="tabpanel">
                                 <div class="d-flex mb-2">
                                     <div class="me-auto"></div>
+                                    <input type="search" id="searchAtlet" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                     <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
                                 <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
@@ -714,6 +760,10 @@ ob_start();
                                 var printAllJurulatih = document.getElementById('printAllJurulatih');
                                 var printAllAtlet = document.getElementById('printAllAtlet');
                                 var printAllPenyelaras = document.getElementById('printAllPenyelaras');
+                                var searchPenyelaras = document.getElementById('searchPenyelaras');
+                                var searchPengurus = document.getElementById('searchPengurus');
+                                var searchJurulatih = document.getElementById('searchJurulatih');
+                                var searchAtlet = document.getElementById('searchAtlet');
                                 var countPengurus = document.getElementById('countPengurus');
                                 var countJurulatih = document.getElementById('countJurulatih');
                                 var countAtlet = document.getElementById('countAtlet');
@@ -773,27 +823,59 @@ ob_start();
                             if (v === '') return '<td class="'+cls+'"><span class="no-data-badge">Tiada</span></td>'; 
                             return '<td class="'+cls+'" title="'+escHtml(v)+'">'+escHtml(v)+'</td>';
                         }
+                        function appendNoDataRow(tbodyEl, colCount){
+                            if (!tbodyEl) return;
+                            var tr = document.createElement('tr');
+                            var html = '';
+                            for (var i = 0; i < colCount; i++) {
+                                html += '<td class="text-center"><span class="no-data-badge">Tiada</span></td>';
+                            }
+                            tr.innerHTML = html;
+                            tbodyEl.appendChild(tr);
+                        }
 
                         function getSelectedKod(){ var sel = document.getElementById('selectKont'); return sel && sel.value ? sel.value : ''; }
+                        function matchSearch(texts, keyword){
+                            var q = (keyword || '').toString().trim().toLowerCase();
+                            if (!q) return true;
+                            for (var i = 0; i < texts.length; i++) {
+                                var t = (texts[i] || '').toString().toLowerCase();
+                                if (t.indexOf(q) !== -1) return true;
+                            }
+                            return false;
+                        }
 
                         function renderPengurusPage(){
-                            var list = lastRows.pengurus || [];
+                            var rawList = lastRows.pengurus || [];
+                            var q = searchPengurus ? searchPengurus.value : '';
+                            var list = rawList.filter(function(p){
+                                return matchSearch([p.nama, p.jawatan, p.tel], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentPengurusPage > pages) currentPengurusPage = pages;
                             var start = (currentPengurusPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             pengurusBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(pengurusBody, 5);
+                            }
                             slice.forEach(function(p, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
                                     (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-pengurus">Cetak</button></td>';
                                 pengurusBody.appendChild(tr);
-                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'PENGURUS', <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-pengurus').addEventListener('click', function(){
+                                    var roleText = (p.jawatan || '').toString().trim();
+                                    if (!roleText) roleText = 'PENGURUS';
+                                    roleText = roleText.toUpperCase();
+                                    printDirectHtml(buildCertHtml(p.nama, roleText, <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>));
+                                });
                             });
                             try{ document.getElementById('pengurusPageInfo').textContent = 'Page ' + currentPengurusPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('pengurusPrev').disabled = currentPengurusPage <= 1; }catch(e){}
@@ -803,23 +885,36 @@ ob_start();
                         }
 
                         function renderJurulatihPage(){
-                            var list = lastRows.jurulatih || [];
+                            var rawList = lastRows.jurulatih || [];
+                            var q = searchJurulatih ? searchJurulatih.value : '';
+                            var list = rawList.filter(function(p){
+                                return matchSearch([p.nama, p.jawatan, p.tel], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentJurulatihPage > pages) currentJurulatihPage = pages;
                             var start = (currentJurulatihPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             jurulatihBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(jurulatihBody, 5);
+                            }
                             slice.forEach(function(p, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
                                 var telSafe = (p.tel || '').replace(/</g,'&lt;');
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>' +
                                     (function(){ return cellHtml(p.nama, false); })() +
+                                    (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-jurulatih">Cetak</button></td>';
                                 jurulatihBody.appendChild(tr);
-                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){ printDirectHtml(buildCertHtml(p.nama, 'JURULATIH', <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>)); });
+                                tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){
+                                    var roleText = (p.jawatan || '').toString().trim();
+                                    if (!roleText) roleText = 'JURULATIH';
+                                    roleText = roleText.toUpperCase();
+                                    printDirectHtml(buildCertHtml(p.nama, roleText, <?php echo json_encode(url('assets/img/sijil/sijil_jurulatih.jpeg')); ?>));
+                                });
                             });
                             try{ document.getElementById('jurulatihPageInfo').textContent = 'Page ' + currentJurulatihPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('jurulatihPrev').disabled = currentJurulatihPage <= 1; }catch(e){}
@@ -829,13 +924,20 @@ ob_start();
                         }
 
                         function renderAthletePage(){
-                            var list = lastRows.athletes || [];
+                            var rawList = lastRows.athletes || [];
+                            var q = searchAtlet ? searchAtlet.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.nama, r.sukan, r.acara], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentAthletePage > pages) currentAthletePage = pages;
                             var start = (currentAthletePage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             athleteBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(athleteBody, 4);
+                            }
                             slice.forEach(function(r, idx){
                                 var pid = r.id || '';
                                 var name = (r.nama || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -863,13 +965,20 @@ ob_start();
                         }
 
                         function renderPenyelarasPage(){
-                            var list = lastRows.penyelaras || [];
+                            var rawList = lastRows.penyelaras || [];
+                            var q = searchPenyelaras ? searchPenyelaras.value : '';
+                            var list = rawList.filter(function(r){
+                                return matchSearch([r.nama, r.emel, r.telefon], q);
+                            });
                             var total = list.length;
                             var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
                             if (currentPenyelarasPage > pages) currentPenyelarasPage = pages;
                             var start = (currentPenyelarasPage - 1) * PAGE_SIZE;
                             var slice = list.slice(start, start + PAGE_SIZE);
                             penyelarasBody.innerHTML = '';
+                            if (!slice.length) {
+                                appendNoDataRow(penyelarasBody, 5);
+                            }
                             slice.forEach(function(r, idx){
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
@@ -904,6 +1013,13 @@ ob_start();
                             document.getElementById('athleteNext').addEventListener('click', function(){ currentAthletePage++; renderAthletePage(); });
                         }catch(e){}
 
+                        try{
+                            if (searchPenyelaras) searchPenyelaras.addEventListener('input', function(){ currentPenyelarasPage = 1; renderPenyelarasPage(); });
+                            if (searchPengurus) searchPengurus.addEventListener('input', function(){ currentPengurusPage = 1; renderPengurusPage(); });
+                            if (searchJurulatih) searchJurulatih.addEventListener('input', function(){ currentJurulatihPage = 1; renderJurulatihPage(); });
+                            if (searchAtlet) searchAtlet.addEventListener('input', function(){ currentAthletePage = 1; renderAthletePage(); });
+                        }catch(e){}
+
                         // wire print all buttons to client-side print (build multi-page HTML and print via hidden iframe)
                         try{
                             var tmplPengurus = <?php echo json_encode(url('assets/img/sijil/sijil_pengurus.jpeg')); ?>;
@@ -933,9 +1049,9 @@ ob_start();
                                         // uppercase for athletes
                                         sukan_combo = (sukan_combo||'').toString().toUpperCase();
                                     } else {
-                                        // fixed labels for other types
-                                        if (type === 'pengurus') sukan_combo = 'PENGURUS';
-                                        else if (type === 'jurulatih') sukan_combo = 'JURULATIH';
+                                        // role label for other types
+                                        if (type === 'pengurus') sukan_combo = ((r.jawatan || '').toString().trim() || 'PENGURUS');
+                                        else if (type === 'jurulatih') sukan_combo = ((r.jawatan || '').toString().trim() || 'JURULATIH');
                                         else if (type === 'penyelaras') sukan_combo = 'KETUA KONTINJEN';
                                         else sukan_combo = '';
                                     }
@@ -1028,24 +1144,53 @@ ob_start();
                                         if (r.pengurus) {
                                             r.pengurus.split(' ||| ').forEach(function(praw){
                                                 var p = (praw||'').trim(); if(!p) return;
-                                                var m = p.match(/\(([^)]*)\)/);
-                                                var tel = m ? m[1].trim() : '';
-                                                // remove phone parentheses and trailing email
-                                                var clean = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
-                                                var key = (clean || p).toLowerCase();
-                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: clean || p, tel: tel };
-                                                else if (!pengurusMap[key].tel && tel) pengurusMap[key].tel = tel;
+                                                var nama = '', jawatan = '', tel = '';
+                                                if (p.indexOf('@@JAWATAN@@') !== -1) {
+                                                    var sNama = p.split('@@JAWATAN@@');
+                                                    nama = (sNama[0] || '').trim();
+                                                    var rest1 = (sNama[1] || '');
+                                                    var sTel = rest1.split('@@TEL@@');
+                                                    jawatan = (sTel[0] || '').trim();
+                                                    var rest2 = (sTel[1] || '');
+                                                    var sEmel = rest2.split('@@EMEL@@');
+                                                    tel = (sEmel[0] || '').trim();
+                                                } else {
+                                                    var m = p.match(/\(([^)]*)\)/);
+                                                    tel = m ? m[1].trim() : '';
+                                                    nama = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                }
+                                                var key = (nama || p).toLowerCase();
+                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel };
+                                                else {
+                                                    if (!pengurusMap[key].tel && tel) pengurusMap[key].tel = tel;
+                                                    if (!pengurusMap[key].jawatan && jawatan) pengurusMap[key].jawatan = jawatan;
+                                                }
                                             });
                                         }
                                         if (r.jurulatih) {
                                             r.jurulatih.split(' ||| ').forEach(function(jraw){
                                                 var j = (jraw||'').trim(); if(!j) return;
-                                                var mj = j.match(/\(([^)]*)\)/);
-                                                var jtTel = mj ? mj[1].trim() : '';
-                                                var cleanj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
-                                                var keyj = (cleanj || j).toLowerCase();
-                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: cleanj || j, tel: jtTel };
-                                                else if (!jurulatihMap[keyj].tel && jtTel) jurulatihMap[keyj].tel = jtTel;
+                                                var namaj = '', jawatanj = '', jtTel = '';
+                                                if (j.indexOf('@@JAWATAN@@') !== -1) {
+                                                    var sjNama = j.split('@@JAWATAN@@');
+                                                    namaj = (sjNama[0] || '').trim();
+                                                    var jRest1 = (sjNama[1] || '');
+                                                    var sjTel = jRest1.split('@@TEL@@');
+                                                    jawatanj = (sjTel[0] || '').trim();
+                                                    var jRest2 = (sjTel[1] || '');
+                                                    var sjEmel = jRest2.split('@@EMEL@@');
+                                                    jtTel = (sjEmel[0] || '').trim();
+                                                } else {
+                                                    var mj = j.match(/\(([^)]*)\)/);
+                                                    jtTel = mj ? mj[1].trim() : '';
+                                                    namaj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                }
+                                                var keyj = (namaj || j).toLowerCase();
+                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel };
+                                                else {
+                                                    if (!jurulatihMap[keyj].tel && jtTel) jurulatihMap[keyj].tel = jtTel;
+                                                    if (!jurulatihMap[keyj].jawatan && jawatanj) jurulatihMap[keyj].jawatan = jawatanj;
+                                                }
                                             });
                                         }
                                     });
@@ -1074,7 +1219,21 @@ ob_start();
         </div>
     </div>
 
-    </div>
+</div>
+
+<style>
+.no-data-badge{
+    display:inline-block;
+    padding:0.18rem 0.5rem;
+    border-radius:0.35rem;
+    background:#fdecea;
+    color:#842029;
+    border:1px solid #f5c2c7;
+    font-size:0.8rem;
+    font-weight:600;
+    line-height:1.2;
+}
+</style>
 
 <style>
 @media print {

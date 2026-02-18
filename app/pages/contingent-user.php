@@ -258,18 +258,16 @@ ob_start();
 
             var $table = $('<table class="table table-sm table-striped mb-0"><colgroup>' +
                 '<col style="width:3%"></col>' +
-                '<col style="width:22%"></col>' +
-                '<col style="width:12%"></col>' +
+                '<col style="width:27%"></col>' +
+                '<col style="width:15%"></col>' +
                 '<col style="width:10%"></col>' +
                 '<col style="width:10%"></col>' +
-                '<col style="width:10%"></col>' +
-                '<col style="width:10%"></col>' +
+                '<col style="width:15%"></col>' +
                 '<col style="width:20%"></col>' +
                 '</colgroup><thead><tr>' +
                 '<th>#</th>' +
                 '<th>Nama</th>' +
-                '<th>No Kad Pengenalan</th>' +
-                '<th>No Matrik</th>' +
+                '<th>Jawatan</th>' +
                 '<th>Peranan</th>' +
                 '<th>Sukan</th>' +
                 '<th>Pasukan</th>' +
@@ -441,14 +439,14 @@ ob_start();
                 var start = (currentPage - 1) * pageSize;
                 var end = start + pageSize;
                 $tbody.empty();
-                if (total === 0) { $tbody.append('<tr><td colspan="8">Tiada peserta untuk penapisan ini.</td></tr>'); }
+                if (total === 0) { $tbody.append('<tr><td colspan="7">Tiada peserta untuk penapisan ini.</td></tr>'); }
                 var pageRows = filtered.slice(start, end);
                 var athleteBefore = filtered.slice(0, start).filter(function(r){ return (r._role||'').toLowerCase() === 'atlet'; }).length;
                 var athleteCounter = athleteBefore;
                 pageRows.forEach(function(r, idx){
                     var name = r.nama || r.nama_peserta || r.nama_atlet || r.nama_pengurus || r.nama_jurulatih || '';
                     var nic = r.no_kad_pengenalan || r.ic || r.no_ic || r.mykad || '';
-                    var matrik = r.no_matrik || r.matrik || r.no_matrik || '';
+                    var jawatan = r.jawatan || '';
                     var role = r._role || '';
                     var sport = r.nama_sukan || ('Sukan ' + (r.sukan_id || ''));
                     // For Pengurus and Jurulatih, always show 'Tiada' for Acara (use empty value so badge is rendered)
@@ -476,8 +474,7 @@ ob_start();
                         $r.append($('<td class="text-center">').html(iconHtml));
                     }
                     $r.append(cell(name));
-                    $r.append(cell(nic));
-                    $r.append(cell(matrik));
+                    $r.append(cell(jawatan));
                     $r.append(cell(role));
                     $r.append(cell(sport));
                     $r.append(cell(team));

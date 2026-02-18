@@ -11,6 +11,19 @@ define('DB_PASS', 'Pend@ftar@2025?');
 define('DB_NAME', 'esportsdb');
 define('DB_CHARSET', 'utf8mb4');
 
+// Sybase ODBC defaults (can be overridden by env vars)
+// STAF DSN
+define('SYBASE_ESPORTS_STAF_DSN', 'SYBASE_ESPORTS_STAF');
+define('SYBASE_ESPORTS_STAF_USER', 'expdir');
+define('SYBASE_ESPORTS_STAF_PASS', 'X@directory1');
+// Backward-compat aliases
+define('SYBASE_ESPORTS_DSN', SYBASE_ESPORTS_STAF_DSN);
+define('SYBASE_ESPORTS_USER', SYBASE_ESPORTS_STAF_USER);
+define('SYBASE_ESPORTS_PASS', SYBASE_ESPORTS_STAF_PASS);
+define('SYBASE_ESPORTS_STUDENT_DSN', 'SYBASE_ESPORTS_STUDENT');
+define('SYBASE_ESPORTS_STUDENT_USER', 'dba_student');
+define('SYBASE_ESPORTS_STUDENT_PASS', 'mnpu123');
+
 // Database connection class
 class Database {
     private static $instance = null;
@@ -58,3 +71,75 @@ function getDB() {
     return Database::getInstance()->getConnection();
 }
 
+// Helper function to get Sybase (ODBC) connection
+function getSybaseConnection($dsn = null, $user = null, $pass = null) {
+    $dsn = $dsn ?: (getenv('SYBASE_ESPORTS_STAF_DSN') ?: getenv('SYBASE_ESPORTS_DSN') ?: SYBASE_ESPORTS_STAF_DSN);
+    $user = $user ?: (getenv('SYBASE_ESPORTS_STAF_USER') ?: getenv('SYBASE_ESPORTS_USER') ?: SYBASE_ESPORTS_STAF_USER);
+    $pass = ($pass !== null) ? $pass : (getenv('SYBASE_ESPORTS_STAF_PASS') ?: getenv('SYBASE_ESPORTS_PASS') ?: SYBASE_ESPORTS_STAF_PASS);
+
+    if (!function_exists('odbc_connect')) {
+        throw new Exception('ODBC extension tidak tersedia pada server PHP.');
+    }
+
+    $conn = @odbc_connect($dsn, $user, $pass);
+    if (!$conn) {
+        $code = function_exists('odbc_error') ? @odbc_error() : '';
+        $msg = function_exists('odbc_errormsg') ? @odbc_errormsg() : '';
+        throw new Exception('Sambungan Sybase gagal' . ($code ? ' [' . $code . ']' : '') . ($msg ? ': ' . $msg : '.'));
+    }
+
+    return $conn;
+}
+
+function getSybaseStudentConnection($dsn = null, $user = null, $pass = null) {
+    $dsn = $dsn ?: (getenv('SYBASE_ESPORTS_STUDENT_DSN') ?: SYBASE_ESPORTS_STUDENT_DSN);
+    $user = $user ?: (getenv('SYBASE_ESPORTS_STUDENT_USER') ?: SYBASE_ESPORTS_STUDENT_USER);
+    $pass = ($pass !== null) ? $pass : (getenv('SYBASE_ESPORTS_STUDENT_PASS') ?: SYBASE_ESPORTS_STUDENT_PASS);
+    return getSybaseConnection($dsn, $user, $pass);
+}
+
+function getSybaseOdbcErrorMessage($conn = null) {
+    if (function_exists('odbc_errormsg')) {
+        try {
+            $msg = $conn ? @odbc_errormsg($conn) : @odbc_errormsg();
+            if ($msg) return (string)$msg;
+        } catch (Throwable $e) {
+            // ignore and fallback
+        }
+    }
+    return 'Ralat ODBC tidak tersedia (pastikan extension ODBC aktif).';
+}
+
+function sybaseOdbcPrepare($conn, $sql) {
+    if (!function_exists('odbc_prepare')) {
+        throw new Exception('Fungsi ODBC tidak tersedia: odbc_prepare');
+    }
+    return @call_user_func('odbc_prepare', $conn, $sql);
+}
+
+function sybaseOdbcExecute($stmt, array $params = []) {
+    if (!function_exists('odbc_execute')) {
+        throw new Exception('Fungsi ODBC tidak tersedia: odbc_execute');
+    }
+    return @call_user_func('odbc_execute', $stmt, $params);
+}
+
+function sybaseOdbcExec($conn, $sql) {
+    if (!function_exists('odbc_exec')) {
+        throw new Exception('Fungsi ODBC tidak tersedia: odbc_exec');
+    }
+    return @call_user_func('odbc_exec', $conn, $sql);
+}
+
+function sybaseOdbcFetchArray($stmt) {
+    if (!function_exists('odbc_fetch_array')) {
+        throw new Exception('Fungsi ODBC tidak tersedia: odbc_fetch_array');
+    }
+    return @call_user_func('odbc_fetch_array', $stmt);
+}
+
+function sybaseOdbcClose($conn) {
+    if (function_exists('odbc_close')) {
+        @call_user_func('odbc_close', $conn);
+    }
+}

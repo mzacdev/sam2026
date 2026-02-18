@@ -100,6 +100,132 @@
 <script src="<?php echo asset('light/js/plugins/perfect-scrollbar.min.js'); ?>"></script>
 <script src="<?php echo asset('light/js/plugins/tippy4.min.js.js'); ?>"></script>
 <script src="<?php echo asset('light/js/main.js'); ?>"></script>
+
+<?php
+$idleTimeoutEnabled = false;
+try {
+    if (function_exists('getAuth')) {
+        $authInstance = getAuth();
+        $idleTimeoutEnabled = $authInstance && $authInstance->isLoggedIn();
+    } elseif (class_exists('Session')) {
+        $idleTimeoutEnabled = Session::has('user_id');
+    }
+} catch (Exception $e) {
+    $idleTimeoutEnabled = false;
+}
+?>
+<?php if ($idleTimeoutEnabled): ?>
+<script>
+(function(){
+    // PRODUCTION CONFIG:
+    // - Warning after 10 minutes idle
+    // - Force logout 1 minute after warning (if user does not click Stay Connected)
+    var warningAfterMs = 10 * 60 * 1000;
+    var forceLogoutAfterMs = 60 * 1000;
+    var logoutUrl = <?php echo json_encode(url('auth/logout.php')); ?>;
+
+    var lastActivityAt = Date.now();
+    var warningShown = false;
+    var tickTimer = null;
+    var countdownTimer = null;
+
+    function markActivity(){
+        // While warning is visible, do not auto-close/auto-reset session.
+        // User must explicitly click "Stay Connected".
+        if (warningShown) return;
+        lastActivityAt = Date.now();
+    }
+
+    function attachActivityListeners(){
+        ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function(evt){
+            window.addEventListener(evt, markActivity, { passive: true });
+        });
+    }
+
+    function startTicker(){
+        if (tickTimer) clearInterval(tickTimer);
+        tickTimer = setInterval(function(){
+            if (warningShown) return;
+            if ((Date.now() - lastActivityAt) >= warningAfterMs) {
+                showWarning();
+            }
+        }, 1000);
+    }
+
+    function goLogout(){
+        try { if (countdownTimer) clearInterval(countdownTimer); } catch(e){}
+        window.location.href = logoutUrl + '?reason=idle';
+    }
+
+    function ensureSwal(cb){
+        if (window.Swal && typeof window.Swal.fire === 'function') return cb(true);
+        var js = document.createElement('script');
+        js.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js';
+        js.onload = function(){ cb(!!(window.Swal && window.Swal.fire)); };
+        js.onerror = function(){ cb(false); };
+        document.head.appendChild(js);
+    }
+
+    function stayConnected(){
+        warningShown = false;
+        lastActivityAt = Date.now();
+        try { if (countdownTimer) clearInterval(countdownTimer); } catch(e){}
+        try {
+            if (window.Swal && window.Swal.isVisible && window.Swal.isVisible()) {
+                window.Swal.close();
+            }
+        } catch(e){}
+    }
+
+    function showWarning(){
+        warningShown = true;
+        var secondsLeft = Math.max(1, Math.floor(forceLogoutAfterMs / 1000));
+
+        ensureSwal(function(ok){
+            if (!ok) {
+                // Fallback if SweetAlert cannot load
+                if (confirm('Sesi akan tamat. Klik OK untuk kekal log masuk, Cancel untuk logout.')) {
+                    stayConnected();
+                } else {
+                    goLogout();
+                }
+                return;
+            }
+
+            countdownTimer = setInterval(function(){
+                secondsLeft--;
+                if (secondsLeft <= 0) {
+                    clearInterval(countdownTimer);
+                    goLogout();
+                    return;
+                }
+                var cEl = document.getElementById('idle-countdown');
+                if (cEl) cEl.textContent = String(Math.max(0, secondsLeft));
+            }, 1000);
+
+            window.Swal.fire({
+                icon: 'warning',
+                title: 'Sesi Anda Hampir Tamat',
+                html: 'Anda tidak aktif. Sistem akan logout dalam <b id="idle-countdown">' + secondsLeft + '</b> saat.',
+                showCancelButton: true,
+                confirmButtonText: 'Stay Connected',
+                cancelButtonText: 'Logout',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then(function(result){
+                if (result.isConfirmed) {
+                    stayConnected();
+                    return;
+                }
+                goLogout();
+            });
+        });
+    }
+
+    attachActivityListeners();
+    startTicker();
+})();
+</script>
+<?php endif; ?>
 </body>
 </html>
-

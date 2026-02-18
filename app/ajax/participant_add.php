@@ -65,6 +65,7 @@ try {
     $no_matrik = isset($input['no_matrik']) ? trim($input['no_matrik']) : null;
     $no_telefon = isset($input['no_telefon']) ? trim($input['no_telefon']) : null;
     $emel = isset($input['emel']) ? trim($input['emel']) : null;
+    $jawatan = isset($input['jawatan']) ? trim($input['jawatan']) : null;
     $kategori_id = isset($input['kategori_id']) && !empty($input['kategori_id']) ? (int)$input['kategori_id'] : null;
     
     // Validation
@@ -78,6 +79,21 @@ try {
     
     if (empty($nama)) {
         throw new Exception('Nama peserta diperlukan.');
+    }
+
+    if ($participant_type === 'pengurus' || $participant_type === 'jurulatih') {
+        if ($jawatan === null || $jawatan === '') {
+            throw new Exception('Jawatan wajib dipilih untuk Pengurus/Jurulatih.');
+        }
+        $jawatan = mb_strtoupper($jawatan, 'UTF-8');
+        $allowedJawatan = $participant_type === 'pengurus'
+            ? ['PENGURUS', 'PENOLONG PENGURUS']
+            : ['JURULATIH', 'PENOLONG JURULATIH'];
+        if (!in_array($jawatan, $allowedJawatan, true)) {
+            throw new Exception('Jawatan tidak sah untuk jenis peserta dipilih.');
+        }
+    } else {
+        $jawatan = null;
     }
     
     // Validate IC format if provided
@@ -151,11 +167,11 @@ try {
         ],
         'pengurus' => [
             'table' => 'table_pasukan_pengurus',
-            'fields' => ['pasukan_id', 'nama', 'no_kad_pengenalan']
+            'fields' => ['pasukan_id', 'nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'jawatan']
         ],
         'jurulatih' => [
             'table' => 'table_pasukan_jurulatih',
-            'fields' => ['pasukan_id', 'nama', 'no_kad_pengenalan']
+            'fields' => ['pasukan_id', 'nama', 'no_kad_pengenalan', 'no_telefon', 'emel', 'jawatan']
         ]
     ];
     
@@ -191,6 +207,10 @@ try {
     if (in_array('emel', $fields)) {
         $params[':emel'] = $emel;
     }
+
+    if (in_array('jawatan', $fields)) {
+        $params[':jawatan'] = $jawatan;
+    }
     
     if (in_array('kategori_id', $fields)) {
         $params[':kategori_id'] = $kategori_id;
@@ -220,4 +240,3 @@ try {
         'message' => $e->getMessage()
     ]);
 }
-

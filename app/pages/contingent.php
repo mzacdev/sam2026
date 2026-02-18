@@ -390,6 +390,7 @@ ob_start();
                                                 // Prefer university status returned by query
                                                 $statusText = isset($c['status_universiti']) ? $c['status_universiti'] : ((isset($c['status']) && (int)$c['status'] === 1) ? 'Aktif' : 'Tidak Aktif');
                                                 $badgeClass = ($statusText === 'Aktif') ? 'bg-success' : 'bg-secondary';
+                                                $statusValue = ($statusText === 'Aktif') ? 1 : 0;
                                                 ?>
                                                 <span class="badge <?php echo $badgeClass; ?>"><?php echo htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8'); ?></span>
                                             </td>
@@ -401,7 +402,7 @@ ob_start();
                                                    data-alamat="<?php echo htmlspecialchars($c['alamat'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                    data-emel="<?php echo htmlspecialchars($c['emel'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                    data-phone="<?php echo htmlspecialchars($c['no_telefon'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                   data-status="<?php echo (int)$status; ?>"
+                                                   data-status="<?php echo (int)$statusValue; ?>"
                                                 >
                                                     <i class="fa fa-edit"></i>
                                                 </a>
@@ -562,6 +563,7 @@ function reloadContingentTable(callback) {
                 contingents.forEach(function(c, i) {
                     // Determine status text from server-provided status_universiti, fallback to numeric status
                     const statusText = (c.status_universiti !== undefined) ? String(c.status_universiti) : ((c.status !== undefined && parseInt(c.status) === 1) ? 'Aktif' : 'Tidak Aktif');
+                    const status = (c.status !== undefined) ? parseInt(c.status) : ((statusText === 'Aktif') ? 1 : 0);
                     const badgeClass = (statusText === 'Aktif') ? 'bg-success' : 'bg-secondary';
                     const jumlahAtlet = (c.jumlah_atlet !== undefined) ? parseInt(c.jumlah_atlet) : 0;
                     const athleteBadge = (jumlahAtlet === 0) ? 'bg-danger' : 'bg-primary';
