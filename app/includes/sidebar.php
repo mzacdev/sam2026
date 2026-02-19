@@ -12,6 +12,8 @@ $iconMap = [
     'cil-id-card' => 'ti-id-badge',
 ];
 
+$rbacDebugEnabled = isset($_GET['rbac_debug']) && (string)$_GET['rbac_debug'] === '1';
+
 // Get current user and RBAC if authenticated (layout.php may already provide this)
 $rbac = $rbac ?? null;
 if (!defined('SKIP_AUTH_CHECK') && $rbac === null) {
@@ -156,6 +158,15 @@ if ($rbac) {
             }
         }
     }
+} else {
+    // Security default: if RBAC is unavailable, do not expose all menu items.
+    if ($useSections) {
+        foreach ($nav_sections as $sidx => $section) {
+            $nav_sections[$sidx]['children'] = [];
+        }
+    } else {
+        $displayNavItems = [];
+    }
 }
 // auth state for logout
 $auth = function_exists('getAuth') ? getAuth() : null;
@@ -171,6 +182,76 @@ try {
 } catch (Exception $e) {
     // ignore
 }
+
+// Optional RBAC debug dump to browser console (?rbac_debug=1)
+$rbacDebugPayload = null;
+if ($rbacDebugEnabled) {
+    try {
+        $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+        $scriptPath = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? $_SERVER['PHP_SELF'] ?? ''));
+        $baseUrl = '/' . trim(str_replace('\\', '/', (string)BASE_URL), '/');
+        if ($baseUrl === '//') {
+            $baseUrl = '/';
+        }
+        if ($baseUrl !== '/' && strpos($scriptPath, $baseUrl . '/') === 0) {
+            $currentRelative = substr($scriptPath, strlen($baseUrl) + 1);
+        } else {
+            $currentRelative = ltrim($scriptPath, '/');
+        }
+        if (strpos($currentRelative, 'app/') === 0) {
+            $currentRelative = substr($currentRelative, 4);
+        }
+        if ($currentRelative === '' || $currentRelative === '/') {
+            $currentRelative = 'index.php';
+        }
+
+        $menuChecks = [];
+        if (isset($nav_sections) && is_array($nav_sections)) {
+            foreach ($nav_sections as $section) {
+                if (!isset($section['children']) || !is_array($section['children'])) continue;
+                foreach ($section['children'] as $child) {
+                    $u = (string)($child['url'] ?? '');
+                    if ($u === '') continue;
+                    $menuChecks[] = [
+                        'section' => (string)($section['title'] ?? ''),
+                        'title' => (string)($child['title'] ?? $u),
+                        'url' => $u,
+                        'status' => $rbac->getPageAccessStatus($u),
+                        'allowed' => $rbac->hasPageAccess($u) ? 1 : 0,
+                    ];
+                }
+            }
+        } else {
+            foreach (($nav_items ?? []) as $item) {
+                $u = (string)($item['url'] ?? '');
+                if ($u === '') continue;
+                $menuChecks[] = [
+                    'section' => 'Top',
+                    'title' => (string)($item['title'] ?? $u),
+                    'url' => $u,
+                    'status' => $rbac->getPageAccessStatus($u),
+                    'allowed' => $rbac->hasPageAccess($u) ? 1 : 0,
+                ];
+            }
+        }
+
+        $rbacDebugPayload = [
+            'email' => (string)(Session::get('user_email') ?? ''),
+            'session_role' => (string)(Session::get('user_role') ?? ''),
+            'session_user_id' => (string)(Session::get('user_id') ?? ''),
+            'script_name' => (string)($_SERVER['SCRIPT_NAME'] ?? ''),
+            'request_path' => $requestPath,
+            'current_relative' => $currentRelative,
+            'current_page_status' => $rbac->getPageAccessStatus($currentRelative),
+            'current_page_allowed' => $rbac->hasPageAccess($currentRelative) ? 1 : 0,
+            'menu_checks' => $menuChecks,
+        ];
+    } catch (Exception $e) {
+        $rbacDebugPayload = [
+            'error' => 'RBAC debug build failed: ' . $e->getMessage(),
+        ];
+    }
+}
 ?>
 <!-- Side Header Start -->
 <div class="side-header show">
@@ -180,7 +261,7 @@ try {
             <ul>
                 <?php // Dashboard first ?>
                 <?php if ($rbac && $rbac->isNavItemVisible('index.php')): ?>
-                    <li class="<?php echo (basename($_SERVER['PHP_SELF']) === 'index.php') ? 'active' : ''; ?>">
+                    <li class="<?php echo (basename($_SERVER['PHP_SELF']) === 'index.php' || basename($_SERVER['PHP_SELF']) === 'dashboard.php') ? 'active' : ''; ?>">
                         <a href="<?php echo url('index.php'); ?>"><i class="ti-home"></i> <span>Dashboard</span></a>
                     </li>
                 <?php endif; ?>
@@ -301,3 +382,32 @@ try {
     </div>
 </div>
 <!-- Side Header End -->
+<?php if ($rbacDebugEnabled && $rbacDebugPayload !== null): ?>
+<script>
+    (function() {
+        const data = <?php echo json_encode($rbacDebugPayload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        console.group('[RBAC DEBUG]');
+        console.log('User:', {
+            email: data.email,
+            session_role: data.session_role,
+            session_user_id: data.session_user_id
+        });
+        console.log('Path:', {
+            script_name: data.script_name,
+            request_path: data.request_path,
+            current_relative: data.current_relative,
+            current_page_status: data.current_page_status,
+            current_page_allowed: data.current_page_allowed
+        });
+        if (Array.isArray(data.menu_checks)) {
+            console.table(data.menu_checks);
+        } else {
+            console.log('menu_checks:', data.menu_checks);
+        }
+        if (data.error) {
+            console.error(data.error);
+        }
+        console.groupEnd();
+    })();
+</script>
+<?php endif; ?>

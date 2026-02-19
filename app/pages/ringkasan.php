@@ -120,13 +120,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'managers') {
                 COALESCE(r.nama_pendek, r.nama_universiti, k.kod_universiti) AS kontinjen,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(pp.nama, IFNULL(CONCAT(' (', pp.no_telefon, ')'), ''), IF(pp.emel IS NOT NULL AND pp.emel <> '', CONCAT(' ', pp.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(DISTINCT TRIM(COALESCE(pp.nama, '')) SEPARATOR ' ||| '),
                         ''
                     )
                 ) AS pengurus,
                 TRIM(
                     COALESCE(
-                        GROUP_CONCAT(DISTINCT CONCAT(j.nama, IFNULL(CONCAT(' (', j.no_telefon, ')'), ''), IF(j.emel IS NOT NULL AND j.emel <> '', CONCAT(' ', j.emel), '')) SEPARATOR ' ||| '),
+                        GROUP_CONCAT(DISTINCT TRIM(COALESCE(j.nama, '')) SEPARATOR ' ||| '),
                         ''
                     )
                 ) AS jurulatih
@@ -544,8 +544,8 @@ ob_start();
                                             <th style="width:5%;" class="bil-col text-center">BIL</th>
                                             <th style="width:10%;">KONTINJEN</th>
                                             <th style="width:15%;">ACARA</th>
-                                            <th style="width:35%;">PENGURUS (Telefon / Emel)</th>
-                                            <th style="width:35%;">JURULATIH (Telefon / Emel)</th>
+                                            <th style="width:35%;">PENGURUS</th>
+                                            <th style="width:35%;">JURULATIH</th>
                                         </tr>
                             </thead>
                             <tbody>
@@ -616,6 +616,18 @@ table.table thead th {
 /* But center the Bil column header specifically */
 table.table thead th.bil-col {
     text-align: center !important;
+}
+/* Tab 2 (Ringkasan Acara): header from Jantina until total should be right-aligned */
+#pane-acara table thead th:nth-child(n+3) {
+    text-align: right !important;
+}
+/* Keep Bil in Tab 2 centered */
+#pane-acara table thead th.bil-col {
+    text-align: center !important;
+}
+/* Tab 3 (Pengurus & Jurulatih): all table data top-aligned */
+#pane-managers #managersTable tbody td {
+    vertical-align: top !important;
 }
 </style>
 <script>

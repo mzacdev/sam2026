@@ -15,13 +15,23 @@ if (!defined('SKIP_AUTH_CHECK')) {
     $auth = getAuth();
     $rbac = getRBAC();
 
-    $currentPage = $_SERVER['PHP_SELF'] ?? 'index.php';
-    $scriptPath = str_replace('\\', '/', $currentPage);
-    $basePath = str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] . BASE_URL);
-    $relativePath = str_replace($basePath, '', $scriptPath);
-    $relativePath = ltrim($relativePath, '/');
+    $scriptPath = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? $_SERVER['PHP_SELF'] ?? 'index.php'));
+    $baseUrl = '/' . trim(str_replace('\\', '/', (string)BASE_URL), '/');
+    if ($baseUrl === '//') {
+        $baseUrl = '/';
+    }
 
-    if (empty($relativePath) || $relativePath === 'index.php') {
+    if ($baseUrl !== '/' && strpos($scriptPath, $baseUrl . '/') === 0) {
+        $relativePath = substr($scriptPath, strlen($baseUrl) + 1);
+    } else {
+        $relativePath = ltrim($scriptPath, '/');
+    }
+
+    if (strpos($relativePath, 'app/') === 0) {
+        $relativePath = substr($relativePath, 4);
+    }
+
+    if ($relativePath === '' || $relativePath === '/' || $relativePath === 'index.php') {
         $relativePath = 'index.php';
     }
 

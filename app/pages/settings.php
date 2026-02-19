@@ -54,7 +54,7 @@ ob_start();
                         <button type="button" class="button button-outline button-secondary mr-10" onclick="resetAllSettings()">
                             <i class="zmdi zmdi-refresh mr-5"></i> Reset
                         </button>
-                        <button type="button" class="button button-primary" onclick="saveAllSettings()">
+                        <button type="button" class="button button-primary" onclick="saveAllSettings(this)">
                             <i class="zmdi zmdi-save mr-5"></i> Simpan Semua
                         </button>
                     </div>
@@ -517,6 +517,11 @@ ob_start();
                                     <input type="text" class="form-control" id="emailFromName" name="emailFromName" 
                                            value="SAM 2026">
                                 </div>
+                                <div class="mb-3">
+                                    <button type="button" class="button button-outline button-info" onclick="testSmtp(this)">
+                                        <i class="zmdi zmdi-email mr-5"></i> Test SMTP
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -707,22 +712,38 @@ ob_start();
                                 <div class="mb-3">
                                     <label for="headerLogo" class="form-label">Logo Header</label>
                                     <input type="file" class="form-control" id="headerLogo" name="headerLogo" accept="image/*">
+                                    <input type="hidden" id="headerLogoPath" name="headerLogoPath" value="<?php echo htmlspecialchars((string)app_setting('logoSettingsForm.headerLogoPath', LOGO_HEADER), ENT_QUOTES, 'UTF-8'); ?>">
                                     <div class="form-text">Logo yang dipaparkan di header (disyorkan: 180x180px)</div>
                                     <div class="mt-2">
-                                        <img src="<?php echo logo(LOGO_HEADER); ?>" alt="Current Logo" class="img-thumbnail" style="max-height: 60px;">
+                                        <img id="headerLogoPreview" src="<?php echo logo(LOGO_HEADER); ?>" alt="Current Logo" class="img-thumbnail" style="max-height: 60px;">
                                     </div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="favicon" class="form-label">Favicon</label>
                                     <input type="file" class="form-control" id="favicon" name="favicon" accept="image/*">
+                                    <input type="hidden" id="faviconPath" name="faviconPath" value="<?php echo htmlspecialchars((string)app_setting('logoSettingsForm.faviconPath', LOGO_FAVICON), ENT_QUOTES, 'UTF-8'); ?>">
                                     <div class="form-text">Ikon untuk tab pelayar (disyorkan: 32x32px atau 16x16px)</div>
+                                    <div class="mt-2">
+                                        <img id="faviconPreview" src="<?php echo logo(LOGO_FAVICON); ?>" alt="Current Favicon" class="img-thumbnail" style="max-height: 40px;">
+                                    </div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="backgroundImage" class="form-label">Gambar Latar Belakang</label>
                                     <input type="file" class="form-control" id="backgroundImage" name="backgroundImage" accept="image/*">
+                                    <input type="hidden" id="backgroundImagePath" name="backgroundImagePath" value="<?php echo htmlspecialchars((string)app_setting('logoSettingsForm.backgroundImagePath', ''), ENT_QUOTES, 'UTF-8'); ?>">
                                     <div class="form-text">Gambar latar belakang untuk semua halaman</div>
+                                    <?php $bgPath = (string)app_setting('logoSettingsForm.backgroundImagePath', ''); ?>
+                                    <?php if ($bgPath !== ''): ?>
+                                    <div class="mt-2">
+                                        <img id="backgroundImagePreview" src="<?php echo url('assets/img/backgrounds/' . $bgPath); ?>" alt="Current Background" class="img-thumbnail" style="max-height: 60px;">
+                                    </div>
+                                    <?php else: ?>
+                                    <div class="mt-2">
+                                        <img id="backgroundImagePreview" src="" alt="Current Background" class="img-thumbnail d-none" style="max-height: 60px;">
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </form>
                         </div>
@@ -793,10 +814,10 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <button type="button" class="button button-outline button-primary mr-10" onclick="createBackup()">
+                                    <button type="button" class="button button-outline button-primary mr-10" onclick="createBackup(this)">
                                         <i class="zmdi zmdi-save mr-5"></i> Buat Backup Sekarang
                                     </button>
-                                    <button type="button" class="button button-outline button-success" onclick="exportData()">
+                                    <button type="button" class="button button-outline button-success" onclick="exportData(this)">
                                         <i class="zmdi zmdi-download mr-5"></i> Eksport Data
                                     </button>
                                 </div>
@@ -867,10 +888,10 @@ ob_start();
                                 </div>
 
                                 <div class="mb-3">
-                                    <button type="button" class="button button-outline button-info mr-10" onclick="viewLogs()">
+                                    <button type="button" class="button button-outline button-info mr-10" onclick="viewLogs(this)">
                                         <i class="zmdi zmdi-format-list-bulleted mr-5"></i> Lihat Log
                                     </button>
-                                    <button type="button" class="button button-outline button-warning" onclick="clearLogs()">
+                                    <button type="button" class="button button-outline button-warning" onclick="clearLogs(this)">
                                         <i class="zmdi zmdi-delete mr-5"></i> Kosongkan Log
                                     </button>
                                 </div>
@@ -883,105 +904,459 @@ ob_start();
 
     </div>
 
-    <!-- Save Success Alert -->
-    <div class="alert alert-success alert-dismissible fade d-none" id="saveSuccessAlert" role="alert">
-        <i class="zmdi zmdi-check-circle me-2"></i>
-        <strong>Berjaya!</strong> Tetapan telah disimpan.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-
-    <!-- Save Error Alert -->
-    <div class="alert alert-danger alert-dismissible fade d-none" id="saveErrorAlert" role="alert">
-        <i class="zmdi zmdi-alert-triangle me-2"></i>
-        <strong>Ralat!</strong> Gagal menyimpan tetapan. Sila cuba lagi.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
 </div>
 
 <script>
+const SETTINGS_API_URL = <?php echo json_encode(url('api/settings.php')); ?>;
+const HAS_SWAL = () => !!(window.Swal && typeof window.Swal.fire === 'function');
+
+function uiSuccess(title, text) {
+    if (HAS_SWAL()) return Swal.fire({ icon: 'success', title, text });
+    if (typeof Toast !== 'undefined' && typeof Toast.success === 'function') {
+        Toast.success(text || title || 'Berjaya');
+    } else {
+        console.log('[SETTINGS][success] ' + (text || title || 'Berjaya'));
+    }
+    return Promise.resolve();
+}
+
+function uiError(title, text) {
+    if (HAS_SWAL()) return Swal.fire({ icon: 'error', title, text });
+    if (typeof Toast !== 'undefined' && typeof Toast.error === 'function') {
+        Toast.error((title ? title + ': ' : '') + (text || 'Ralat.'));
+    } else {
+        console.error('[SETTINGS][error] ' + (title ? title + ': ' : '') + (text || 'Ralat.'));
+    }
+    return Promise.resolve();
+}
+
+function uiInfo(title, text) {
+    if (HAS_SWAL()) return Swal.fire({ icon: 'info', title, text });
+    if (typeof Toast !== 'undefined' && typeof Toast.info === 'function') {
+        Toast.info(text || title || 'Makluman');
+    } else {
+        console.log('[SETTINGS][info] ' + (text || title || 'Makluman'));
+    }
+    return Promise.resolve();
+}
+
+async function uiConfirm(title, text, confirmText) {
+    if (HAS_SWAL()) {
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: title || 'Pengesahan',
+            text: text || '',
+            showCancelButton: true,
+            confirmButtonText: confirmText || 'Ya',
+            cancelButtonText: 'Batal',
+            reverseButtons: true
+        });
+        return !!(res && res.isConfirmed);
+    }
+    if (typeof Toast !== 'undefined' && typeof Toast.info === 'function') {
+        Toast.info(text || title || 'Pengesahan diperlukan.');
+    }
+    return false;
+}
+
+function uiLoading(title, text) {
+    if (!HAS_SWAL()) return;
+    Swal.fire({
+        title: title || 'Sila tunggu',
+        text: text || 'Sedang diproses...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+}
+
+function uiCloseLoading() {
+    if (HAS_SWAL()) Swal.close();
+}
+
+function setBtnLoading(btn, loadingText) {
+    if (!btn) return () => {};
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ' + (loadingText || 'Memproses...');
+    return () => {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    };
+}
+
+function collectFormValues(form) {
+    const data = {};
+    const fields = form.querySelectorAll('input[name], select[name], textarea[name]');
+    fields.forEach(el => {
+        if (el.disabled) return;
+        const name = el.name;
+        if (!name) return;
+        if (el.type === 'file') return;
+
+        if (el.type === 'checkbox') {
+            if (name.endsWith('[]')) {
+                if (!Array.isArray(data[name])) data[name] = [];
+                if (el.checked) data[name].push(el.value);
+            } else {
+                data[name] = !!el.checked;
+            }
+            return;
+        }
+
+        if (el.type === 'radio') {
+            if (el.checked) data[name] = el.value;
+            return;
+        }
+
+        data[name] = el.value;
+    });
+    return data;
+}
+
+function applyFormValues(form, values) {
+    if (!form || !values || typeof values !== 'object') return;
+    const fields = form.querySelectorAll('input[name], select[name], textarea[name]');
+    fields.forEach(el => {
+        const name = el.name;
+        if (!name || !(name in values)) return;
+        if (el.type === 'file') return;
+
+        const incoming = values[name];
+        if (el.type === 'checkbox') {
+            if (name.endsWith('[]')) {
+                const arr = Array.isArray(incoming) ? incoming.map(String) : [];
+                el.checked = arr.includes(String(el.value));
+            } else {
+                el.checked = !!incoming;
+            }
+            return;
+        }
+
+        if (el.type === 'radio') {
+            el.checked = (String(el.value) === String(incoming));
+            return;
+        }
+
+        el.value = incoming ?? '';
+    });
+}
+
+async function loadAllSettings() {
+    try {
+        const res = await fetch(SETTINGS_API_URL, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json || !json.ok || !json.data || typeof json.data !== 'object') return;
+
+        Object.keys(json.data).forEach(formId => {
+            const form = document.getElementById(formId);
+            if (!form) return;
+            applyFormValues(form, json.data[formId]);
+        });
+    } catch (e) {
+        console.error('Load settings error:', e);
+    }
+}
+
 // Save all settings
-function saveAllSettings() {
+async function saveAllSettings(saveBtn) {
     // Collect all form data
     const allForms = document.querySelectorAll('#settingsTabContent form');
     const allData = {};
     
     allForms.forEach(form => {
-        const formData = new FormData(form);
         const formId = form.id;
-        allData[formId] = {};
-        
-        for (let [key, value] of formData.entries()) {
-            if (allData[formId][key]) {
-                // Handle multiple values (checkboxes, etc.)
-                if (Array.isArray(allData[formId][key])) {
-                    allData[formId][key].push(value);
-                } else {
-                    allData[formId][key] = [allData[formId][key], value];
-                }
-            } else {
-                allData[formId][key] = value;
-            }
-        }
+        allData[formId] = collectFormValues(form);
     });
     
     // Show loading
-    const saveBtn = event.target;
-    const originalText = saveBtn.innerHTML;
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...';
-    
-    // Simulate save (replace with actual AJAX call)
-    setTimeout(() => {
-        // Show success message
-        const successAlert = document.getElementById('saveSuccessAlert');
-        successAlert.classList.remove('d-none');
-        successAlert.classList.add('show');
-        
-        // Reset button
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalText;
-        
-        // Hide alert after 3 seconds
-        setTimeout(() => {
-            successAlert.classList.remove('show');
-            setTimeout(() => successAlert.classList.add('d-none'), 150);
-        }, 3000);
-    }, 1000);
+    if (!saveBtn) return;
+    const doneBtn = setBtnLoading(saveBtn, 'Menyimpan...');
+    uiLoading('Simpan Tetapan', 'Sedang menyimpan semua tetapan...');
+
+    try {
+        const res = await fetch(SETTINGS_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ data: allData })
+        });
+        const json = await res.json();
+        if (!res.ok || !json || !json.ok) {
+            let msg = (json && json.error) ? json.error : 'Gagal menyimpan tetapan.';
+            if (json && Array.isArray(json.errors) && json.errors.length) {
+                msg += ' ' + json.errors.slice(0, 3).join(' | ');
+            }
+            throw new Error(msg);
+        }
+        uiCloseLoading();
+        await uiSuccess('Berjaya', json.message || 'Tetapan telah disimpan.');
+    } catch (err) {
+        console.error('Save settings error:', err);
+        uiCloseLoading();
+        await uiError('Ralat', (err && err.message) ? err.message : 'Gagal menyimpan tetapan. Sila cuba lagi.');
+    } finally {
+        doneBtn();
+    }
 }
 
 // Reset all settings
 function resetAllSettings() {
-    if (confirm('Adakah anda pasti mahu reset semua tetapan kepada nilai lalai?')) {
-        // Reload page or reset forms
-        location.reload();
+    uiConfirm('Reset Tetapan', 'Adakah anda pasti mahu reset semua tetapan kepada nilai lalai?', 'Reset').then(ok => {
+        if (ok) location.reload();
+    });
+}
+
+async function testSmtp(btn) {
+    const smtpHost = (document.getElementById('smtpHost')?.value || '').trim();
+    const smtpPort = parseInt(document.getElementById('smtpPort')?.value || '0', 10);
+    if (!smtpHost || !smtpPort) {
+        uiInfo('Maklumat Tidak Lengkap', 'Sila isi SMTP Host dan SMTP Port dahulu.');
+        return;
+    }
+    const doneBtn = setBtnLoading(btn, 'Testing...');
+    uiLoading('Ujian SMTP', 'Sedang menguji sambungan SMTP...');
+    try {
+        const res = await fetch(SETTINGS_API_URL + '?action=test_smtp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ smtpHost, smtpPort })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Test SMTP gagal.');
+        uiCloseLoading();
+        await uiSuccess('Berjaya', json.message || 'SMTP berjaya diuji.');
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Test SMTP Gagal', e.message || 'Unknown error');
+    } finally {
+        doneBtn();
     }
 }
 
 // Create backup
-function createBackup() {
-    alert('Fungsi backup akan dilaksanakan kemudian.');
+async function createBackup(btn) {
+    const doneBtn = setBtnLoading(btn, 'Membuat backup...');
+    uiLoading('Backup Sistem', 'Sedang menjana fail backup...');
+    try {
+        const res = await fetch(SETTINGS_API_URL + '?action=create_backup', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Gagal buat backup.');
+        if (json.download_url) {
+            window.open(json.download_url, '_blank');
+        }
+        uiCloseLoading();
+        await uiSuccess('Berjaya', json.message || 'Backup berjaya dibuat.');
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Backup Gagal', e.message || 'Unknown error');
+    } finally {
+        doneBtn();
+    }
 }
 
 // Export data
-function exportData() {
-    alert('Fungsi eksport data akan dilaksanakan kemudian.');
+async function exportData(btn) {
+    const doneBtn = setBtnLoading(btn, 'Mengeksport...');
+    uiLoading('Eksport Data', 'Sedang menjana fail eksport...');
+    try {
+        const res = await fetch(SETTINGS_API_URL + '?action=export_data', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Gagal eksport data.');
+        if (json.download_url) {
+            window.open(json.download_url, '_blank');
+        }
+        uiCloseLoading();
+        await uiSuccess('Berjaya', json.message || 'Eksport data berjaya.');
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Eksport Gagal', e.message || 'Unknown error');
+    } finally {
+        doneBtn();
+    }
 }
 
 // View logs
-function viewLogs() {
-    alert('Fungsi lihat log akan dilaksanakan kemudian.');
+async function viewLogs(btn) {
+    const doneBtn = setBtnLoading(btn, 'Memuat log...');
+    uiLoading('Log Audit', 'Sedang memuatkan log terkini...');
+    try {
+        const res = await fetch(SETTINGS_API_URL + '?action=view_logs', {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Gagal dapatkan log.');
+        const rows = Array.isArray(json.rows) ? json.rows : [];
+        if (!rows.length) {
+            uiCloseLoading();
+            await uiInfo('Log Audit', 'Tiada log untuk dipaparkan.');
+            return;
+        }
+        const safe = (v) => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        const body = rows.slice(0, 100).map(r => (
+            `<tr>
+                <td>${safe(r.id)}</td>
+                <td>${safe(r.created_at)}</td>
+                <td>${safe(r.action)}</td>
+                <td>${safe(r.description || '')}</td>
+            </tr>`
+        )).join('');
+        uiCloseLoading();
+        if (HAS_SWAL()) {
+            await Swal.fire({
+                title: 'Log Audit (100 terkini)',
+                width: '900px',
+                html: `<div style="max-height:55vh;overflow:auto;text-align:left">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead><tr><th style="width:70px">ID</th><th style="width:170px">Tarikh</th><th style="width:140px">Aksi</th><th>Keterangan</th></tr></thead>
+                        <tbody>${body}</tbody>
+                    </table>
+                </div>`,
+                showConfirmButton: true,
+                confirmButtonText: 'Tutup'
+            });
+        } else {
+            const preview = rows.slice(0, 20).map(r => `#${r.id} [${r.created_at}] ${r.action} - ${r.description || ''}`).join('\n');
+            console.log('[SETTINGS][logs]\\n' + preview);
+            await uiInfo('Log Audit', 'Log telah dipaparkan di console browser.');
+        }
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Lihat Log Gagal', e.message || 'Unknown error');
+    } finally {
+        doneBtn();
+    }
 }
 
 // Clear logs
-function clearLogs() {
-    if (confirm('Adakah anda pasti mahu kosongkan semua log?')) {
-        alert('Fungsi kosongkan log akan dilaksanakan kemudian.');
+async function clearLogs(btn) {
+    const ok = await uiConfirm('Kosongkan Log', 'Adakah anda pasti mahu kosongkan log lama berdasarkan tempoh retention?', 'Teruskan');
+    if (!ok) return;
+
+    const doneBtn = setBtnLoading(btn, 'Membersihkan...');
+    uiLoading('Kosongkan Log', 'Sedang memadam log lama...');
+    try {
+        const retention = parseInt(document.getElementById('logRetention')?.value || '90', 10);
+        const res = await fetch(SETTINGS_API_URL + '?action=clear_logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ days: retention })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Gagal kosongkan log.');
+        uiCloseLoading();
+        await uiSuccess('Berjaya', (json.message || 'Log berjaya dibersihkan.') + ` (deleted: ${json.deleted || 0})`);
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Kosongkan Log Gagal', e.message || 'Unknown error');
+    } finally {
+        doneBtn();
+    }
+}
+
+function uploadSettingsAssetXhr(assetType, file) {
+    return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append('asset_type', assetType);
+        fd.append('asset_file', file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', SETTINGS_API_URL + '?action=upload_asset');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.responseType = 'json';
+
+        xhr.upload.onprogress = function(ev) {
+            if (!ev.lengthComputable || !HAS_SWAL()) return;
+            const pct = Math.max(0, Math.min(100, Math.round((ev.loaded / ev.total) * 100)));
+            const container = Swal.getHtmlContainer();
+            if (!container) return;
+            const bar = container.querySelector('#settingsUploadBar');
+            const text = container.querySelector('#settingsUploadPct');
+            if (bar) bar.style.width = pct + '%';
+            if (text) text.textContent = pct + '%';
+        };
+
+        xhr.onload = function() {
+            const status = xhr.status || 0;
+            const res = xhr.response || {};
+            if (status >= 200 && status < 300 && res && res.ok) {
+                resolve(res);
+                return;
+            }
+            reject(new Error((res && res.error) ? res.error : 'Upload gagal.'));
+        };
+        xhr.onerror = function() { reject(new Error('Ralat rangkaian semasa upload.')); };
+        xhr.send(fd);
+    });
+}
+
+async function uploadSettingsAsset(assetType, fileInputId, hiddenFieldId, previewId) {
+    const input = document.getElementById(fileInputId);
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+
+    if (HAS_SWAL()) {
+        Swal.fire({
+            title: 'Muat Naik Aset',
+            html: `<div class="text-start small mb-2">Sedang memuat naik fail...</div>
+                   <div class="progress" style="height:14px">
+                     <div id="settingsUploadBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%"></div>
+                   </div>
+                   <div class="small mt-2">Progress: <span id="settingsUploadPct">0%</span></div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false
+        });
+    }
+
+    try {
+        const json = await uploadSettingsAssetXhr(assetType, file);
+        const hidden = document.getElementById(hiddenFieldId);
+        if (hidden) hidden.value = json.filename || '';
+        const preview = document.getElementById(previewId);
+        if (preview && json.url) {
+            preview.src = json.url;
+            preview.classList.remove('d-none');
+        }
+        uiCloseLoading();
+        await uiSuccess('Berjaya', json.message || 'Fail berjaya dimuat naik.');
+    } catch (e) {
+        uiCloseLoading();
+        await uiError('Upload Gagal', e.message || 'Unknown error');
+    } finally {
+        input.value = '';
     }
 }
 
 // Initialize tabs
 document.addEventListener('DOMContentLoaded', function() {
     // Tab switching is handled by CoreUI
+    loadAllSettings();
+    const headerLogo = document.getElementById('headerLogo');
+    const favicon = document.getElementById('favicon');
+    const bg = document.getElementById('backgroundImage');
+    if (headerLogo) headerLogo.addEventListener('change', function(){ uploadSettingsAsset('headerLogo', 'headerLogo', 'headerLogoPath', 'headerLogoPreview'); });
+    if (favicon) favicon.addEventListener('change', function(){ uploadSettingsAsset('favicon', 'favicon', 'faviconPath', 'faviconPreview'); });
+    if (bg) bg.addEventListener('change', function(){ uploadSettingsAsset('backgroundImage', 'backgroundImage', 'backgroundImagePath', 'backgroundImagePreview'); });
 });
 </script>
 

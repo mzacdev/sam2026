@@ -82,7 +82,7 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="roleModalLabel">Peranan Baru</h5>
-                <button type="button" class="btn-close btn-close-white" data-coreui-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-coreui-dismiss="modal" data-bs-dismiss="modal" onclick="closeAllModals()"></button>
             </div>
             <div class="modal-body">
                 <form id="roleForm">
@@ -129,7 +129,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-coreui-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-secondary" data-coreui-dismiss="modal" data-bs-dismiss="modal" onclick="closeAllModals()">Batal</button>
                 <button type="button" class="btn btn-primary" onclick="saveRole()">Simpan</button>
             </div>
         </div>
@@ -142,7 +142,7 @@
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title" id="pageRuleModalLabel">Peraturan Akses Halaman</h5>
-                <button type="button" class="btn-close btn-close-white" data-coreui-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-coreui-dismiss="modal" data-bs-dismiss="modal" onclick="closeAllModals()"></button>
             </div>
             <div class="modal-body">
                 <form id="pageRuleForm">
@@ -187,7 +187,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-coreui-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-secondary" data-coreui-dismiss="modal" data-bs-dismiss="modal" onclick="closeAllModals()">Batal</button>
                 <button type="button" class="btn btn-info" onclick="savePageRule()">Simpan</button>
             </div>
         </div>
@@ -195,29 +195,150 @@
 </div>
 
 <script>
+// Scoped style fix for Select2 in RBAC user assignment
+(function injectRbacSelect2Style(){
+    if (document.getElementById('rbac-select2-style')) return;
+    const css = `
+    #userRolesContainer, #userSelect { font-size: 14px; }
+    #userSelect + .select2-container { width: 100% !important; }
+    #userSelect + .select2-container .select2-selection--single {
+        height: 38px !important;
+        min-height: 38px !important;
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        display: flex !important;
+        align-items: center !important;
+        background-color: #fff !important;
+        box-sizing: border-box !important;
+    }
+    #userSelect + .select2-container .select2-selection__rendered {
+        line-height: 36px !important;
+        padding-left: 12px !important;
+        padding-right: 32px !important;
+        color: #212529 !important;
+        font-size: 14px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    #userSelect + .select2-container .select2-selection__arrow {
+        height: 36px !important;
+        right: 8px !important;
+        top: 0 !important;
+    }
+    .select2-container--open .select2-dropdown {
+        z-index: 1080 !important;
+    }`;
+    const style = document.createElement('style');
+    style.id = 'rbac-select2-style';
+    style.textContent = css;
+    document.head.appendChild(style);
+})();
+
 // RBAC Management JavaScript
 const RBACManager = {
-    apiBase: '<?php echo BASE_URL; ?>api/rbac/',
+    apiBase: <?php echo json_encode(url('api/rbac/')); ?>,
     
     init: function() {
+        this.ensureSelect2Assets().then(() => this.initUserSelect2()).catch(() => {});
         this.loadRoles();
         this.loadUsers();
         this.loadPageRules();
         this.loadPermissions();
     },
+
+    ensureSelect2Assets: function() {
+        return new Promise((resolve, reject) => {
+            // Need jQuery for Select2
+            if (!window.jQuery) {
+                reject(new Error('jQuery not available'));
+                return;
+            }
+            const done = () => resolve();
+            const fail = () => reject(new Error('Select2 assets failed to load'));
+
+            // CSS
+            if (!document.querySelector('link[href*="select2.min.css"]')) {
+                const css = document.createElement('link');
+                css.rel = 'stylesheet';
+                css.href = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+                document.head.appendChild(css);
+            }
+
+            // JS
+            if (window.jQuery.fn && window.jQuery.fn.select2) {
+                done();
+                return;
+            }
+            const existing = document.querySelector('script[src*="select2.min.js"]');
+            if (existing) {
+                let retry = 0;
+                const timer = setInterval(() => {
+                    if (window.jQuery.fn && window.jQuery.fn.select2) {
+                        clearInterval(timer);
+                        done();
+                        return;
+                    }
+                    retry++;
+                    if (retry > 40) {
+                        clearInterval(timer);
+                        fail();
+                    }
+                }, 100);
+                return;
+            }
+            const js = document.createElement('script');
+            js.src = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
+            js.onload = () => {
+                if (window.jQuery.fn && window.jQuery.fn.select2) done();
+                else fail();
+            };
+            js.onerror = fail;
+            document.body.appendChild(js);
+        });
+    },
+
+    initUserSelect2: function() {
+        try {
+            if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) return;
+            const $select = window.jQuery('#userSelect');
+            if (!$select.length) return;
+            if ($select.data('select2')) {
+                $select.select2('destroy');
+            }
+            $select.select2({
+                width: 'resolve',
+                placeholder: '-- Pilih Pengguna --',
+                allowClear: true,
+                dropdownParent: window.jQuery('#user'),
+                minimumResultsForSearch: 0
+            });
+        } catch (e) {
+            console.warn('initUserSelect2 failed:', e);
+        }
+    },
     
     loadRoles: async function() {
         try {
             const response = await fetch(this.apiBase + 'roles.php?action=list');
-            const data = await response.json();
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (e) {
+                data = null;
+            }
             
-            if (data.success) {
+            if (response.ok && data && data.success) {
                 this.renderRoles(data.data);
+            } else {
+                const msg = (data && data.message) ? data.message : ('HTTP ' + response.status + ' semasa memuatkan peranan');
+                document.getElementById('rolesListContainer').innerHTML = 
+                    '<div class="alert alert-danger">Ralat memuatkan peranan: ' + msg + '</div>';
             }
         } catch (error) {
             console.error('Error loading roles:', error);
             document.getElementById('rolesListContainer').innerHTML = 
-                '<div class="alert alert-danger">Ralat memuatkan peranan</div>';
+                '<div class="alert alert-danger">Ralat memuatkan peranan: ' + (error.message || 'Ralat tidak diketahui') + '</div>';
         }
     },
     
@@ -256,13 +377,36 @@ const RBACManager = {
     loadUsers: async function() {
         try {
             const response = await fetch(this.apiBase + 'users.php?action=list');
-            const data = await response.json();
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (e) {
+                data = null;
+            }
             
-            if (data.success) {
+            if (response.ok && data && data.success) {
                 this.renderUserSelect(data.data);
+            } else {
+                const msg = (data && data.message) ? data.message : ('HTTP ' + response.status + ' semasa memuatkan pengguna');
+                const select = document.getElementById('userSelect');
+                if (select) {
+                    select.innerHTML = '<option value="">-- Ralat: ' + msg + ' --</option>';
+                }
+                const container = document.getElementById('userRolesContainer');
+                if (container) {
+                    container.innerHTML = '<div class="alert alert-danger mb-0">Ralat memuatkan tugasan peranan pengguna: ' + msg + '</div>';
+                }
             }
         } catch (error) {
             console.error('Error loading users:', error);
+            const select = document.getElementById('userSelect');
+            if (select) {
+                select.innerHTML = '<option value="">-- Ralat memuatkan pengguna --</option>';
+            }
+            const container = document.getElementById('userRolesContainer');
+            if (container) {
+                container.innerHTML = '<div class="alert alert-danger mb-0">Ralat memuatkan tugasan peranan pengguna: ' + (error.message || 'Ralat tidak diketahui') + '</div>';
+            }
         }
     },
     
@@ -276,6 +420,9 @@ const RBACManager = {
             option.textContent = `${user.full_name} (${user.username})`;
             select.appendChild(option);
         });
+
+        // Refresh Select2 after options updated
+        this.initUserSelect2();
     },
     
     loadPageRules: async function() {
@@ -337,7 +484,7 @@ function closeAllModals() {
     // Close all visible modals
     const visibleModals = document.querySelectorAll('.modal.show');
     visibleModals.forEach(modal => {
-        const instance = coreui.Modal.getInstance(modal) || bootstrap?.Modal?.getInstance(modal);
+        const instance = getModalInstance(modal);
         if (instance) {
             instance.hide();
         } else {
@@ -349,6 +496,24 @@ function closeAllModals() {
     
     // Clean up all backdrops immediately
     cleanupModalBackdrops();
+}
+
+function getModalApi() {
+    if (window.coreui && window.coreui.Modal) return window.coreui.Modal;
+    if (window.bootstrap && window.bootstrap.Modal) return window.bootstrap.Modal;
+    return null;
+}
+
+function getModalInstance(modalEl) {
+    const Api = getModalApi();
+    if (!Api || !modalEl || typeof Api.getInstance !== 'function') return null;
+    return Api.getInstance(modalEl);
+}
+
+function createModalInstance(modalEl, options) {
+    const Api = getModalApi();
+    if (!Api || !modalEl) throw new Error('Modal library tidak tersedia.');
+    return new Api(modalEl, options || {});
 }
 
 // Function to fix modal z-index - Bootstrap Standard
@@ -493,17 +658,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // Only initialize if we're on the user tab
     const userTab = document.getElementById('user-tab');
     if (userTab) {
-        userTab.addEventListener('shown.coreui.tab', function() {
+        const initRbacSection = function() {
             RBACManager.init();
             // Clean up any backdrops when tab is shown
             cleanupModalBackdrops();
             // Hide loading overlay
             hideLoadingOverlayForModal();
+        };
+
+        // CoreUI tab event
+        userTab.addEventListener('shown.coreui.tab', initRbacSection);
+        // Bootstrap tab event (settings.php currently uses data-bs-toggle="tab")
+        userTab.addEventListener('shown.bs.tab', initRbacSection);
+        // Fallback for environments where shown event does not fire as expected
+        userTab.addEventListener('click', function() {
+            setTimeout(function() {
+                const userPane = document.getElementById('user');
+                if (userPane && (userPane.classList.contains('active') || userPane.classList.contains('show'))) {
+                    initRbacSection();
+                }
+            }, 120);
         });
         
         // Also initialize if tab is already active
         if (userTab.classList.contains('active')) {
-            RBACManager.init();
+            initRbacSection();
+        } else if (window.location.hash === '#user') {
+            initRbacSection();
         }
     }
     
@@ -596,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Find and close the associated modal
             const modals = document.querySelectorAll('.modal.show');
             modals.forEach(modal => {
-                const instance = coreui.Modal.getInstance(modal) || bootstrap?.Modal?.getInstance(modal);
+                const instance = getModalInstance(modal);
                 if (instance) {
                     instance.hide();
                 }
@@ -611,6 +792,74 @@ document.addEventListener('DOMContentLoaded', function() {
         hideLoadingOverlayForModal();
     });
 });
+
+function rbacNotify(type, message, title) {
+    const text = message || '';
+    if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
+        return Swal.fire({
+            icon: type || 'info',
+            title: title || (type === 'error' ? 'Ralat' : 'Makluman'),
+            text: text
+        });
+    }
+    if (typeof Toast !== 'undefined') {
+        if (type === 'error' && typeof Toast.error === 'function') { Toast.error(text); return Promise.resolve(); }
+        if (type === 'success' && typeof Toast.success === 'function') { Toast.success(text); return Promise.resolve(); }
+        if (typeof Toast.info === 'function') { Toast.info(text); return Promise.resolve(); }
+    }
+    console.log('[RBAC][' + (type || 'info') + '] ' + text);
+    return Promise.resolve();
+}
+
+async function ensureRbacSwal() {
+    if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
+        return true;
+    }
+    return await new Promise((resolve) => {
+        const existing = document.querySelector('script[src*="sweetalert2"]');
+        if (existing) {
+            let retry = 0;
+            const timer = setInterval(() => {
+                if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
+                    clearInterval(timer);
+                    resolve(true);
+                    return;
+                }
+                retry++;
+                if (retry > 40) {
+                    clearInterval(timer);
+                    resolve(false);
+                }
+            }, 100);
+            return;
+        }
+        const js = document.createElement('script');
+        js.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js';
+        js.onload = () => resolve(!!(window.Swal && window.Swal.fire));
+        js.onerror = () => resolve(false);
+        document.body.appendChild(js);
+    });
+}
+
+async function rbacConfirm(message, title, confirmText) {
+    await ensureRbacSwal();
+    if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: title || 'Pengesahan',
+            text: message || '',
+            showCancelButton: true,
+            confirmButtonText: confirmText || 'Ya',
+            cancelButtonText: 'Batal',
+            reverseButtons: true
+        });
+        return !!(res && res.isConfirmed);
+    }
+    if (typeof Toast !== 'undefined' && typeof Toast.info === 'function') {
+        Toast.info(message || 'Pengesahan diperlukan.');
+    }
+    return false;
+}
 
 // Helper functions - Modal instances
 let roleModalInstance = null;
@@ -671,7 +920,7 @@ async function showCreateRoleModal() {
         document.body.appendChild(modalElement);
     }
     
-    roleModalInstance = new coreui.Modal(modalElement, {
+    roleModalInstance = createModalInstance(modalElement, {
         backdrop: true,
         keyboard: true,
         focus: true
@@ -856,7 +1105,7 @@ async function saveRole() {
             if (roleModalInstance) {
                 roleModalInstance.hide();
             } else {
-                const modal = coreui.Modal.getInstance(document.getElementById('roleModal'));
+                const modal = getModalInstance(document.getElementById('roleModal'));
                 if (modal) modal.hide();
             }
             
@@ -865,19 +1114,11 @@ async function saveRole() {
             // Reload roles list
             RBACManager.loadRoles();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat menyimpan peranan');
-            } else {
-                alert(result.message || 'Ralat menyimpan peranan');
-            }
+            await rbacNotify('error', result.message || 'Ralat menyimpan peranan', 'Ralat');
         }
     } catch (error) {
         console.error('Error saving role:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
@@ -933,7 +1174,7 @@ async function editRole(id) {
                 document.body.appendChild(modalElement);
             }
             
-            roleModalInstance = new coreui.Modal(modalElement, {
+            roleModalInstance = createModalInstance(modalElement, {
                 backdrop: true,
                 keyboard: true,
                 focus: true
@@ -983,24 +1224,17 @@ async function editRole(id) {
                 }
             }, 100);
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error('Ralat memuatkan peranan');
-            } else {
-                alert('Ralat memuatkan peranan');
-            }
+            await rbacNotify('error', 'Ralat memuatkan peranan', 'Ralat');
         }
     } catch (error) {
         console.error('Error loading role:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
 async function deleteRole(id) {
-    if (!confirm('Adakah anda pasti ingin memadam peranan ini? Tindakan ini tidak boleh dibatalkan.')) {
+    const ok = await rbacConfirm('Adakah anda pasti ingin memadam peranan ini? Tindakan ini tidak boleh dibatalkan.', 'Padam Peranan', 'Padam');
+    if (!ok) {
         return;
     }
     
@@ -1017,19 +1251,11 @@ async function deleteRole(id) {
             }
             RBACManager.loadRoles();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat memadam peranan');
-            } else {
-                alert(result.message || 'Ralat memadam peranan');
-            }
+            await rbacNotify('error', result.message || 'Ralat memadam peranan', 'Ralat');
         }
     } catch (error) {
         console.error('Error deleting role:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
@@ -1120,24 +1346,17 @@ async function assignUserRole(userId, roleId) {
             }
             loadUserRoles();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat menugaskan peranan');
-            } else {
-                alert(result.message || 'Ralat menugaskan peranan');
-            }
+            await rbacNotify('error', result.message || 'Ralat menugaskan peranan', 'Ralat');
         }
     } catch (error) {
         console.error('Error assigning role:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
 async function removeUserRole(userId, roleId) {
-    if (!confirm('Adakah anda pasti ingin membuang peranan ini daripada pengguna?')) {
+    const ok = await rbacConfirm('Adakah anda pasti ingin membuang peranan ini daripada pengguna?', 'Buang Peranan', 'Buang');
+    if (!ok) {
         return;
     }
     
@@ -1155,19 +1374,11 @@ async function removeUserRole(userId, roleId) {
             }
             loadUserRoles();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat membuang peranan');
-            } else {
-                alert(result.message || 'Ralat membuang peranan');
-            }
+            await rbacNotify('error', result.message || 'Ralat membuang peranan', 'Ralat');
         }
     } catch (error) {
         console.error('Error removing role:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
@@ -1205,7 +1416,7 @@ async function showCreatePageRuleModal() {
         document.body.appendChild(modalElement);
     }
     
-    pageRuleModalInstance = new coreui.Modal(modalElement, {
+    pageRuleModalInstance = createModalInstance(modalElement, {
         backdrop: true,
         keyboard: true,
         focus: true
@@ -1302,11 +1513,7 @@ async function savePageRule() {
     const requiresAuth = document.getElementById('requiresAuth').checked;
     
     if (!pagePath) {
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Laluan halaman diperlukan');
-        } else {
-            alert('Laluan halaman diperlukan');
-        }
+        await rbacNotify('error', 'Laluan halaman diperlukan', 'Ralat');
         return;
     }
     
@@ -1344,7 +1551,7 @@ async function savePageRule() {
             if (pageRuleModalInstance) {
                 pageRuleModalInstance.hide();
             } else {
-                const modal = coreui.Modal.getInstance(document.getElementById('pageRuleModal'));
+                const modal = getModalInstance(document.getElementById('pageRuleModal'));
                 if (modal) modal.hide();
             }
             
@@ -1353,19 +1560,11 @@ async function savePageRule() {
             // Reload page rules list
             RBACManager.loadPageRules();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat menyimpan peraturan');
-            } else {
-                alert(result.message || 'Ralat menyimpan peraturan');
-            }
+            await rbacNotify('error', result.message || 'Ralat menyimpan peraturan', 'Ralat');
         }
     } catch (error) {
         console.error('Error saving page rule:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
@@ -1422,7 +1621,7 @@ async function editPageRule(id) {
                 document.body.appendChild(modalElement);
             }
             
-            pageRuleModalInstance = new coreui.Modal(modalElement, {
+            pageRuleModalInstance = createModalInstance(modalElement, {
                 backdrop: true,
                 keyboard: true,
                 focus: true
@@ -1472,24 +1671,17 @@ async function editPageRule(id) {
                 }
             }, 100);
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error('Ralat memuatkan peraturan');
-            } else {
-                alert('Ralat memuatkan peraturan');
-            }
+            await rbacNotify('error', 'Ralat memuatkan peraturan', 'Ralat');
         }
     } catch (error) {
         console.error('Error loading page rule:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
 async function deletePageRule(id) {
-    if (!confirm('Adakah anda pasti ingin memadam peraturan ini? Tindakan ini tidak boleh dibatalkan.')) {
+    const ok = await rbacConfirm('Adakah anda pasti ingin memadam peraturan ini? Tindakan ini tidak boleh dibatalkan.', 'Padam Peraturan', 'Padam');
+    if (!ok) {
         return;
     }
     
@@ -1506,19 +1698,11 @@ async function deletePageRule(id) {
             }
             RBACManager.loadPageRules();
         } else {
-            if (typeof Toast !== 'undefined') {
-                Toast.error(result.message || 'Ralat memadam peraturan');
-            } else {
-                alert(result.message || 'Ralat memadam peraturan');
-            }
+            await rbacNotify('error', result.message || 'Ralat memadam peraturan', 'Ralat');
         }
     } catch (error) {
         console.error('Error deleting page rule:', error);
-        if (typeof Toast !== 'undefined') {
-            Toast.error('Ralat sistem. Sila cuba lagi.');
-        } else {
-            alert('Ralat sistem. Sila cuba lagi.');
-        }
+        await rbacNotify('error', 'Ralat sistem. Sila cuba lagi.', 'Ralat');
     }
 }
 
@@ -1533,4 +1717,3 @@ function toggleRoleSelection() {
     }
 }
 </script>
-

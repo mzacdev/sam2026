@@ -6,17 +6,21 @@
 
 // Session configuration
 define('SESSION_NAME', 'SAM2026_SESSION');
-define('SESSION_LIFETIME', 3600); // 1 hour in seconds
+$sessionTimeoutMin = function_exists('app_setting') ? (int)app_setting('securitySettingsForm.sessionTimeout', 60) : 60;
+if ($sessionTimeoutMin < 5 || $sessionTimeoutMin > 480) $sessionTimeoutMin = 60;
+define('SESSION_LIFETIME', $sessionTimeoutMin * 60); // in seconds
 define('SESSION_PATH', '/');
 define('SESSION_DOMAIN', '');
 define('SESSION_SECURE', false); // Set to true in production with HTTPS
 define('SESSION_HTTPONLY', true);
 
 // Password configuration
-define('PASSWORD_MIN_LENGTH', 8);
-define('PASSWORD_REQUIRE_UPPERCASE', true);
-define('PASSWORD_REQUIRE_NUMBER', true);
-define('PASSWORD_REQUIRE_SPECIAL', false);
+$pwdMinLen = function_exists('app_setting') ? (int)app_setting('securitySettingsForm.passwordMinLength', 8) : 8;
+if ($pwdMinLen < 6 || $pwdMinLen > 20) $pwdMinLen = 8;
+define('PASSWORD_MIN_LENGTH', $pwdMinLen);
+define('PASSWORD_REQUIRE_UPPERCASE', function_exists('app_bool_setting') ? app_bool_setting('securitySettingsForm.passwordRequireUppercase', true) : true);
+define('PASSWORD_REQUIRE_NUMBER', function_exists('app_bool_setting') ? app_bool_setting('securitySettingsForm.passwordRequireNumber', true) : true);
+define('PASSWORD_REQUIRE_SPECIAL', function_exists('app_bool_setting') ? app_bool_setting('securitySettingsForm.passwordRequireSpecial', false) : false);
 
 // Login security
 define('MAX_LOGIN_ATTEMPTS', 5);

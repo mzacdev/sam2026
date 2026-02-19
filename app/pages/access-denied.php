@@ -3,7 +3,6 @@
  * Access Denied Page
  * Shown when authenticated user tries to access a page they don't have permission for
  */
-define('SKIP_AUTH_CHECK', true); // Allow access to this page
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/database.php';

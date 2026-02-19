@@ -2818,7 +2818,7 @@ ob_start();
                                 var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
                                 var nameHtml = name;
                                 if (showLink) {
-                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="committee" data-ref="' + refKey.replace(/"/g, '&quot;') + '">papar</a>';
+                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="committee" data-ref="' + refKey.replace(/"/g, '&quot;') + '" title="Papar butiran" aria-label="Papar butiran"><i class="fa-solid fa-circle-info"></i></a>';
                                 }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(nameHtml, false, true); })() +
@@ -2934,7 +2934,7 @@ ob_start();
                                 var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
                                 var nameHtml = name;
                                 if (showLink) {
-                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="volunteer" data-ref="' + refKey.replace(/"/g, '&quot;') + '">papar</a>';
+                                    nameHtml += ' <a href="#" class="small dup-view-link" data-scope="volunteer" data-ref="' + refKey.replace(/"/g, '&quot;') + '" title="Papar butiran" aria-label="Papar butiran"><i class="fa-solid fa-circle-info"></i></a>';
                                 }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(nameHtml, false, true); })() +

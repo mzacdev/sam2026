@@ -5,7 +5,6 @@
  */
 
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/rbac.php';
 
@@ -26,10 +25,107 @@ if (!$auth->isLoggedIn() || !$rbac->hasPageAccess('pages/settings.php')) {
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
+function toTinyInt($value): int {
+    if (is_bool($value)) return $value ? 1 : 0;
+    if (is_int($value)) return $value === 0 ? 0 : 1;
+    $s = strtolower(trim((string)$value));
+    if ($s === '' || $s === '0' || $s === 'false' || $s === 'off' || $s === 'no') return 0;
+    return 1;
+}
+
+function ensurePageExclusionTable(PDO $db): void {
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS page_access_exclusions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            page_path VARCHAR(255) NOT NULL UNIQUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_by INT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+}
+
+function syncPageRulesFromFilesystem(PDO $db, ?int $createdBy = null): void {
+    $baseDir = realpath(__DIR__ . '/../../');
+    if ($baseDir === false || !is_dir($baseDir)) return;
+
+    $publicDefaults = [
+        'auth/login.php' => ['is_public' => 1, 'requires_auth' => 0],
+        'auth/logout.php' => ['is_public' => 1, 'requires_auth' => 0],
+        'auth/ajax-login.php' => ['is_public' => 1, 'requires_auth' => 0],
+        'pages/access-denied.php' => ['is_public' => 1, 'requires_auth' => 0],
+    ];
+
+    $discovered = [];
+
+    // Root entry pages
+    $indexPath = $baseDir . DIRECTORY_SEPARATOR . 'index.php';
+    if (is_file($indexPath)) $discovered[] = 'index.php';
+
+    // All pages/*.php
+    $pagesDir = $baseDir . DIRECTORY_SEPARATOR . 'pages';
+    if (is_dir($pagesDir)) {
+        $pageFiles = glob($pagesDir . DIRECTORY_SEPARATOR . '*.php') ?: [];
+        foreach ($pageFiles as $fp) {
+            $name = basename((string)$fp);
+            if ($name === '' || $name[0] === '_') continue;
+            $discovered[] = 'pages/' . $name;
+        }
+    }
+
+    // Public/auth files
+    $authDir = $baseDir . DIRECTORY_SEPARATOR . 'auth';
+    if (is_dir($authDir)) {
+        $authFiles = glob($authDir . DIRECTORY_SEPARATOR . '*.php') ?: [];
+        foreach ($authFiles as $fp) {
+            $name = basename((string)$fp);
+            if ($name === '' || $name[0] === '_') continue;
+            $discovered[] = 'auth/' . $name;
+        }
+    }
+
+    if (empty($discovered)) return;
+
+    $existingStmt = $db->query("SELECT page_path FROM page_access_rules");
+    $existing = $existingStmt ? $existingStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    $existingMap = [];
+    foreach ($existing as $p) {
+        $existingMap[strtolower(trim((string)$p))] = true;
+    }
+
+    $excludedStmt = $db->query("SELECT page_path FROM page_access_exclusions");
+    $excluded = $excludedStmt ? $excludedStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    $excludedMap = [];
+    foreach ($excluded as $p) {
+        $excludedMap[strtolower(trim((string)$p))] = true;
+    }
+
+    $insert = $db->prepare("
+        INSERT INTO page_access_rules (page_path, is_public, requires_auth, created_by)
+        VALUES (:page_path, :is_public, :requires_auth, :created_by)
+    ");
+
+    foreach ($discovered as $pagePath) {
+        $key = strtolower($pagePath);
+        // Respect exclusions: pages deleted by admin in settings should stay hidden.
+        if (isset($excludedMap[$key])) continue;
+        if (isset($existingMap[$key])) continue;
+        $default = $publicDefaults[$pagePath] ?? ['is_public' => 0, 'requires_auth' => 1];
+        $insert->execute([
+            ':page_path' => $pagePath,
+            ':is_public' => (int)$default['is_public'],
+            ':requires_auth' => (int)$default['requires_auth'],
+            ':created_by' => $createdBy,
+        ]);
+        $existingMap[$key] = true;
+    }
+}
+
 try {
+    ensurePageExclusionTable($db);
     switch ($method) {
         case 'GET':
             if ($action === 'list') {
+                syncPageRulesFromFilesystem($db, Session::get('user_id') ? (int)Session::get('user_id') : null);
                 // Get all page access rules with their roles
                 $stmt = $db->query("
                     SELECT par.*,
@@ -77,8 +173,8 @@ try {
                 $data = json_decode(file_get_contents('php://input'), true);
                 
                 $pagePath = trim($data['page_path'] ?? '');
-                $isPublic = isset($data['is_public']) ? (bool)$data['is_public'] : false;
-                $requiresAuth = isset($data['requires_auth']) ? (bool)$data['requires_auth'] : true;
+                $isPublic = isset($data['is_public']) ? toTinyInt($data['is_public']) : 0;
+                $requiresAuth = isset($data['requires_auth']) ? toTinyInt($data['requires_auth']) : 1;
                 $roleIds = $data['role_ids'] ?? [];
                 
                 if (empty($pagePath)) {
@@ -109,6 +205,10 @@ try {
                     ':requires_auth' => $requiresAuth,
                     ':created_by' => $currentUserId
                 ]);
+
+                // If user manually adds a page rule, remove it from exclusion list (if existed)
+                $stmt = $db->prepare("DELETE FROM page_access_exclusions WHERE page_path = :page_path");
+                $stmt->execute([':page_path' => $pagePath]);
                 
                 $pageRuleId = $db->lastInsertId();
                 
@@ -149,12 +249,12 @@ try {
                 
                 if (isset($data['is_public'])) {
                     $updates[] = "is_public = :is_public";
-                    $params[':is_public'] = (bool)$data['is_public'];
+                    $params[':is_public'] = toTinyInt($data['is_public']);
                 }
                 
                 if (isset($data['requires_auth'])) {
                     $updates[] = "requires_auth = :requires_auth";
-                    $params[':requires_auth'] = (bool)$data['requires_auth'];
+                    $params[':requires_auth'] = toTinyInt($data['requires_auth']);
                 }
                 
                 if (!empty($updates)) {
@@ -205,6 +305,23 @@ try {
         case 'DELETE':
             if ($action === 'delete' && isset($_GET['id'])) {
                 $pageRuleId = $_GET['id'];
+
+                // Capture page_path for exclusion before delete
+                $pathStmt = $db->prepare("SELECT page_path FROM page_access_rules WHERE id = :id");
+                $pathStmt->execute([':id' => $pageRuleId]);
+                $row = $pathStmt->fetch(PDO::FETCH_ASSOC);
+                $pagePath = $row['page_path'] ?? null;
+                if ($pagePath) {
+                    $exStmt = $db->prepare("
+                        INSERT INTO page_access_exclusions (page_path, created_by)
+                        VALUES (:page_path, :created_by)
+                        ON DUPLICATE KEY UPDATE page_path = VALUES(page_path)
+                    ");
+                    $exStmt->execute([
+                        ':page_path' => $pagePath,
+                        ':created_by' => Session::get('user_id') ? (int)Session::get('user_id') : null,
+                    ]);
+                }
                 
                 // Delete page rule (cascade will handle page_role_access)
                 $stmt = $db->prepare("DELETE FROM page_access_rules WHERE id = :id");
@@ -231,4 +348,3 @@ try {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Ralat sistem: ' . $e->getMessage()]);
 }
-

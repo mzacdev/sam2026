@@ -3,7 +3,7 @@
  * Dashboard Page
  */
 require_once 'config.php';
-// Redirect to pages/dashboard.php
+// Redirect default landing
 header('Location: ' . url('pages/dashboard.php'));
 exit;
 // Authentication is handled in layout.php

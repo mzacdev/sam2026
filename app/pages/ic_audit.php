@@ -11,7 +11,7 @@ $auth = getAuth();
 $auth->requireAuth();
 require_once __DIR__ . '/../config/rbac.php';
 $rbac = getRBAC();
-$rbac->requireMinimumRole('ADMIN');
+$rbac->requirePageAccess('pages/ic_audit.php');
 
 $page_title = 'Audit MyKad — Pasukan Atlet';
 
@@ -234,4 +234,3 @@ require_once __DIR__ . '/../includes/layout.php';
     document.addEventListener('DOMContentLoaded', function(){ var search = document.getElementById('icSearch'); if(search){ search.addEventListener('input', function(){ var status = document.getElementById('filterStatusSelect').value || ''; applyIcFilter(this.value, status); renderIcPage(); }); } var ps = document.getElementById('icPageSizeSelect'); if(ps){ ps.addEventListener('change', function(){ setIcPageSize(this.value); }); } var statusSel = document.getElementById('filterStatusSelect'); if(statusSel){ statusSel.addEventListener('change', function(){ var q = (document.getElementById('icSearch')||{value:''}).value || ''; applyIcFilter(q, this.value || ''); renderIcPage(); }); } var initStatus = (document.getElementById('filterStatusSelect')||{value:''}).value || ''; applyIcFilter((document.getElementById('icSearch')||{value:''}).value || '', initStatus); try{ document.getElementById('icPageSizeSelect').value = '10'; icPageSize = 10; }catch(e){} renderIcPage(); });
 })();
 </script>
-

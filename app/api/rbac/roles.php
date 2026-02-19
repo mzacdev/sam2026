@@ -5,7 +5,6 @@
  */
 
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/rbac.php';
 
@@ -262,4 +261,3 @@ try {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Ralat sistem: ' . $e->getMessage()]);
 }
-

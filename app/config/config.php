@@ -49,12 +49,88 @@ $baseUrl = rtrim($baseUrl, '/');
 define('BASE_URL', $baseUrl);
 
 /* ============================================================
+ * RUNTIME SETTINGS (LOADED FROM app_settings)
+ * ============================================================ */
+if (file_exists(__DIR__ . '/database.php')) {
+    require_once __DIR__ . '/database.php';
+}
+
+$runtime_settings = [];
+if (function_exists('getDB')) {
+    try {
+        $db = getDB();
+        $chk = $db->query("SHOW TABLES LIKE 'app_settings'");
+        if ($chk && $chk->rowCount() > 0) {
+            $st = $db->prepare("SELECT setting_value FROM app_settings WHERE setting_key = :k LIMIT 1");
+            $st->execute([':k' => 'settings_page_payload_v1']);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if ($row && isset($row['setting_value'])) {
+                $decoded = json_decode((string)$row['setting_value'], true);
+                if (is_array($decoded)) {
+                    $runtime_settings = $decoded;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[config] load runtime settings failed: ' . $e->getMessage());
+        $runtime_settings = [];
+    }
+}
+
+if (!function_exists('app_settings_all')) {
+    function app_settings_all(): array {
+        global $runtime_settings;
+        return is_array($runtime_settings) ? $runtime_settings : [];
+    }
+}
+
+if (!function_exists('app_setting')) {
+    function app_setting(string $path, $default = null) {
+        $data = app_settings_all();
+        if ($path === '') return $default;
+        $segments = explode('.', $path);
+        $cur = $data;
+        foreach ($segments as $seg) {
+            if (!is_array($cur) || !array_key_exists($seg, $cur)) {
+                return $default;
+            }
+            $cur = $cur[$seg];
+        }
+        return $cur;
+    }
+}
+
+if (!function_exists('app_bool_setting')) {
+    function app_bool_setting(string $path, bool $default = false): bool {
+        $v = app_setting($path, $default);
+        if (is_bool($v)) return $v;
+        $s = strtolower(trim((string)$v));
+        if (in_array($s, ['1', 'true', 'yes', 'on'], true)) return true;
+        if (in_array($s, ['0', 'false', 'no', 'off', ''], true)) return false;
+        return $default;
+    }
+}
+
+/* ============================================================
  * SITE SETTINGS
  * ============================================================ */
-define('SITE_NAME', 'Sukan Asasi Malaysia 2026');
-define('SITE_FULL_NAME', 'Sukan Asasi Malaysia');
-define('SITE_DESCRIPTION', 'Sistem Pengurusan Kejohanan Sukan Asasi Malaysia');
+define('SITE_NAME', (string)app_setting('generalSettingsForm.siteName', 'Sukan Asasi Malaysia 2026'));
+define('SITE_FULL_NAME', (string)app_setting('generalSettingsForm.siteFullName', 'Sukan Asasi Malaysia'));
+define('SITE_DESCRIPTION', (string)app_setting('generalSettingsForm.siteDescription', 'Sistem Pengurusan Kejohanan Sukan Asasi Malaysia'));
 define('SITE_TITLE', 'Papan Pemuka');
+
+/* ============================================================
+ * LOCALE SETTINGS
+ * ============================================================ */
+$appTz = (string)app_setting('localeSettingsForm.timezone', 'Asia/Kuala_Lumpur');
+if (!in_array($appTz, timezone_identifiers_list(), true)) {
+    $appTz = 'Asia/Kuala_Lumpur';
+}
+define('APP_TIMEZONE', $appTz);
+date_default_timezone_set(APP_TIMEZONE);
+define('APP_LANGUAGE', (string)app_setting('localeSettingsForm.language', 'ms'));
+define('APP_DATE_FORMAT', (string)app_setting('localeSettingsForm.dateFormat', 'd/m/Y'));
+define('APP_TIME_FORMAT', (string)app_setting('localeSettingsForm.timeFormat', 'H:i'));
 
 /* ============================================================
  * DEBUG MODE
@@ -64,13 +140,61 @@ define('DEBUG_MODE', false);
 /* ============================================================
  * SESSION & AUTH INITIALIZATION
  * ============================================================ */
-// Ensure database helper is available before initializing auth (some auth helpers call getDB())
-if (file_exists(__DIR__ . '/database.php')) {
-    require_once __DIR__ . '/database.php';
-}
 if (file_exists(__DIR__ . '/auth.php')) {
     require_once __DIR__ . '/auth.php';
     Session::start();
+}
+
+// Set default UI language cookie from settings when not explicitly set
+if (empty($_COOKIE['sam_lang']) && !headers_sent()) {
+    $lang = APP_LANGUAGE;
+    if (!in_array($lang, ['ms', 'en'], true)) $lang = 'ms';
+    setcookie('sam_lang', $lang, [
+        'expires' => time() + (86400 * 365),
+        'path' => '/',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => false,
+        'samesite' => 'Lax',
+    ]);
+}
+
+// Global maintenance mode gate (allow ADMIN and essential auth/settings endpoints)
+try {
+    $maintenance = app_bool_setting('maintenanceForm.maintenanceMode', false);
+    if ($maintenance) {
+        $script = strtolower(str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? '')));
+        $allowList = [
+            '/auth/login.php',
+            '/auth/logout.php',
+            '/pages/settings.php',
+            '/api/settings.php',
+            '/pages/access-denied.php',
+        ];
+        $isAllowedPath = false;
+        foreach ($allowList as $ap) {
+            if (str_ends_with($script, strtolower($ap))) {
+                $isAllowedPath = true;
+                break;
+            }
+        }
+
+        $role = '';
+        if (class_exists('Session')) {
+            $role = strtoupper((string)Session::get('user_role', ''));
+        }
+        $isAdmin = ($role === 'ADMIN');
+        if (!$isAllowedPath && !$isAdmin) {
+            http_response_code(503);
+            $msg = trim((string)app_setting('maintenanceForm.maintenanceMessage', 'Sistem sedang dalam penyelenggaraan. Sila cuba lagi kemudian.'));
+            if ($msg === '') $msg = 'Sistem sedang dalam penyelenggaraan. Sila cuba lagi kemudian.';
+            echo '<!doctype html><html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Penyelenggaraan Sistem</title>'
+                . '<style>body{font-family:Arial,sans-serif;background:#f8f9fa;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.card{max-width:640px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,.08)}h1{margin:0 0 12px;font-size:22px}p{margin:0;color:#444;line-height:1.6}</style>'
+                . '</head><body><div class="card"><h1>Sistem Dalam Penyelenggaraan</h1><p>' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p></div></body></html>';
+            exit;
+        }
+    }
+} catch (Throwable $e) {
+    error_log('[config] maintenance gate failed: ' . $e->getMessage());
 }
 
 /* ============================================================
@@ -105,8 +229,8 @@ function logo($filename) {
 /* ============================================================
  * LOGO CONFIGURATION
  * ============================================================ */
-define('LOGO_HEADER', 'apple-icon-180x180.png');
-define('LOGO_FAVICON', 'favicon.ico');
+define('LOGO_HEADER', (string)app_setting('logoSettingsForm.headerLogoPath', 'apple-icon-180x180.png'));
+define('LOGO_FAVICON', (string)app_setting('logoSettingsForm.faviconPath', 'favicon.ico'));
 define('LOGO_APPLE_TOUCH', 'apple-icon-180x180.png');
 define('LOGO_ANDROID', 'android-icon-192x192.png');
 
@@ -156,7 +280,7 @@ $nav_sections = [
     [
         'title' => 'Tetapan',
         'children' => [
-            ['title' => 'General', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
+            ['title' => 'Konfigurasi Sistem', 'icon' => 'cil-settings', 'url' => 'pages/settings.php'],
             ['title' => 'Universiti', 'icon' => 'cil-building', 'url' => 'pages/university.php'],
             ['title' => 'Pengguna', 'icon' => 'cil-user', 'url' => 'pages/pengurusan-pengguna.php'],
             ['title' => 'Audit MyKad', 'icon' => 'cil-id-card', 'url' => 'pages/ic_audit.php'],
@@ -180,21 +304,19 @@ function _nav_normalize($p) {
     return strtolower($p === '' ? '/' : $p);
 }
 
-// Ensure 'Kontinjen User' menu item only visible to CONTINGENT role
+// Keep 'Kontinjen User' menu entry available in config, then let RBAC decide visibility.
+// This removes dependency on legacy Session::user_role and avoids menu/access mismatch.
 try {
-    $currentRole = Session::get('user_role') ?? '';
-    $currentRole = strtoupper((string)$currentRole);
-    if ($currentRole === 'CONTINGENT') {
-        // insert the contingent-user item into the first section (Pengurusan)
-        if (isset($nav_sections[0]) && isset($nav_sections[0]['children']) && is_array($nav_sections[0]['children'])) {
-            $nav_sections[0]['children'][] = ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'];
+    if (isset($nav_sections[0]) && isset($nav_sections[0]['children']) && is_array($nav_sections[0]['children'])) {
+        $exists = false;
+        foreach ($nav_sections[0]['children'] as $c) {
+            if (isset($c['url']) && trim((string)$c['url']) === 'pages/contingent-user.php') {
+                $exists = true;
+                break;
+            }
         }
-    } else {
-        // remove any existing contingent-user entry if present
-        if (isset($nav_sections[0]) && isset($nav_sections[0]['children']) && is_array($nav_sections[0]['children'])) {
-            $nav_sections[0]['children'] = array_values(array_filter($nav_sections[0]['children'], function($c){
-                return (isset($c['url']) && trim($c['url']) === 'pages/contingent-user.php') ? false : true;
-            }));
+        if (!$exists) {
+            $nav_sections[0]['children'][] = ['title' => 'Kontinjen User', 'icon' => 'cil-people', 'url' => 'pages/contingent-user.php'];
         }
     }
 } catch (Exception $e) {

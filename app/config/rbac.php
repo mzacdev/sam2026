@@ -80,6 +80,8 @@ class RBAC {
     private $ensureAdmin = true;
     
     private $useDatabase = false;
+    private $strictMode = true;
+    private $temporaryAdminFullAccess = false;
     
     public function __construct() {
         $this->auth = getAuth();
@@ -97,11 +99,119 @@ class RBAC {
      */
     private function checkDatabaseTables() {
         try {
-            $stmt = $this->db->query("SHOW TABLES LIKE 'page_access_rules'");
-            return $stmt->rowCount() > 0;
+            $required = ['roles', 'user_roles', 'page_access_rules', 'page_role_access'];
+            foreach ($required as $table) {
+                $stmt = $this->db->prepare("
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                      AND table_name = :t
+                ");
+                $stmt->execute([':t' => $table]);
+                if ((int)$stmt->fetchColumn() <= 0) {
+                    return false;
+                }
+            }
+            return true;
         } catch (PDOException $e) {
             return false;
         }
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function getActiveUserRoleIds(int $userId): array {
+        $stmt = $this->db->prepare("
+            SELECT role_id
+            FROM user_roles
+            WHERE user_id = :user_id
+            AND is_active = TRUE
+            AND (expires_at IS NULL OR expires_at > NOW())
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($rows)) return [];
+        return array_values(array_map('intval', $rows));
+    }
+
+    /**
+     * In strict mode, enforce session role as effective role if available.
+     * This prevents stale multi-role assignments from granting unexpected access.
+     *
+     * @return array<int, int>
+     */
+    private function getEffectiveUserRoleIds(int $userId): array {
+        $stmt = $this->db->prepare("
+            SELECT ur.role_id, UPPER(r.role_code) AS role_code
+            FROM user_roles ur
+            INNER JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = :user_id
+            AND ur.is_active = TRUE
+            AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rows = is_array($rows) ? $rows : [];
+
+        $sessionRole = strtoupper(trim((string)Session::get('user_role', '')));
+        if (!empty($rows) && $sessionRole !== '') {
+            $filtered = array_values(array_filter($rows, static function ($r) use ($sessionRole) {
+                return strtoupper(trim((string)($r['role_code'] ?? ''))) === $sessionRole;
+            }));
+            if (!empty($filtered)) {
+                return array_values(array_map(static fn($r) => (int)$r['role_id'], $filtered));
+            }
+        }
+
+        if (!empty($rows)) {
+            return array_values(array_map(static fn($r) => (int)$r['role_id'], $rows));
+        }
+
+        // Fallback bridge: if user_roles is empty, infer from users.role to avoid total lockout.
+        // This keeps strict page rules, but tolerates legacy user-role data during migration.
+        $legacyStmt = $this->db->prepare("
+            SELECT UPPER(TRIM(role)) AS role_code
+            FROM users
+            WHERE id = :user_id
+            LIMIT 1
+        ");
+        $legacyStmt->execute([':user_id' => $userId]);
+        $legacyRole = strtoupper(trim((string)$legacyStmt->fetchColumn()));
+        if ($legacyRole === '') {
+            $legacyRole = $sessionRole;
+        }
+        if ($legacyRole === '') {
+            return [];
+        }
+
+        $roleIdStmt = $this->db->prepare("
+            SELECT id
+            FROM roles
+            WHERE UPPER(TRIM(role_code)) = :role_code
+            LIMIT 1
+        ");
+        $roleIdStmt->execute([':role_code' => $legacyRole]);
+        $roleId = (int)$roleIdStmt->fetchColumn();
+        return $roleId > 0 ? [$roleId] : [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function getActiveUserRoleCodes(int $userId): array {
+        $stmt = $this->db->prepare("
+            SELECT DISTINCT UPPER(r.role_code) AS role_code
+            FROM user_roles ur
+            INNER JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = :user_id
+            AND ur.is_active = TRUE
+            AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($rows)) return [];
+        return array_values(array_unique(array_map(static fn($v) => strtoupper((string)$v), $rows)));
     }
 
     /**
@@ -130,7 +240,7 @@ class RBAC {
         }
 
         // Replace public pages if provided
-        if (isset($data['public_pages']) && is_array($data['public_pages'])) {
+        if (isset($data['public_pages']) && is_array($data['public_pages']) && !empty($data['public_pages'])) {
             $this->publicPages = $data['public_pages'];
         }
 
@@ -138,6 +248,28 @@ class RBAC {
         if (isset($data['ensure_admin'])) {
             $this->ensureAdmin = (bool)$data['ensure_admin'];
         }
+    }
+
+    /**
+     * Static rule fallback (menu_access.json / in-code defaults).
+     */
+    private function hasStaticPageAccess(string $pagePath): bool {
+        $pagePath = $this->normalizePagePath($pagePath);
+        if ($this->isPublicPage($pagePath)) {
+            return true;
+        }
+        if (!$this->auth->isLoggedIn()) {
+            return false;
+        }
+        $sessionRole = strtoupper(trim((string)Session::get('user_role', '')));
+        if ($sessionRole === '') {
+            return false;
+        }
+        if (!isset($this->pageAccessRules[$pagePath]) || !is_array($this->pageAccessRules[$pagePath])) {
+            return false;
+        }
+        $allowedRoles = array_map(static fn($r) => strtoupper(trim((string)$r)), $this->pageAccessRules[$pagePath]);
+        return in_array($sessionRole, $allowedRoles, true);
     }
     
     /**
@@ -169,84 +301,100 @@ class RBAC {
             return false;
         }
 
-        // ADMIN shortcut: administrators have full access
-        // NOTE: some pages should explicitly forbid ADMIN automatic override
-        try {
-            $roleCheck = Session::get('user_role');
-            if ($roleCheck && strtoupper($roleCheck) === 'ADMIN') {
-                $noAdminOverride = [
-                    'pages/sijil-user.php'
-                ];
-                // if current page is not in the no-override list, allow ADMIN full access
-                if (!in_array($pagePath, $noAdminOverride, true)) {
+        // Dashboard landing must be accessible to any authenticated user.
+        if ($pagePath === 'index.php') {
+            return true;
+        }
+
+        // Temporary bypass: allow ADMIN full access until RBAC page-role setup is complete.
+        // Set $temporaryAdminFullAccess = false after migration is finalized.
+        if ($this->temporaryAdminFullAccess) {
+            $roleCheck = strtoupper((string)Session::get('user_role', ''));
+            if ($roleCheck === 'ADMIN') {
+                return true;
+            }
+        }
+        
+        // Strict mode: access must come from DB rules only
+        if ($this->strictMode) {
+            if (!$this->useDatabase) {
+                // If RBAC DB tables are unavailable, use static rules as safe compatibility fallback.
+                return $this->hasStaticPageAccess($pagePath);
+            }
+            try {
+                $userId = (int)Session::get('user_id');
+                if ($userId <= 0) return false;
+
+                $roleIds = $this->getEffectiveUserRoleIds($userId);
+                if (empty($roleIds)) {
+                    // All users must have user_roles in strict mode
+                    return false;
+                }
+
+                // All pages must have page_access_rules entry in strict mode
+                $pageStmt = $this->db->prepare("
+                    SELECT id, is_public, requires_auth
+                    FROM page_access_rules
+                    WHERE page_path = :page_path
+                    LIMIT 1
+                ");
+                $pageStmt->execute([':page_path' => $pagePath]);
+                $pageRule = $pageStmt->fetch(PDO::FETCH_ASSOC);
+                if (!$pageRule) {
+                    // Compatibility fallback while DB page rules are being completed
+                    return $this->hasStaticPageAccess($pagePath);
+                }
+
+                if ((int)$pageRule['is_public'] === 1 || (int)$pageRule['requires_auth'] === 0) {
                     return true;
                 }
+
+                $in = implode(',', array_fill(0, count($roleIds), '?'));
+                $sql = "
+                    SELECT COUNT(*) AS count
+                    FROM page_role_access
+                    WHERE page_rule_id = ?
+                    AND role_id IN ($in)
+                ";
+                $stmt = $this->db->prepare($sql);
+                $params = array_merge([(int)$pageRule['id']], $roleIds);
+                $stmt->execute($params);
+                $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($result && (int)$result['count'] > 0) {
+                    return true;
+                }
+                // Compatibility fallback while role-page mappings are being completed
+                return $this->hasStaticPageAccess($pagePath);
+            } catch (PDOException $e) {
+                error_log("RBAC Error (hasPageAccess strict): " . $e->getMessage());
+                return $this->hasStaticPageAccess($pagePath);
             }
-        } catch (Exception $e) {
-            // ignore session read errors
         }
-        
-        // Use database if available
+
+        // Non-strict compatibility path (kept for rollback safety)
         if ($this->useDatabase) {
             try {
-                $userId = Session::get('user_id');
-                
-                // Check if user_roles table exists
-                $checkTable = $this->db->query("SHOW TABLES LIKE 'user_roles'");
-                if ($checkTable->rowCount() > 0) {
-                    // Get user's active roles from user_roles table
-                    $stmt = $this->db->prepare("
-                        SELECT role_id 
-                        FROM user_roles 
-                        WHERE user_id = :user_id 
-                        AND is_active = TRUE
-                        AND (expires_at IS NULL OR expires_at > NOW())
-                    ");
-                    $stmt->execute([':user_id' => $userId]);
-                    $userRoleIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-                    
-                    // If user has roles in user_roles table, use database-based access control
-                    if (!empty($userRoleIds)) {
-                        // Check if any of user's roles have access to this page
-                            $inPlaceholders = implode(',', array_fill(0, count($userRoleIds) + 1, '?'));
-                            $sql = "
-                                SELECT COUNT(*) as count
-                                FROM page_role_access pra
-                                INNER JOIN page_access_rules par ON pra.page_rule_id = par.id
-                                WHERE par.page_path = ?
-                                AND pra.role_id IN (" . implode(',', array_fill(0, count($userRoleIds), '?')) . ")
-                            ";
-                            $stmt = $this->db->prepare($sql);
-
-                            // Build positional params: first pagePath, then role ids
-                            $params = array_merge([$pagePath], $userRoleIds);
-                            $stmt->execute($params);
-                        $result = $stmt->fetch();
-                        
-                        return $result && $result['count'] > 0;
-                    }
-                    // If user_roles table exists but user has no roles, fall through to static config
+                $userId = (int)Session::get('user_id');
+                $roleIds = $this->getActiveUserRoleIds($userId);
+                if (!empty($roleIds)) {
+                    $sql = "
+                        SELECT COUNT(*) as count
+                        FROM page_role_access pra
+                        INNER JOIN page_access_rules par ON pra.page_rule_id = par.id
+                        WHERE par.page_path = ?
+                        AND pra.role_id IN (" . implode(',', array_fill(0, count($roleIds), '?')) . ")
+                    ";
+                    $stmt = $this->db->prepare($sql);
+                    $params = array_merge([$pagePath], $roleIds);
+                    $stmt->execute($params);
+                    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                    return $result && (int)$result['count'] > 0;
                 }
-                // If user_roles table doesn't exist, fall through to static config
             } catch (PDOException $e) {
                 error_log("RBAC Error (hasPageAccess): " . $e->getMessage());
-                // Fallback to static config
             }
         }
-        
-        // Fallback to static configuration
-        $userRole = Session::get('user_role');
-        $userRoleNorm = $userRole ? strtoupper($userRole) : null;
-
-        // If page is in pageAccessRules, check if user's role is allowed (case-insensitive)
-        if (isset($this->pageAccessRules[$pagePath])) {
-            $allowed = array_map('strtoupper', $this->pageAccessRules[$pagePath]);
-            return in_array($userRoleNorm, $allowed, true);
-        }
-        
-        // If page is not in pageAccessRules but is not public, require any authenticated user
-        // This ensures all pages require authentication
-        return true;
+        return false;
     }
     
     /**
@@ -289,6 +437,20 @@ class RBAC {
      * Handle access denied for authenticated users without permission
      */
     private function handleAccessDenied($pagePath) {
+        if (isset($_GET['rbac_debug']) && (string)$_GET['rbac_debug'] === '1') {
+            $payload = $this->buildDeniedDebugPayload((string)$pagePath);
+            $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if (!headers_sent()) {
+                header('Content-Type: text/html; charset=utf-8');
+            }
+            echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>RBAC Debug</title></head><body>';
+            echo '<h3>RBAC Debug (Access Denied)</h3>';
+            echo '<pre style="white-space:pre-wrap;word-break:break-word;background:#f7f7f9;border:1px solid #ddd;padding:12px;">' . htmlspecialchars((string)$json, ENT_QUOTES, 'UTF-8') . '</pre>';
+            echo '<script>console.group("[RBAC DEBUG DENIED]");console.log(' . json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ');console.groupEnd();</script>';
+            echo '</body></html>';
+            exit;
+        }
+
         // Set unauthorized flag
         Session::set('unauthorized_access', true);
         Session::set('unauthorized_page', $pagePath);
@@ -305,6 +467,89 @@ class RBAC {
         echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($deniedUrl) . '"></head><body><script>window.location.href="' . htmlspecialchars($deniedUrl) . '";</script></body></html>';
         exit;
     }
+
+    /**
+     * Build diagnostics for denied access flow.
+     *
+     * @return array<string,mixed>
+     */
+    private function buildDeniedDebugPayload(string $pagePath): array {
+        $normalized = $this->normalizePagePath($pagePath);
+        $userId = (int)Session::get('user_id');
+        $sessionRole = (string)Session::get('user_role', '');
+        $sessionEmail = (string)Session::get('user_email', '');
+
+        $payload = [
+            'input_page' => $pagePath,
+            'normalized_page' => $normalized,
+            'is_logged_in' => $this->auth->isLoggedIn() ? 1 : 0,
+            'session' => [
+                'user_id' => $userId,
+                'user_role' => $sessionRole,
+                'user_email' => $sessionEmail,
+            ],
+            'flags' => [
+                'strictMode' => $this->strictMode ? 1 : 0,
+                'useDatabase' => $this->useDatabase ? 1 : 0,
+            ],
+            'public_page' => $this->isPublicPage($normalized) ? 1 : 0,
+            'static_fallback_allowed' => $this->hasStaticPageAccess($normalized) ? 1 : 0,
+        ];
+
+        if (!$this->useDatabase || $userId <= 0) {
+            return $payload;
+        }
+
+        try {
+            $payload['effective_role_ids'] = $this->getEffectiveUserRoleIds($userId);
+
+            $codesStmt = $this->db->prepare("
+                SELECT DISTINCT UPPER(r.role_code) AS role_code
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id
+                WHERE ur.user_id = :user_id
+                AND ur.is_active = TRUE
+                AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+            ");
+            $codesStmt->execute([':user_id' => $userId]);
+            $payload['active_user_roles'] = $codesStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            $legacyStmt = $this->db->prepare("SELECT role FROM users WHERE id = :user_id LIMIT 1");
+            $legacyStmt->execute([':user_id' => $userId]);
+            $payload['legacy_users_role'] = $legacyStmt->fetchColumn();
+
+            $pageStmt = $this->db->prepare("
+                SELECT id, page_path, is_public, requires_auth
+                FROM page_access_rules
+                WHERE page_path = :page_path
+                LIMIT 1
+            ");
+            $pageStmt->execute([':page_path' => $normalized]);
+            $rule = $pageStmt->fetch(PDO::FETCH_ASSOC);
+            $payload['db_page_rule'] = $rule ?: null;
+
+            if ($rule && !empty($payload['effective_role_ids'])) {
+                $in = implode(',', array_fill(0, count($payload['effective_role_ids']), '?'));
+                $sql = "
+                    SELECT pra.role_id, r.role_code
+                    FROM page_role_access pra
+                    INNER JOIN roles r ON r.id = pra.role_id
+                    WHERE pra.page_rule_id = ?
+                    AND pra.role_id IN ($in)
+                ";
+                $stmt = $this->db->prepare($sql);
+                $params = array_merge([(int)$rule['id']], $payload['effective_role_ids']);
+                $stmt->execute($params);
+                $payload['db_matching_page_roles'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $payload['db_matching_page_roles'] = [];
+            }
+        } catch (Throwable $e) {
+            $payload['debug_error'] = $e->getMessage();
+        }
+
+        return $payload;
+    }
     
     /**
      * Check if user has minimum role level
@@ -313,12 +558,32 @@ class RBAC {
         if (!$this->auth->isLoggedIn()) {
             return false;
         }
-        
-        $userRole = Session::get('user_role');
-        $userLevel = $this->roleHierarchy[$userRole] ?? 0;
-        $requiredLevel = $this->roleHierarchy[$requiredRole] ?? 0;
-        
-        return $userLevel >= $requiredLevel;
+
+        if (!$this->useDatabase) {
+            return false;
+        }
+
+        try {
+            $userId = (int)Session::get('user_id');
+            if ($userId <= 0) return false;
+            $codes = $this->getActiveUserRoleCodes($userId);
+            if (empty($codes)) return false;
+
+            $userLevel = 0;
+            foreach ($codes as $code) {
+                $lvl = (int)($this->roleHierarchy[$code] ?? 0);
+                if ($lvl > $userLevel) $userLevel = $lvl;
+            }
+
+            $requiredRoleNorm = strtoupper((string)$requiredRole);
+            $requiredLevel = (int)($this->roleHierarchy[$requiredRoleNorm] ?? 0);
+            if ($requiredLevel <= 0) return false;
+
+            return $userLevel >= $requiredLevel;
+        } catch (PDOException $e) {
+            error_log("RBAC Error (hasMinimumRole): " . $e->getMessage());
+            return false;
+        }
     }
     
     /**
@@ -343,6 +608,21 @@ class RBAC {
         // Normalize common workspace prefix 'app/' so paths like 'app/pages/..' become 'pages/..'
         if (strpos($path, 'app/') === 0) {
             $path = substr($path, 4);
+        }
+
+        // Remove BASE_URL prefix (supports both with and without leading slash)
+        $baseUrl = trim(str_replace('\\', '/', (string)BASE_URL), '/');
+        if ($baseUrl !== '') {
+            if (strpos($path, $baseUrl . '/') === 0) {
+                $path = substr($path, strlen($baseUrl) + 1);
+            } elseif ($path === $baseUrl) {
+                $path = '';
+            }
+        }
+
+        // Canonical alias: treat dashboard page as index for access rules/menu mapping.
+        if ($path === 'pages/dashboard.php') {
+            return 'index.php';
         }
 
         // If path is already normalized (starts with 'pages/', 'auth/', or 'index.php'), return as is
@@ -379,7 +659,7 @@ class RBAC {
         if (empty($path) || $path === 'index.php' || $path === '/') {
             return 'index.php';
         }
-        
+
         return $path;
     }
     
@@ -445,17 +725,31 @@ class RBAC {
         if (!$this->auth->isLoggedIn()) {
             return [];
         }
-        
-        $userRole = Session::get('user_role');
-        $allowedPages = [];
-        
-        foreach ($this->pageAccessRules as $page => $allowedRoles) {
-            if (in_array($userRole, $allowedRoles)) {
-                $allowedPages[] = $page;
-            }
+
+        if (!$this->useDatabase) {
+            return [];
         }
-        
-        return $allowedPages;
+        try {
+            $userId = (int)Session::get('user_id');
+            $roleIds = $this->getEffectiveUserRoleIds($userId);
+            if (empty($roleIds)) return [];
+            $in = implode(',', array_fill(0, count($roleIds), '?'));
+            $sql = "
+                SELECT DISTINCT par.page_path
+                FROM page_access_rules par
+                LEFT JOIN page_role_access pra ON pra.page_rule_id = par.id
+                WHERE par.is_public = 1
+                OR pra.role_id IN ($in)
+                ORDER BY par.page_path
+            ";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($roleIds);
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            return is_array($rows) ? $rows : [];
+        } catch (PDOException $e) {
+            error_log("RBAC Error (getAllowedPages): " . $e->getMessage());
+            return [];
+        }
     }
     
     /**
