@@ -9,12 +9,15 @@ RUN a2enmod rewrite ssl
 # Disable default site
 RUN a2dissite 000-default.conf
 
-# System deps for Sybase (pdo_dblib / pdo_odbc)
+# System deps for Sybase + certificate PDF generation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     unixodbc-dev \
     freetds-dev \
     freetds-bin \
     tdsodbc \
+    chromium \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions

@@ -233,6 +233,87 @@ try {
                 }
                 
                 echo json_encode(['success' => true, 'message' => 'Peraturan berjaya dicipta', 'id' => $pageRuleId]);
+            } elseif ($action === 'update' && isset($_GET['id'])) {
+                // POST fallback for environments that block PUT (e.g., some Windows server setups)
+                $data = json_decode(file_get_contents('php://input'), true);
+                if (!is_array($data)) $data = [];
+                $pageRuleId = (int)$_GET['id'];
+
+                $updates = [];
+                $params = [':id' => $pageRuleId];
+
+                if (array_key_exists('is_public', $data)) {
+                    $updates[] = "is_public = :is_public";
+                    $params[':is_public'] = toTinyInt($data['is_public']);
+                }
+
+                if (array_key_exists('requires_auth', $data)) {
+                    $updates[] = "requires_auth = :requires_auth";
+                    $params[':requires_auth'] = toTinyInt($data['requires_auth']);
+                }
+
+                if (!empty($updates)) {
+                    $currentUserId = Session::get('user_id');
+                    $updates[] = "updated_by = :updated_by";
+                    $params[':updated_by'] = $currentUserId;
+                    $sql = "UPDATE page_access_rules SET " . implode(', ', $updates) . " WHERE id = :id";
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                }
+
+                if (isset($data['role_ids']) && is_array($data['role_ids'])) {
+                    $stmt = $db->prepare("DELETE FROM page_role_access WHERE page_rule_id = :page_rule_id");
+                    $stmt->execute([':page_rule_id' => $pageRuleId]);
+
+                    if (!empty($data['role_ids'])) {
+                        $currentUserId = Session::get('user_id');
+                        $stmt = $db->prepare("
+                            INSERT INTO page_role_access (page_rule_id, role_id, created_by)
+                            VALUES (:page_rule_id, :role_id, :created_by)
+                        ");
+                        foreach ($data['role_ids'] as $roleId) {
+                            $stmt->execute([
+                                ':page_rule_id' => $pageRuleId,
+                                ':role_id' => $roleId,
+                                ':created_by' => $currentUserId
+                            ]);
+                        }
+                    }
+                }
+
+                if (method_exists($rbac, 'clearCache')) {
+                    $rbac->clearCache();
+                }
+
+                echo json_encode(['success' => true, 'message' => 'Peraturan berjaya dikemaskini']);
+            } elseif ($action === 'delete' && isset($_GET['id'])) {
+                // POST fallback for environments that block DELETE
+                $pageRuleId = (int)$_GET['id'];
+
+                $pathStmt = $db->prepare("SELECT page_path FROM page_access_rules WHERE id = :id");
+                $pathStmt->execute([':id' => $pageRuleId]);
+                $row = $pathStmt->fetch(PDO::FETCH_ASSOC);
+                $pagePath = $row['page_path'] ?? null;
+                if ($pagePath) {
+                    $exStmt = $db->prepare("
+                        INSERT INTO page_access_exclusions (page_path, created_by)
+                        VALUES (:page_path, :created_by)
+                        ON DUPLICATE KEY UPDATE page_path = VALUES(page_path)
+                    ");
+                    $exStmt->execute([
+                        ':page_path' => $pagePath,
+                        ':created_by' => Session::get('user_id') ? (int)Session::get('user_id') : null,
+                    ]);
+                }
+
+                $stmt = $db->prepare("DELETE FROM page_access_rules WHERE id = :id");
+                $stmt->execute([':id' => $pageRuleId]);
+
+                if (method_exists($rbac, 'clearCache')) {
+                    $rbac->clearCache();
+                }
+
+                echo json_encode(['success' => true, 'message' => 'Peraturan berjaya dipadam']);
             } else {
                 http_response_code(400);
                 echo json_encode(['success' => false, 'message' => 'Tindakan tidak sah']);

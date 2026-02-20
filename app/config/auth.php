@@ -50,6 +50,24 @@ class Session {
         
         // Headers not sent - can configure and start session
         if (session_status() === PHP_SESSION_NONE) {
+            // Enforce lifetime at PHP engine level (important on production)
+            @ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
+            @ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
+            @ini_set('session.use_strict_mode', '1');
+
+            // Use app-specific session directory when possible to avoid shared cleanup by other apps
+            try {
+                $sessionDir = realpath(__DIR__ . '/../') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'sessions';
+                if ($sessionDir && !is_dir($sessionDir)) {
+                    @mkdir($sessionDir, 0775, true);
+                }
+                if ($sessionDir && is_dir($sessionDir) && is_writable($sessionDir)) {
+                    @session_save_path($sessionDir);
+                }
+            } catch (Exception $e) {
+                // Fallback to default session path silently
+            }
+
             session_name(SESSION_NAME);
             session_set_cookie_params([
                 'lifetime' => SESSION_LIFETIME,

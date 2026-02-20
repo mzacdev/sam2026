@@ -25,6 +25,350 @@ $rbac->requirePageAccess('pages/sijil.php');
 
 $page_title = 'Sijil Penyertaan';
 
+function getSettingsPayloadRaw(PDO $db): array {
+    try {
+        $st = $db->prepare("SELECT setting_value FROM app_settings WHERE setting_key = :k LIMIT 1");
+        $st->execute([':k' => 'settings_page_payload_v1']);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row || !isset($row['setting_value'])) return [];
+        $decoded = json_decode((string)$row['setting_value'], true);
+        return is_array($decoded) ? $decoded : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function decryptSettingsSecretValue(string $raw): string {
+    if (!str_starts_with($raw, 'ENC:v1:')) return $raw;
+    $key = getenv('SETTINGS_ENCRYPTION_KEY');
+    if ($key === false || trim((string)$key) === '') return '';
+    $parts = explode(':', substr($raw, strlen('ENC:v1:')), 2);
+    if (count($parts) !== 2) return '';
+    $iv = base64_decode($parts[0], true);
+    $cipher = base64_decode($parts[1], true);
+    if ($iv === false || $cipher === false) return '';
+    $k = hash('sha256', (string)$key, true);
+    $plain = openssl_decrypt($cipher, 'AES-256-CBC', $k, OPENSSL_RAW_DATA, $iv);
+    return $plain === false ? '' : (string)$plain;
+}
+
+function getEmailNotificationSettings(PDO $db): array {
+    $payload = getSettingsPayloadRaw($db);
+    $f = (isset($payload['emailNotificationForm']) && is_array($payload['emailNotificationForm'])) ? $payload['emailNotificationForm'] : [];
+    $smtpPasswordRaw = trim((string)($f['smtpPassword'] ?? ''));
+    $smtpPassword = decryptSettingsSecretValue($smtpPasswordRaw);
+    if ($smtpPassword === '' && $smtpPasswordRaw !== '') {
+        $smtpPassword = $smtpPasswordRaw;
+    }
+    return [
+        'enabled' => (bool)($f['emailEnabled'] ?? false),
+        'host' => trim((string)($f['smtpHost'] ?? '')),
+        'port' => (int)($f['smtpPort'] ?? 0),
+        'username' => trim((string)($f['smtpUsername'] ?? '')),
+        'password' => $smtpPassword,
+        'from_email' => trim((string)($f['emailFrom'] ?? '')),
+        'from_name' => trim((string)($f['emailFromName'] ?? 'Sistem SAM2026')),
+    ];
+}
+
+function smtpReadResponse($fp): string {
+    $data = '';
+    while (!feof($fp)) {
+        $line = fgets($fp, 515);
+        if ($line === false) break;
+        $data .= $line;
+        if (preg_match('/^\d{3}\s/', $line)) break;
+    }
+    return $data;
+}
+
+function smtpExpectCode($fp, array $codes): string {
+    $resp = smtpReadResponse($fp);
+    $code = (int)substr($resp, 0, 3);
+    if (!in_array($code, $codes, true)) {
+        throw new RuntimeException('SMTP response tidak dijangka: ' . trim($resp));
+    }
+    return $resp;
+}
+
+function smtpSendCmd($fp, string $cmd, array $okCodes): string {
+    fwrite($fp, $cmd . "\r\n");
+    return smtpExpectCode($fp, $okCodes);
+}
+
+function smtpSendMailWithAttachment(array $smtp, string $toEmail, string $toName, string $subject, string $htmlBody, string $attachName, string $attachBinary): void {
+    $host = (string)$smtp['host'];
+    $port = (int)$smtp['port'];
+    $username = (string)$smtp['username'];
+    $password = (string)$smtp['password'];
+    $fromEmail = (string)$smtp['from_email'];
+    $fromName = (string)$smtp['from_name'];
+
+    if ($host === '' || $port <= 0 || $fromEmail === '') {
+        throw new RuntimeException('Tetapan SMTP tidak lengkap.');
+    }
+
+    $transportHost = ($port === 465) ? ('ssl://' . $host) : $host;
+    $errno = 0;
+    $errstr = '';
+    $fp = @fsockopen($transportHost, $port, $errno, $errstr, 15);
+    if (!$fp) {
+        throw new RuntimeException("Gagal sambung SMTP {$host}:{$port} ({$errno}) {$errstr}");
+    }
+
+    try {
+        smtpExpectCode($fp, [220]);
+        smtpSendCmd($fp, 'EHLO sam2026.local', [250]);
+
+        if ($port === 587) {
+            smtpSendCmd($fp, 'STARTTLS', [220]);
+            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('Gagal aktifkan STARTTLS.');
+            }
+            smtpSendCmd($fp, 'EHLO sam2026.local', [250]);
+        }
+
+        if ($username !== '') {
+            smtpSendCmd($fp, 'AUTH LOGIN', [334]);
+            smtpSendCmd($fp, base64_encode($username), [334]);
+            smtpSendCmd($fp, base64_encode($password), [235]);
+        }
+
+        smtpSendCmd($fp, 'MAIL FROM:<' . $fromEmail . '>', [250]);
+        smtpSendCmd($fp, 'RCPT TO:<' . $toEmail . '>', [250, 251]);
+        smtpSendCmd($fp, 'DATA', [354]);
+
+        $boundary = '=_SAM2026_' . bin2hex(random_bytes(8));
+        $fromHeaderName = mb_encode_mimeheader($fromName, 'UTF-8');
+        $toHeaderName = mb_encode_mimeheader($toName, 'UTF-8');
+        $subjectEnc = mb_encode_mimeheader($subject, 'UTF-8');
+
+        $headers = [];
+        $headers[] = 'From: ' . $fromHeaderName . ' <' . $fromEmail . '>';
+        $headers[] = 'To: ' . $toHeaderName . ' <' . $toEmail . '>';
+        $headers[] = 'Subject: ' . $subjectEnc;
+        $headers[] = 'MIME-Version: 1.0';
+        $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
+        $headers[] = '';
+        $headers[] = '--' . $boundary;
+        $headers[] = 'Content-Type: text/html; charset=UTF-8';
+        $headers[] = 'Content-Transfer-Encoding: base64';
+        $headers[] = '';
+        $headers[] = chunk_split(base64_encode($htmlBody));
+        $headers[] = '--' . $boundary;
+        $headers[] = 'Content-Type: application/pdf; name="' . $attachName . '"';
+        $headers[] = 'Content-Transfer-Encoding: base64';
+        $headers[] = 'Content-Disposition: attachment; filename="' . $attachName . '"';
+        $headers[] = '';
+        $headers[] = chunk_split(base64_encode($attachBinary));
+        $headers[] = '--' . $boundary . '--';
+        $headers[] = '';
+        $mime = implode("\r\n", $headers);
+        fwrite($fp, $mime . "\r\n.\r\n");
+        smtpExpectCode($fp, [250]);
+        smtpSendCmd($fp, 'QUIT', [221]);
+    } finally {
+        fclose($fp);
+    }
+}
+
+function buildCertificateHtmlForEmail(string $name, string $line2, string $templateAbsUrl): string {
+    return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sijil Penyertaan</title>'
+        . '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.cert-name{position:absolute;left:11%;top:38%;transform:translateY(-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.05;z-index:1;font-size:20px}.cert-sport{position:absolute;left:11%;top:48%;width:78%;text-align:center;color:#000;font-weight:700;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+        . '<div class="page">'
+        . '<img class="bg-img" src="' . htmlspecialchars($templateAbsUrl, ENT_QUOTES, 'UTF-8') . '" alt="background">'
+        . '<div class="cert-name">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>'
+        . '<div class="cert-sport">' . htmlspecialchars($line2, ENT_QUOTES, 'UTF-8') . '</div>'
+        . '</div></body></html>';
+}
+
+function imageFileToDataUri(string $absPath): ?string {
+    if (!is_file($absPath) || !is_readable($absPath)) return null;
+    $bin = @file_get_contents($absPath);
+    if ($bin === false || $bin === '') return null;
+    $ext = strtolower((string)pathinfo($absPath, PATHINFO_EXTENSION));
+    $mime = 'image/jpeg';
+    if ($ext === 'png') $mime = 'image/png';
+    if ($ext === 'webp') $mime = 'image/webp';
+    return 'data:' . $mime . ';base64,' . base64_encode($bin);
+}
+
+function findBinaryPath(string $binaryName): ?string {
+    // Allow explicit override from environment (production friendly)
+    $envKey = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '_', $binaryName)) . '_PATH';
+    $envPath = trim((string)(getenv($envKey) ?: ''));
+    if ($envPath !== '' && is_file($envPath)) {
+        return $envPath;
+    }
+
+    // Windows common install locations (XAMPP/production)
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $candidates = [];
+        $bn = strtolower($binaryName);
+        if ($bn === 'wkhtmltopdf') {
+            $candidates = [
+                'C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe',
+                'C:\\Program Files (x86)\\wkhtmltopdf\\bin\\wkhtmltopdf.exe',
+            ];
+        } elseif ($bn === 'chromium' || $bn === 'chromium-browser') {
+            $candidates = [
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Chromium\\Application\\chrome.exe',
+                'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+                'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            ];
+        }
+        foreach ($candidates as $p) {
+            if (is_file($p)) return $p;
+        }
+    }
+
+    $whichCmd = (stripos(PHP_OS, 'WIN') === 0) ? 'where' : 'command -v';
+    $rawPath = '';
+    if (function_exists('shell_exec')) {
+        $tmp = @shell_exec($whichCmd . ' ' . $binaryName);
+        $rawPath = is_null($tmp) ? '' : (string)$tmp;
+    }
+    $pathCheck = trim($rawPath);
+    if ($pathCheck === '') return null;
+    $first = trim(explode("\n", $pathCheck)[0]);
+    return $first !== '' ? $first : null;
+}
+
+function runCommandCapture(string $command): string {
+    if (function_exists('proc_open')) {
+        $desc = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $pipes = [];
+        $proc = @proc_open($command, $desc, $pipes);
+        if (is_resource($proc)) {
+            if (isset($pipes[0])) fclose($pipes[0]);
+            $out = isset($pipes[1]) ? stream_get_contents($pipes[1]) : '';
+            $err = isset($pipes[2]) ? stream_get_contents($pipes[2]) : '';
+            if (isset($pipes[1])) fclose($pipes[1]);
+            if (isset($pipes[2])) fclose($pipes[2]);
+            @proc_close($proc);
+            return trim((string)($out . "\n" . $err));
+        }
+    }
+    if (function_exists('shell_exec')) {
+        $res = @shell_exec($command . ' 2>&1');
+        return trim((string)($res ?? ''));
+    }
+    return '';
+}
+
+function shellQuoteArg(string $arg): string {
+    // cmd.exe on Windows does not treat single quotes as quoting characters.
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        return '"' . str_replace('"', '\"', $arg) . '"';
+    }
+    return escapeshellarg($arg);
+}
+
+function shellQuoteCmd(string $binary): string {
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        return '"' . str_replace('"', '\"', $binary) . '"';
+    }
+    return escapeshellcmd($binary);
+}
+
+function runPdfGenerator(string $command, string $tmpPdf): string {
+    runCommandCapture($command);
+    if (file_exists($tmpPdf) && filesize($tmpPdf) > 0) {
+        return (string)file_get_contents($tmpPdf);
+    }
+    return '';
+}
+
+function renderPdfFromHtmlWithFallback(string $html, string $tmpPrefix = 'sijil_mail_'): string {
+    $tmpDir = sys_get_temp_dir();
+    $tmpHtml = tempnam($tmpDir, $tmpPrefix) . '.html';
+    $tmpPdf = tempnam($tmpDir, $tmpPrefix) . '.pdf';
+    file_put_contents($tmpHtml, $html);
+
+    $pdf = '';
+    $GLOBALS['__pdf_engine_used'] = '';
+    try {
+        // Primary: wkhtmltopdf
+        $wkDetected = findBinaryPath('wkhtmltopdf');
+        $wk = $wkDetected ?: 'wkhtmltopdf';
+        $wkCmd = shellQuoteCmd($wk)
+            . ' --page-size A4 --margin-top 0mm --margin-bottom 0mm --margin-left 0mm --margin-right 0mm --disable-smart-shrinking --print-media-type --enable-local-file-access '
+            . shellQuoteArg($tmpHtml) . ' ' . shellQuoteArg($tmpPdf);
+        $pdf = runPdfGenerator($wkCmd, $tmpPdf);
+        if ($pdf !== '') $GLOBALS['__pdf_engine_used'] = 'wkhtmltopdf';
+
+        // In Windows production, keep output stable: if wkhtmltopdf exists, do not switch engine.
+        if ($pdf === '' && stripos(PHP_OS, 'WIN') === 0 && $wkDetected) {
+            throw new RuntimeException('Gagal jana PDF dengan wkhtmltopdf di Windows.');
+        }
+
+        // Fallback: chromium/chromium-browser headless print
+        if ($pdf === '') {
+            $chrome = findBinaryPath('chromium')
+                ?: (findBinaryPath('chromium-browser') ?: null);
+            if ($chrome) {
+                $fileUrl = 'file://' . str_replace(DIRECTORY_SEPARATOR, '/', realpath($tmpHtml) ?: $tmpHtml);
+                $chromeCmd = shellQuoteCmd($chrome)
+                    . ' --headless --disable-gpu --no-sandbox --print-to-pdf-no-header --no-pdf-header-footer --print-to-pdf=' . shellQuoteArg($tmpPdf)
+                    . ' ' . shellQuoteArg($fileUrl);
+                $pdf = runPdfGenerator($chromeCmd, $tmpPdf);
+                if ($pdf !== '') $GLOBALS['__pdf_engine_used'] = 'chromium';
+            }
+        }
+    } finally {
+        @unlink($tmpHtml);
+        @unlink($tmpPdf);
+    }
+
+    if ($pdf === '') {
+        $df = trim((string)(ini_get('disable_functions') ?: ''));
+        $extra = $df !== '' ? (' disable_functions=' . $df) : '';
+        throw new RuntimeException('Gagal jana PDF sijil. Pastikan wkhtmltopdf/chrome tersedia dan fungsi proc_open/shell_exec tidak disekat.' . $extra);
+    }
+    return $pdf;
+}
+
+function renderCertPdfBinary(string $html): string {
+    return renderPdfFromHtmlWithFallback($html, 'sijil_mail_');
+}
+
+function safeSamPdfFileName(string $name): string {
+    $trans = @iconv('UTF-8', 'ASCII//TRANSLIT', $name);
+    $base = $trans !== false ? $trans : $name;
+    $base = preg_replace('/[^A-Za-z0-9 _-]/', '', (string)$base);
+    $base = preg_replace('/[\s\t\r\n]+/', '_', (string)$base);
+    $base = preg_replace('/_+/', '_', (string)$base);
+    $base = trim((string)$base, '_');
+    if ($base === '') $base = 'PENERIMA';
+    $base = strtoupper(substr($base, 0, 60));
+    return 'SAM2026_' . $base . '.pdf';
+}
+
+function ensureCertificateEmailLogTable(PDO $db): void {
+    $sql = "CREATE TABLE IF NOT EXISTS certificate_email_logs (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                member_id BIGINT UNSIGNED NOT NULL,
+                cert_type VARCHAR(30) NOT NULL,
+                recipient_name VARCHAR(255) NOT NULL,
+                recipient_email VARCHAR(255) NOT NULL,
+                role_text VARCHAR(255) NULL,
+                sent_by_user_id BIGINT UNSIGNED NULL,
+                sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_member_id (member_id),
+                KEY idx_cert_type (cert_type),
+                KEY idx_sent_at (sent_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    $db->exec($sql);
+}
+
 // load list of universities (same approach as ringkasan)
 // Populate list of universities for the select (reuse ringkasan logic)
 $unis = [];
@@ -217,11 +561,46 @@ if ($ajax === 'managers') {
     $t0 = microtime(true);
         try {
         $db = getDB();
+        ensureCertificateEmailLogTable($db);
         // Order differently depending on requested member_ref_type: STAF -> order by role_id then name; others -> order by name
         if (strtoupper($type) === 'STAF') {
-            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.role_id, cm.member_name";
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id,
+                           COALESCE(el.send_count, 0) AS email_send_count, el.last_sent_at AS email_last_sent_at, COALESCE(el.last_recipient_email, '') AS email_last_sent_to
+                    FROM committee_members cm
+                    LEFT JOIN committee_roles cr ON cr.id = cm.role_id
+                    LEFT JOIN (
+                        SELECT x.member_id, x.send_count, y.sent_at AS last_sent_at, y.recipient_email AS last_recipient_email
+                        FROM (
+                            SELECT member_id, COUNT(*) AS send_count, MAX(id) AS last_log_id
+                            FROM certificate_email_logs
+                            GROUP BY member_id
+                        ) x
+                        LEFT JOIN certificate_email_logs y
+                          ON y.id = x.last_log_id
+                    ) el ON el.member_id = cm.id
+                    WHERE cm.deleted_at IS NULL
+                      AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL)
+                      AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type
+                    ORDER BY cm.role_id, cm.member_name";
         } else {
-            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id FROM committee_members cm LEFT JOIN committee_roles cr ON cr.id = cm.role_id WHERE cm.deleted_at IS NULL AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL) AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type ORDER BY cm.member_name";
+            $sql = "SELECT cm.id AS id, TRIM(cm.member_name) AS member_name, TRIM(cm.member_email) AS member_email, COALESCE(cr.role_name, '') AS role_name, cm.member_ref_type, cm.member_ref_id, cm.member_phone, cm.role_id,
+                           COALESCE(el.send_count, 0) AS email_send_count, el.last_sent_at AS email_last_sent_at, COALESCE(el.last_recipient_email, '') AS email_last_sent_to
+                    FROM committee_members cm
+                    LEFT JOIN committee_roles cr ON cr.id = cm.role_id
+                    LEFT JOIN (
+                        SELECT x.member_id, x.send_count, y.sent_at AS last_sent_at, y.recipient_email AS last_recipient_email
+                        FROM (
+                            SELECT member_id, COUNT(*) AS send_count, MAX(id) AS last_log_id
+                            FROM certificate_email_logs
+                            GROUP BY member_id
+                        ) x
+                        LEFT JOIN certificate_email_logs y
+                          ON y.id = x.last_log_id
+                    ) el ON el.member_id = cm.id
+                    WHERE cm.deleted_at IS NULL
+                      AND (cr.deleted_at IS NULL OR cr.deleted_at IS NULL)
+                      AND UPPER(COALESCE(cm.member_ref_type,'')) = :ref_type
+                    ORDER BY cm.member_name";
         }
         $st = $db->prepare($sql);
         $st->execute([':ref_type' => $type]);
@@ -494,6 +873,148 @@ if ($ajax === 'student_lookup') {
 
         $out['ok'] = true;
         $out['results'] = $rows;
+    } catch (Exception $e) {
+        $out['ok'] = false;
+        $out['error'] = $e->getMessage();
+    }
+    $out['elapsed_ms'] = (int)((microtime(true) - $t0) * 1000);
+    echo json_encode($out);
+    exit;
+}
+
+// AJAX endpoint: send certificate email with PDF attachment
+if ($ajax === 'send_certificate_email' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = ['ok' => false, 'error' => null, 'message' => null];
+    $t0 = microtime(true);
+    try {
+        $db = getDB();
+        $smtp = getEmailNotificationSettings($db);
+        if (empty($smtp['enabled'])) {
+            throw new Exception('Notifikasi emel belum diaktifkan dalam Tetapan.');
+        }
+
+        $recipientName = trim((string)($_POST['recipient_name'] ?? ''));
+        $recipientEmail = trim((string)($_POST['recipient_email'] ?? ''));
+        $certType = strtolower(trim((string)($_POST['cert_type'] ?? '')));
+        $roleTextInput = trim((string)($_POST['role_text'] ?? ''));
+        $athleteId = (int)($_POST['athlete_id'] ?? 0);
+        $memberId = (int)($_POST['member_id'] ?? 0);
+
+        if ($recipientName === '') throw new Exception('Nama penerima diperlukan.');
+        if ($recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('Emel penerima tidak sah.');
+        }
+
+        $roleText = $roleTextInput;
+        $templateRel = '/assets/img/sijil/sijil_penyelaras.jpeg';
+
+        if ($certType === 'athlete') {
+            if ($athleteId <= 0) throw new Exception('ID atlet tidak sah.');
+            $sqlSingle = "SELECT TRIM(pa.nama) AS nama, COALESCE(s.nama_sukan,'') AS sukan, COALESCE(kt.nama_kategori,'') AS acara
+                          FROM table_pasukan_atlet pa
+                          JOIN table_pasukan p ON p.id = pa.pasukan_id
+                          LEFT JOIN table_sukan s ON s.id = p.sukan_id
+                          LEFT JOIN table_kategori kt ON kt.id = pa.kategori_id
+                          WHERE pa.id = :id AND pa.deleted_at IS NULL AND p.deleted_at IS NULL
+                          LIMIT 1";
+            $st = $db->prepare($sqlSingle);
+            $st->execute([':id' => $athleteId]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) throw new Exception('Rekod atlet tidak ditemui.');
+            $recipientName = trim((string)($r['nama'] ?? $recipientName));
+            $sukan = trim((string)($r['sukan'] ?? ''));
+            $acara = trim((string)($r['acara'] ?? ''));
+            $roleText = $sukan;
+            if ($acara !== '') $roleText = ($roleText !== '' ? ($roleText . ' (' . $acara . ')') : $acara);
+            $templateRel = '/assets/img/sijil/sijil_atlet.jpeg';
+        } elseif ($certType === 'pengurus') {
+            if ($roleText === '') $roleText = 'PENGURUS';
+            $templateRel = '/assets/img/sijil/sijil_pengurus.jpeg';
+        } elseif ($certType === 'jurulatih') {
+            if ($roleText === '') $roleText = 'JURULATIH';
+            $templateRel = '/assets/img/sijil/sijil_jurulatih.jpeg';
+        } elseif ($certType === 'penyelaras') {
+            if ($roleText === '') $roleText = 'KETUA KONTINJEN';
+            $templateRel = '/assets/img/sijil/sijil_penyelaras.jpeg';
+        } elseif ($certType === 'committee' || $certType === 'volunteer') {
+            if ($roleText === '') $roleText = 'JAWATANKUASA';
+            $templateRel = '/assets/img/sijil/sijil_penyelaras.jpeg';
+        } else {
+            throw new Exception('Jenis sijil tidak disokong.');
+        }
+
+        $roleText = mb_strtoupper($roleText, 'UTF-8');
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $fullImg = realpath(__DIR__ . '/..') . $templateRel;
+        $ver = @file_exists($fullImg) ? @filemtime($fullImg) : time();
+        $templateAbsUrl = $scheme . '://' . $host . url(ltrim($templateRel, '/')) . '?v=' . (int)$ver;
+        $templateDataUri = imageFileToDataUri($fullImg);
+        if ($templateDataUri) {
+            $templateAbsUrl = $templateDataUri;
+        }
+
+        $pdfHtml = buildCertificateHtmlForEmail($recipientName, $roleText, $templateAbsUrl);
+        $pdfBinary = renderCertPdfBinary($pdfHtml);
+        $pdfEngine = (string)($GLOBALS['__pdf_engine_used'] ?? '');
+        $pdfName = safeSamPdfFileName($recipientName);
+
+        $subject = 'Sijil Penyertaan SAM2026 - ' . $recipientName;
+        $htmlBody = '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;color:#1f2937} .card{max-width:680px;margin:auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden} .head{background:#0d6efd;color:#fff;padding:16px 20px;font-size:18px;font-weight:700} .body{padding:20px;line-height:1.6} .meta{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin:14px 0} .foot{padding:16px 20px;background:#f9fafb;color:#6b7280;font-size:12px}</style></head><body>'
+            . '<div class="card"><div class="head">Sijil Penyertaan SAM2026</div><div class="body">'
+            . '<p>Assalamualaikum / Salam Sejahtera <strong>' . htmlspecialchars($recipientName, ENT_QUOTES, 'UTF-8') . '</strong>,</p>'
+            . '<p>Emel ini mengandungi sijil penyertaan anda bagi <strong>Sukan Asasi Malaysia 2026</strong>.</p>'
+            . '<div class="meta"><div><strong>Nama:</strong> ' . htmlspecialchars($recipientName, ENT_QUOTES, 'UTF-8') . '</div>'
+            . '<div><strong>Peranan / Sukan:</strong> ' . htmlspecialchars($roleText, ENT_QUOTES, 'UTF-8') . '</div>'
+            . '<div><strong>Lampiran:</strong> ' . htmlspecialchars($pdfName, ENT_QUOTES, 'UTF-8') . '</div></div>'
+            . '<p>Sila rujuk lampiran PDF untuk sijil rasmi anda.</p>'
+            . '<p>Terima kasih.</p></div><div class="foot">Emel automatik SAM2026. Sila jangan balas emel ini.</div></div></body></html>';
+
+        smtpSendMailWithAttachment($smtp, $recipientEmail, $recipientName, $subject, $htmlBody, $pdfName, $pdfBinary);
+
+        if (($certType === 'committee' || $certType === 'volunteer') && $memberId > 0) {
+            ensureCertificateEmailLogTable($db);
+            // Upsert per member_id: first send -> insert, next sends -> update last sent timestamp/details.
+            $stExist = $db->prepare("SELECT id FROM certificate_email_logs WHERE member_id = :member_id ORDER BY id DESC LIMIT 1");
+            $stExist->execute([':member_id' => $memberId]);
+            $existingId = (int)($stExist->fetchColumn() ?: 0);
+            if ($existingId > 0) {
+                $stUpd = $db->prepare("UPDATE certificate_email_logs
+                    SET cert_type = :cert_type,
+                        recipient_name = :recipient_name,
+                        recipient_email = :recipient_email,
+                        role_text = :role_text,
+                        sent_by_user_id = :sent_by,
+                        sent_at = NOW()
+                    WHERE id = :id");
+                $stUpd->execute([
+                    ':cert_type' => $certType,
+                    ':recipient_name' => mb_strtoupper(trim((string)$recipientName), 'UTF-8'),
+                    ':recipient_email' => strtolower(trim((string)$recipientEmail)),
+                    ':role_text' => trim((string)$roleText),
+                    ':sent_by' => (int)($_SESSION['user_id'] ?? 0) ?: null,
+                    ':id' => $existingId
+                ]);
+            } else {
+                $stLog = $db->prepare("INSERT INTO certificate_email_logs
+                    (member_id, cert_type, recipient_name, recipient_email, role_text, sent_by_user_id)
+                    VALUES (:member_id, :cert_type, :recipient_name, :recipient_email, :role_text, :sent_by)");
+                $stLog->execute([
+                    ':member_id' => $memberId,
+                    ':cert_type' => $certType,
+                    ':recipient_name' => mb_strtoupper(trim((string)$recipientName), 'UTF-8'),
+                    ':recipient_email' => strtolower(trim((string)$recipientEmail)),
+                    ':role_text' => trim((string)$roleText),
+                    ':sent_by' => (int)($_SESSION['user_id'] ?? 0) ?: null
+                ]);
+            }
+        }
+
+        $out['ok'] = true;
+        $out['message'] = 'Emel sijil berjaya dihantar ke ' . $recipientEmail;
+        $out['file'] = $pdfName;
+        $out['pdf_engine'] = $pdfEngine;
     } catch (Exception $e) {
         $out['ok'] = false;
         $out['error'] = $e->getMessage();
@@ -842,38 +1363,19 @@ if ($printAll !== '') {
 
     $multiHtml .= '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },180); } })();</script></body></html>';
 
-    // If download requested, attempt wkhtmltopdf generation
+    // If download requested, attempt PDF generation (wkhtmltopdf/chromium fallback)
     $downloadAll = trim((string)($_GET['download'] ?? $_GET['dl'] ?? ''));
     if ($downloadAll === '1' || strtolower($downloadAll) === 'true') {
-        $tmpDir = sys_get_temp_dir();
-        $tmpHtml = tempnam($tmpDir, 'sijil_all_') . '.html';
-        $tmpPdf = tempnam($tmpDir, 'sijil_all_') . '.pdf';
-        file_put_contents($tmpHtml, $multiHtml);
-
-        $wk = 'wkhtmltopdf';
-        $whichCmd = (stripos(PHP_OS, 'WIN') === 0) ? 'where' : 'command -v';
-        $binary = null;
-        $rawPath = @shell_exec($whichCmd . ' ' . $wk);
-        $pathCheck = is_null($rawPath) ? '' : trim($rawPath);
-        if ($pathCheck) $binary = trim(explode("\n", $pathCheck)[0]);
-        if (!$binary) $binary = $wk;
-
-        $cmd = escapeshellcmd($binary) . ' --page-size A4 --margin-top 0 --margin-bottom 0 --margin-left 0 --margin-right 0 --enable-local-file-access ' . escapeshellarg($tmpHtml) . ' ' . escapeshellarg($tmpPdf) . ' 2>&1';
-        $output = @shell_exec($cmd);
-
-        if (file_exists($tmpPdf) && filesize($tmpPdf) > 0) {
+        try {
+            $pdfBinary = renderPdfFromHtmlWithFallback($multiHtml, 'sijil_all_');
             $dlname = 'sijil_semua_' . $kodAll . '_' . date('Ymd_His') . '.pdf';
             $dlNameEnc = rawurlencode($dlname);
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="' . $dlname . '"; filename*=UTF-8\'\'' . $dlNameEnc);
-            header('Content-Length: ' . filesize($tmpPdf));
-            readfile($tmpPdf);
-            @unlink($tmpHtml);
-            @unlink($tmpPdf);
+            header('Content-Length: ' . strlen($pdfBinary));
+            echo $pdfBinary;
             exit;
-        } else {
-            @unlink($tmpHtml);
-            @unlink($tmpPdf);
+        } catch (Throwable $e) {
             // fallback to HTML output when PDF generation fails
         }
     }
@@ -945,30 +1447,10 @@ if ($printId !== '') {
         '</div>' .
         '<script> (function(){ var bg=document.querySelector(".bg-img"); function p(){ try{ if(window.top===window.self){ window.print(); } }catch(e){} } if(bg){ if(bg.complete) setTimeout(p,120); else { bg.addEventListener("load", p); bg.addEventListener("error", p); } } else setTimeout(p,200); })(); </script></body></html>';
 
-    // If user requested download=1, try to generate PDF server-side using wkhtmltopdf
+    // If user requested download=1, try to generate PDF server-side (wkhtmltopdf/chromium fallback)
     if ($download === '1' || strtolower($download) === 'true') {
-        // create temp files
-        $tmpDir = sys_get_temp_dir();
-        $tmpHtml = tempnam($tmpDir, 'sijil_') . '.html';
-        $tmpPdf = tempnam($tmpDir, 'sijil_') . '.pdf';
-        file_put_contents($tmpHtml, $certHtml);
-
-        // command
-        $wk = 'wkhtmltopdf';
-        // try to find wkhtmltopdf full path on Windows or Unix
-        $whichCmd = (stripos(PHP_OS, 'WIN') === 0) ? 'where' : 'command -v';
-        $binary = null;
-        $rawPath = @shell_exec($whichCmd . ' ' . $wk);
-        $pathCheck = is_null($rawPath) ? '' : trim($rawPath);
-        if ($pathCheck) $binary = trim(explode("\n", $pathCheck)[0]);
-        if (!$binary) $binary = $wk; // rely on PATH
-
-        $cmd = escapeshellcmd($binary) . ' --page-size A4 --margin-top 0 --margin-bottom 0 --margin-left 0 --margin-right 0 --enable-local-file-access ' . escapeshellarg($tmpHtml) . ' ' . escapeshellarg($tmpPdf) . ' 2>&1';
-        $output = null;
-        $ret = null;
-        $output = shell_exec($cmd);
-
-        if (file_exists($tmpPdf) && filesize($tmpPdf) > 0) {
+        try {
+            $pdfBinary = renderPdfFromHtmlWithFallback($certHtml, 'sijil_');
             // create a safe filename using recipient name
             $raw = trim((string)$name);
             $slug = '';
@@ -988,16 +1470,11 @@ if ($printId !== '') {
             $downloadNameUtf = rawurlencode($downloadName);
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="' . $downloadName . '"; filename*=UTF-8\'\'' . $downloadNameUtf);
-            header('Content-Length: ' . filesize($tmpPdf));
-            readfile($tmpPdf);
-            @unlink($tmpHtml);
-            @unlink($tmpPdf);
+            header('Content-Length: ' . strlen($pdfBinary));
+            echo $pdfBinary;
             exit;
-        } else {
-            // cleanup and fall back to HTML page if PDF generation failed
-            @unlink($tmpHtml);
-            @unlink($tmpPdf);
-            // optionally log $output for debugging
+        } catch (Throwable $e) {
+            // fallback to HTML page if PDF generation failed
         }
     }
     // If PDF not requested or generation failed, output the HTML certificate
@@ -1108,6 +1585,19 @@ ob_start();
                         font-weight:600;
                         line-height:1.2;
                     }
+                    .email-sent-badge{
+                        display:inline-block;
+                        margin-left:0.35rem;
+                        padding:0.18rem 0.5rem;
+                        border-radius:999px;
+                        background:#d1e7dd;
+                        color:#0f5132;
+                        border:1px solid #badbcc;
+                        font-size:0.72rem;
+                        font-weight:700;
+                        line-height:1.2;
+                        white-space:nowrap;
+                    }
                 </style>
                 <div id="tabsWrap">
                     <div class="d-flex align-items-start">
@@ -1174,7 +1664,7 @@ ob_start();
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
                                             <input type="search" id="searchPenyelaras" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
-                                            <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                            <button type="button" id="printAllPenyelaras" class="btn btn-sm btn-primary"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Ketua Kontinjen</th><th style="width:20%">Email</th><th style="width:10%" class="text-center">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="penyelarasBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
@@ -1188,7 +1678,7 @@ ob_start();
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
                                             <input type="search" id="searchPengurus" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
-                                            <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                            <button type="button" id="printAllPengurus" class="btn btn-sm btn-primary"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Pengurus</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="pengurusBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
@@ -1202,7 +1692,7 @@ ob_start();
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
                                             <input type="search" id="searchJurulatih" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
-                                            <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                            <button type="button" id="printAllJurulatih" class="btn btn-sm btn-primary"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Jurulatih</th><th style="width:20%">Jawatan</th><th style="width:10%">No Telefon</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="jurulatihBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
@@ -1216,7 +1706,7 @@ ob_start();
                                         <div class="d-flex mb-2">
                                             <div class="me-auto"></div>
                                             <input type="search" id="searchAtlet" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
-                                            <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
+                                            <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                         <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:55%">Nama Atlet</th><th style="width:30%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
                                         <div class="d-flex justify-content-end align-items-center mt-2">
@@ -1257,7 +1747,7 @@ ob_start();
                                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
                                         <div class="d-flex align-items-center ms-auto">
                                             <input type="search" id="searchCommittee" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:320px;">
-                                            <button type="button" id="printAllCommittee" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;">Cetak Semua</button>
+                                            <button type="button" id="printAllCommittee" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                     </div>
                                         <div class="table-responsive">
@@ -1309,7 +1799,7 @@ ob_start();
                                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
                                         <div class="d-flex align-items-center ms-auto">
                                             <input type="search" id="searchVolunteer" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:320px;">
-                                            <button type="button" id="printAllVolunteer" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;">Cetak Semua</button>
+                                            <button type="button" id="printAllVolunteer" class="btn btn-sm btn-primary text-nowrap" style="white-space:nowrap;"><i class="fa-solid fa-print me-1"></i>Cetak Semua</button>
                                         </div>
                                     </div>
                                         <div class="table-responsive">
@@ -1437,6 +1927,18 @@ ob_start();
                     #memberManualTypeWrap.force-show {
                         display: block !important;
                     }
+                    .icon-action-btn {
+                        width: 32px;
+                        height: 30px;
+                        padding: 0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .icon-action-btn .icon-glyph {
+                        font-size: 1rem;
+                        line-height: 1;
+                    }
                 </style>
 
                 <script>
@@ -1538,6 +2040,80 @@ ob_start();
                                 }catch(e){ console.error(e); hideLoader(); }
                             }
 
+                            function sendCertificateEmail(payload){
+                                payload = payload || {};
+                                var name = (payload.recipient_name || '').toString().trim();
+                                var email = (payload.recipient_email || '').toString().trim();
+                                var notifyError = function(msg){
+                                    if (window.Swal) {
+                                        window.Swal.fire({ icon: 'error', title: 'Ralat', text: msg });
+                                    } else {
+                                        alert(msg);
+                                    }
+                                };
+                                if (!name) { notifyError('Nama penerima tiada.'); return; }
+                                if (!email) { notifyError('Emel penerima tiada.'); return; }
+                                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { notifyError('Emel penerima tidak sah.'); return; }
+
+                                var htmlConfirm = '<div style="text-align:center">'
+                                    + '<div>' + escHtml(name) + '</div>'
+                                    + '<div>' + escHtml(email) + '</div>'
+                                    + '</div>';
+
+                                var doSend = function(){
+                                    showLoader();
+                                    var fd = new URLSearchParams();
+                                    fd.append('recipient_name', name);
+                                    fd.append('recipient_email', email);
+                                    fd.append('cert_type', payload.cert_type || '');
+                                    fd.append('role_text', payload.role_text || '');
+                                    if (payload.athlete_id) fd.append('athlete_id', String(payload.athlete_id));
+                                    if (payload.member_id) fd.append('member_id', String(payload.member_id));
+
+                                    fetch(window.location.pathname + '?ajax=send_certificate_email', {
+                                        method: 'POST',
+                                        body: fd,
+                                        credentials: 'same-origin'
+                                    })
+                                    .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+                                    .then(function(t){
+                                        var j = null;
+                                        try { j = JSON.parse(t); } catch(parseErr){ throw new Error('Invalid response server'); }
+                                        if (!j || !j.ok) throw new Error((j && j.error) ? j.error : 'Gagal hantar emel.');
+                                        if (window.Swal) Swal.fire({ icon:'success', title:'Berjaya', text: j.message || 'Emel sijil berjaya dihantar.' });
+                                        else alert(j.message || 'Emel sijil berjaya dihantar.');
+                                        try {
+                                            if ((payload.cert_type || '') === 'committee' && btnLoadCommittee) {
+                                                preserveCommitteePage = currentCommitteePage;
+                                                btnLoadCommittee.click();
+                                            } else if ((payload.cert_type || '') === 'volunteer' && btnLoadVolunteer) {
+                                                preserveVolunteerPage = currentVolunteerPage;
+                                                btnLoadVolunteer.click();
+                                            }
+                                        } catch (e) {}
+                                    })
+                                    .catch(function(err){
+                                        if (window.Swal) Swal.fire({ icon:'error', title:'Gagal', text: err && err.message ? err.message : 'Ralat menghantar emel.' });
+                                        else alert('Ralat menghantar emel: ' + (err && err.message ? err.message : 'Unknown'));
+                                    })
+                                    .finally(function(){ hideLoader(); });
+                                };
+
+                                if (window.Swal){
+                                    Swal.fire({
+                                        title: 'E-Sijil?',
+                                        html: htmlConfirm,
+                                        icon: 'question',
+                                        width: 640,
+                                        showCancelButton: true,
+                                        confirmButtonText: 'Hantar',
+                                        cancelButtonText: 'Batal'
+                                    }).then(function(res){ if (res && res.isConfirmed) doSend(); });
+                                } else {
+                                    if (confirm('Hantar emel sijil kepada ' + name + ' (' + email + ')?')) doSend();
+                                }
+                            }
+
                         // Pagination and rendering helpers
                         var PAGE_SIZE = 10;
                         var currentPenyelarasPage = 1, currentPengurusPage = 1, currentJurulatihPage = 1, currentAthletePage = 1;
@@ -1574,6 +2150,26 @@ ob_start();
                         }
                         function normalizeRefKey(v){
                             return String(v || '').trim().toUpperCase();
+                        }
+                        function formatBadgeDateTime(v){
+                            var s = String(v || '').trim();
+                            if (!s) return '';
+                            // Expected source: YYYY-MM-DD HH:MM:SS (MySQL DATETIME)
+                            var m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+                            if (m) {
+                                return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5] + ';' + m[6];
+                            }
+                            var d = new Date(s);
+                            if (!isNaN(d.getTime())) {
+                                var dd = String(d.getDate()).padStart(2, '0');
+                                var mm = String(d.getMonth() + 1).padStart(2, '0');
+                                var yyyy = d.getFullYear();
+                                var hh = String(d.getHours()).padStart(2, '0');
+                                var mi = String(d.getMinutes()).padStart(2, '0');
+                                var ss = String(d.getSeconds()).padStart(2, '0');
+                                return dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + mi + ';' + ss;
+                            }
+                            return s;
                         }
                         function openDuplicateDetailModal(scope, refId){
                             try{
@@ -1640,7 +2236,9 @@ ob_start();
                                     (function(){ return cellHtml(p.nama, false); })() +
                                     (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-pengurus">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary icon-action-btn me-1 do-print-pengurus" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '</td>';
                                 pengurusBody.appendChild(tr);
                                 tr.querySelector('.do-print-pengurus').addEventListener('click', function(){
                                     var roleText = (p.jawatan || '').toString().trim();
@@ -1679,7 +2277,9 @@ ob_start();
                                     (function(){ return cellHtml(p.nama, false); })() +
                                     (function(){ return cellHtml(p.jawatan || '', false); })() +
                                     (function(){ return cellHtml(p.tel || '', false); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-jurulatih">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary icon-action-btn me-1 do-print-jurulatih" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '</td>';
                                 jurulatihBody.appendChild(tr);
                                 tr.querySelector('.do-print-jurulatih').addEventListener('click', function(){
                                     var roleText = (p.jawatan || '').toString().trim();
@@ -1722,7 +2322,9 @@ ob_start();
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(name, false); })() +
                                     (function(){ return cellHtml(info, false); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary icon-action-btn me-1 do-print" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '</td>';
                                 athleteBody.appendChild(tr);
                                 var btnEl = tr.querySelector('.do-print');
                                 if (btnEl) {
@@ -2593,10 +3195,22 @@ ob_start();
                                     (function(){ return cellHtml(nameSafe, false); })() +
                                     (function(){ return cellHtml(emailSafe, false); })() +
                                     (function(){ return cellHtml(telSafe, true); })() +
-                                    '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print-penyelaras">Cetak</button></td>';
+                                    '<td class="text-center">'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary icon-action-btn me-1 do-print-penyelaras" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-info icon-action-btn do-email-penyelaras" title="Hantar Emel" aria-label="Hantar Emel"><span class="icon-glyph">📧</span></button>'
+                                    + '</td>';
                                 penyelarasBody.appendChild(tr);
                                 var btn = tr.querySelector('.do-print-penyelaras');
                                 if (btn) btn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.nama || '', 'KETUA KONTINJEN', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>)); });
+                                var emBtn = tr.querySelector('.do-email-penyelaras');
+                                if (emBtn) emBtn.addEventListener('click', function(){
+                                    sendCertificateEmail({
+                                        cert_type: 'penyelaras',
+                                        recipient_name: r.nama || '',
+                                        recipient_email: r.emel || '',
+                                        role_text: 'KETUA KONTINJEN'
+                                    });
+                                });
                             });
                             try{ document.getElementById('penyelarasPageInfo').textContent = 'Page ' + currentPenyelarasPage + '/' + pages; }catch(e){}
                             try{ document.getElementById('penyelarasPrev').disabled = currentPenyelarasPage <= 1; }catch(e){}
@@ -2815,25 +3429,36 @@ ob_start();
                                 var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var emailCount = parseInt(r.email_send_count || 0, 10) || 0;
+                                var lastSentAt = (r.email_last_sent_at || '').toString().trim();
+                                var lastSentTo = (r.email_last_sent_to || '').toString().trim();
                                 var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
                                 var nameHtml = name;
                                 if (showLink) {
                                     nameHtml += ' <a href="#" class="small dup-view-link" data-scope="committee" data-ref="' + refKey.replace(/"/g, '&quot;') + '" title="Papar butiran" aria-label="Papar butiran"><i class="fa-solid fa-circle-info"></i></a>';
+                                }
+                                if (emailCount > 0) {
+                                    var sentTitle = 'Sijil telah dihantar';
+                                    if (lastSentAt) sentTitle += ' pada ' + formatBadgeDateTime(lastSentAt);
+                                    if (lastSentTo) sentTitle += ' kepada ' + lastSentTo;
+                                    nameHtml += ' <span class="email-sent-badge" title="' + sentTitle.replace(/"/g,'&quot;') + '"><i class="fa-solid fa-circle-check me-1"></i>E-Sijil</span>';
                                 }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(nameHtml, false, true); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
                                     '<td class="text-center">'
-                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 do-edit-committee" title="Edit">✏️</button>'
-                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 do-delete-committee" title="Padam">🗑️</button>'
-                                    + '<button type="button" class="btn btn-sm btn-outline-primary do-print-committee">Cetak</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 icon-action-btn do-edit-committee" title="Edit"><span class="icon-glyph">✏️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 icon-action-btn do-delete-committee" title="Padam"><span class="icon-glyph">🗑️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary me-1 icon-action-btn do-print-committee" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-info icon-action-btn do-email-committee" title="Hantar Emel" aria-label="Hantar Emel"><span class="icon-glyph">📧</span></button>'
                                     + '</td>';
                                 committeeBody.appendChild(tr);
                                 // action buttons: edit, delete, print
                                 var editBtn = tr.querySelector('.do-edit-committee');
                                 var delBtn = tr.querySelector('.do-delete-committee');
                                 var prBtn = tr.querySelector('.do-print-committee');
+                                var emBtn = tr.querySelector('.do-email-committee');
                                 var viewBtn = tr.querySelector('.dup-view-link');
                                 if (viewBtn) viewBtn.addEventListener('click', function(ev){
                                     ev.preventDefault();
@@ -2886,6 +3511,15 @@ ob_start();
                                     }catch(ex){ console.error('delete error', ex); }
                                 });
                                 if (prBtn) prBtn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
+                                if (emBtn) emBtn.addEventListener('click', function(){
+                                    sendCertificateEmail({
+                                        cert_type: 'committee',
+                                        member_id: r.id || '',
+                                        recipient_name: r.member_name || '',
+                                        recipient_email: r.member_email || '',
+                                        role_text: r.role_name || ''
+                                    });
+                                });
                             });
                             try{ if (committeePageInfo) committeePageInfo.textContent = 'Page ' + currentCommitteePage + '/' + pages; }catch(e){}
                             try{ if (committeePrev) committeePrev.disabled = currentCommitteePage <= 1; }catch(e){}
@@ -2931,24 +3565,35 @@ ob_start();
                                 var name = (r.member_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var role = (r.role_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var email = (r.member_email||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var emailCount = parseInt(r.email_send_count || 0, 10) || 0;
+                                var lastSentAt = (r.email_last_sent_at || '').toString().trim();
+                                var lastSentTo = (r.email_last_sent_to || '').toString().trim();
                                 var showLink = (!missingName && refKey && (dupRefMap[refKey] || 0) > 1);
                                 var nameHtml = name;
                                 if (showLink) {
                                     nameHtml += ' <a href="#" class="small dup-view-link" data-scope="volunteer" data-ref="' + refKey.replace(/"/g, '&quot;') + '" title="Papar butiran" aria-label="Papar butiran"><i class="fa-solid fa-circle-info"></i></a>';
+                                }
+                                if (emailCount > 0) {
+                                    var sentTitle = 'Sijil telah dihantar';
+                                    if (lastSentAt) sentTitle += ' pada ' + formatBadgeDateTime(lastSentAt);
+                                    if (lastSentTo) sentTitle += ' kepada ' + lastSentTo;
+                                    nameHtml += ' <span class="email-sent-badge" title="' + sentTitle.replace(/"/g,'&quot;') + '"><i class="fa-solid fa-circle-check me-1"></i>E-Sijil</span>';
                                 }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(nameHtml, false, true); })() +
                                     (function(){ return cellHtml(role, false); })() +
                                     (function(){ return cellHtml(email, false); })() +
                                     '<td class="text-center">'
-                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 do-edit-volunteer" title="Edit">✏️</button>'
-                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 do-delete-volunteer" title="Padam">🗑️</button>'
-                                    + '<button type="button" class="btn btn-sm btn-outline-primary do-print-volunteer">Cetak</button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-secondary me-1 icon-action-btn do-edit-volunteer" title="Edit"><span class="icon-glyph">✏️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-danger me-1 icon-action-btn do-delete-volunteer" title="Padam"><span class="icon-glyph">🗑️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-primary me-1 icon-action-btn do-print-volunteer" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
+                                    + '<button type="button" class="btn btn-sm btn-outline-info icon-action-btn do-email-volunteer" title="Hantar Emel" aria-label="Hantar Emel"><span class="icon-glyph">📧</span></button>'
                                     + '</td>';
                                 volunteerBody.appendChild(tr);
                                 var editBtn = tr.querySelector('.do-edit-volunteer');
                                 var delBtn = tr.querySelector('.do-delete-volunteer');
                                 var prBtn = tr.querySelector('.do-print-volunteer');
+                                var emBtn = tr.querySelector('.do-email-volunteer');
                                 var viewBtn = tr.querySelector('.dup-view-link');
                                 if (viewBtn) viewBtn.addEventListener('click', function(ev){
                                     ev.preventDefault();
@@ -2997,6 +3642,15 @@ ob_start();
                                     }catch(ex){ console.error('delete error', ex); }
                                 });
                                 if (prBtn) prBtn.addEventListener('click', function(){ printDirectHtml(buildCertHtml(r.member_name || '', r.role_name || '', <?php echo json_encode(url('assets/img/sijil/sijil_penyelaras.jpeg')); ?>, { nudgeIfLong: true })); });
+                                if (emBtn) emBtn.addEventListener('click', function(){
+                                    sendCertificateEmail({
+                                        cert_type: 'volunteer',
+                                        member_id: r.id || '',
+                                        recipient_name: r.member_name || '',
+                                        recipient_email: r.member_email || '',
+                                        role_text: r.role_name || ''
+                                    });
+                                });
                             });
                             try{ if (volunteerPageInfo) volunteerPageInfo.textContent = 'Page ' + currentVolunteerPage + '/' + pages; }catch(e){}
                             try{ if (volunteerPrev) volunteerPrev.disabled = currentVolunteerPage <= 1; }catch(e){}
@@ -3223,7 +3877,7 @@ ob_start();
                                         if (r.pengurus) {
                                             r.pengurus.split(' ||| ').forEach(function(praw){
                                                 var p = (praw||'').trim(); if(!p) return;
-                                                var nama = '', jawatan = '', tel = '';
+                                                var nama = '', jawatan = '', tel = '', emel = '';
                                                 if (p.indexOf('@@JAWATAN@@') !== -1) {
                                                     var sNama = p.split('@@JAWATAN@@');
                                                     nama = (sNama[0] || '').trim();
@@ -3233,25 +3887,29 @@ ob_start();
                                                     var rest2 = (sTel[1] || '');
                                                     var sEmel = rest2.split('@@EMEL@@');
                                                     tel = (sEmel[0] || '').trim();
+                                                    emel = (sEmel[1] || '').trim();
                                                 } else {
                                                     var m = p.match(/\(([^)]*)\)/);
                                                     tel = m ? m[1].trim() : '';
                                                     nama = p.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                    var em = p.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+                                                    emel = em ? em[0] : '';
                                                 }
                                                 if (!nama) return;
                                                 if (p.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var key = (nama || p).toLowerCase();
-                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel };
+                                                if (!pengurusMap[key]) pengurusMap[key] = { nama: nama || p, jawatan: jawatan || '', tel: tel, emel: emel || '' };
                                                 else {
                                                     if (!pengurusMap[key].tel && tel) pengurusMap[key].tel = tel;
                                                     if (!pengurusMap[key].jawatan && jawatan) pengurusMap[key].jawatan = jawatan;
+                                                    if (!pengurusMap[key].emel && emel) pengurusMap[key].emel = emel;
                                                 }
                                             });
                                         }
                                         if (r.jurulatih) {
                                             r.jurulatih.split(' ||| ').forEach(function(jraw){
                                                 var j = (jraw||'').trim(); if(!j) return;
-                                                var namaj = '', jawatanj = '', jtTel = '';
+                                                var namaj = '', jawatanj = '', jtTel = '', jtEmel = '';
                                                 if (j.indexOf('@@JAWATAN@@') !== -1) {
                                                     var sjNama = j.split('@@JAWATAN@@');
                                                     namaj = (sjNama[0] || '').trim();
@@ -3261,18 +3919,22 @@ ob_start();
                                                     var jRest2 = (sjTel[1] || '');
                                                     var sjEmel = jRest2.split('@@EMEL@@');
                                                     jtTel = (sjEmel[0] || '').trim();
+                                                    jtEmel = (sjEmel[1] || '').trim();
                                                 } else {
                                                     var mj = j.match(/\(([^)]*)\)/);
                                                     jtTel = mj ? mj[1].trim() : '';
                                                     namaj = j.replace(/\s*\([^)]*\)/g,'').replace(/\s+\S+@\S+$/,'').trim();
+                                                    var jm = j.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+                                                    jtEmel = jm ? jm[0] : '';
                                                 }
                                                 if (!namaj) return;
                                                 if (j.replace(/\s+/g,'').toUpperCase() === '@@JAWATAN@@@@TEL@@@@EMEL@@') return;
                                                 var keyj = (namaj || j).toLowerCase();
-                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel };
+                                                if (!jurulatihMap[keyj]) jurulatihMap[keyj] = { nama: namaj || j, jawatan: jawatanj || '', tel: jtTel, emel: jtEmel || '' };
                                                 else {
                                                     if (!jurulatihMap[keyj].tel && jtTel) jurulatihMap[keyj].tel = jtTel;
                                                     if (!jurulatihMap[keyj].jawatan && jawatanj) jurulatihMap[keyj].jawatan = jawatanj;
+                                                    if (!jurulatihMap[keyj].emel && jtEmel) jurulatihMap[keyj].emel = jtEmel;
                                                 }
                                             });
                                         }

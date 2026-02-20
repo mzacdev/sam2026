@@ -59,9 +59,15 @@
                 <div>
                     <i class="cil cil-lock-locked me-2"></i><strong>Peraturan Akses Halaman</strong>
                 </div>
-                <button type="button" class="btn btn-sm btn-light" onclick="showCreatePageRuleModal()">
-                    <i class="cil cil-plus me-1"></i> Peraturan Baru
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="pageRulesRoleFilter" class="form-select form-select-sm" style="min-width:240px;">
+                        <option value="">--Sila Pilih--</option>
+                        <option value="ALL">Semua Peranan</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-light" onclick="showCreatePageRuleModal()">
+                        <i class="cil cil-plus me-1"></i> Peraturan Baru
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div id="pageRulesListContainer">
@@ -238,13 +244,40 @@
 // RBAC Management JavaScript
 const RBACManager = {
     apiBase: <?php echo json_encode(url('api/rbac/')); ?>,
+    rolesData: [],
+    pageRulesRaw: [],
     
     init: function() {
         this.ensureSelect2Assets().then(() => this.initUserSelect2()).catch(() => {});
+        this.bindPageRulesFilter();
         this.loadRoles();
         this.loadUsers();
         this.loadPageRules();
         this.loadPermissions();
+    },
+    
+    bindPageRulesFilter: function() {
+        const ddl = document.getElementById('pageRulesRoleFilter');
+        if (!ddl) return;
+        ddl.addEventListener('change', () => {
+            this.renderPageRules(this.pageRulesRaw || []);
+        });
+    },
+
+    renderPageRoleFilterOptions: function(roles) {
+        const ddl = document.getElementById('pageRulesRoleFilter');
+        if (!ddl) return;
+        const selected = ddl.value || '';
+        ddl.innerHTML = '<option value="">--Sila Pilih--</option><option value="ALL">Semua Peranan</option>';
+        (roles || []).forEach(role => {
+            const opt = document.createElement('option');
+            opt.value = String(role.id);
+            opt.textContent = role.role_name + ' (' + role.role_code + ')';
+            ddl.appendChild(opt);
+        });
+        if (selected && Array.from(ddl.options).some(o => o.value === selected)) {
+            ddl.value = selected;
+        }
     },
 
     ensureSelect2Assets: function() {
@@ -329,7 +362,9 @@ const RBACManager = {
             }
             
             if (response.ok && data && data.success) {
+                this.rolesData = Array.isArray(data.data) ? data.data : [];
                 this.renderRoles(data.data);
+                this.renderPageRoleFilterOptions(this.rolesData);
             } else {
                 const msg = (data && data.message) ? data.message : ('HTTP ' + response.status + ' semasa memuatkan peranan');
                 document.getElementById('rolesListContainer').innerHTML = 
@@ -431,7 +466,8 @@ const RBACManager = {
             const data = await response.json();
             
             if (data.success) {
-                this.renderPageRules(data.data);
+                this.pageRulesRaw = Array.isArray(data.data) ? data.data : [];
+                this.renderPageRules(this.pageRulesRaw);
             }
         } catch (error) {
             console.error('Error loading page rules:', error);
@@ -442,8 +478,19 @@ const RBACManager = {
     
     renderPageRules: function(rules) {
         const container = document.getElementById('pageRulesListContainer');
+        const selectedRole = (document.getElementById('pageRulesRoleFilter') || {}).value || '';
+        let filtered = Array.isArray(rules) ? rules.slice() : [];
+        if (selectedRole && selectedRole !== 'ALL') {
+            filtered = filtered.filter(rule => {
+                const ids = String(rule.role_ids || '')
+                    .split(',')
+                    .map(v => v.trim())
+                    .filter(Boolean);
+                return ids.includes(String(selectedRole));
+            });
+        }
         
-        if (rules.length === 0) {
+        if (filtered.length === 0) {
             container.innerHTML = '<p class="text-muted text-center">Tiada peraturan dijumpai</p>';
             return;
         }
@@ -451,7 +498,7 @@ const RBACManager = {
         let html = '<div class="table-responsive"><table class="table table-hover">';
         html += '<thead><tr><th>Laluan Halaman</th><th>Awam</th><th>Perlu Auth</th><th>Peranan</th><th>Tindakan</th></tr></thead><tbody>';
         
-        rules.forEach(rule => {
+        filtered.forEach(rule => {
             html += `<tr>
                 <td><code>${rule.page_path}</code></td>
                 <td>${rule.is_public ? '<span class="badge bg-success">Ya</span>' : '<span class="badge bg-secondary">Tidak</span>'}</td>
@@ -1530,7 +1577,8 @@ async function savePageRule() {
     
     try {
         const url = RBACManager.apiBase + 'pages.php?action=' + (pageRuleId ? 'update&id=' + pageRuleId : 'create');
-        const method = pageRuleId ? 'PUT' : 'POST';
+        // Production-safe: use POST for update/create (some Windows servers block PUT)
+        const method = 'POST';
         
         const response = await fetch(url, {
             method: method,
@@ -1687,7 +1735,8 @@ async function deletePageRule(id) {
     
     try {
         const response = await fetch(RBACManager.apiBase + 'pages.php?action=delete&id=' + id, {
-            method: 'DELETE'
+            // Production-safe: use POST for delete (some Windows servers block DELETE)
+            method: 'POST'
         });
         
         const result = await response.json();
