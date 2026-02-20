@@ -50,6 +50,9 @@ class Session {
         
         // Headers not sent - can configure and start session
         if (session_status() === PHP_SESSION_NONE) {
+            $defaultSessionSavePath = (string)ini_get('session.save_path');
+            $usedCustomSessionPath = false;
+
             // Enforce lifetime at PHP engine level (important on production)
             @ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
             @ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
@@ -63,6 +66,7 @@ class Session {
                 }
                 if ($sessionDir && is_dir($sessionDir) && is_writable($sessionDir)) {
                     @session_save_path($sessionDir);
+                    $usedCustomSessionPath = true;
                 }
             } catch (Exception $e) {
                 // Fallback to default session path silently
@@ -77,8 +81,18 @@ class Session {
                 'httponly' => SESSION_HTTPONLY,
                 'samesite' => 'Strict'
             ]);
-            session_start();
-            self::$started = true;
+            @session_start();
+            if (session_status() !== PHP_SESSION_ACTIVE && $usedCustomSessionPath) {
+                // Fallback: custom path may contain files owned by different UID on shared hosts.
+                @session_write_close();
+                @session_save_path($defaultSessionSavePath);
+                @session_start();
+            }
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                self::$started = true;
+            } else {
+                error_log('[Session] failed to start session in ' . __FILE__);
+            }
         }
     }
     
@@ -115,12 +129,16 @@ class Session {
     }
     
     public static function destroy() {
-        self::start();
-        $_SESSION = [];
-        if (isset($_COOKIE[session_name()])) {
-            setcookie(session_name(), '', time() - 3600, SESSION_PATH, SESSION_DOMAIN, SESSION_SECURE, SESSION_HTTPONLY);
+        if (session_status() === PHP_SESSION_NONE) {
+            self::start();
         }
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION = [];
+            if (isset($_COOKIE[session_name()])) {
+                setcookie(session_name(), '', time() - 3600, SESSION_PATH, SESSION_DOMAIN, SESSION_SECURE, SESSION_HTTPONLY);
+            }
+            @session_destroy();
+        }
     }
     
     public static function regenerate() {
