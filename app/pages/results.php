@@ -1630,7 +1630,7 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
 
             // Build HTML for official page
             let html = '<!doctype html><html><head><meta charset="utf-8"><title>Laporan Pencapaian Pingat Keseluruhan Kejohanan</title>';
-                html += '<style>' +
+            html += '<style>' +
                     '@page{size:A4 landscape;margin:18mm}' +
                     '@media print{body{margin:0}}' +
                     'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:18px}' +
@@ -1646,18 +1646,16 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
                     'tr{page-break-inside:avoid}' +
                     'table.summary th,table.summary td{box-shadow: inset -1px 0 0 #000, inset 0 -1px 0 #000}' +
                     '</style>';
+            if (isWordExport) {
+                html += '<style>body,table,th,td,p,div,li,span{font-size:12px !important;line-height:1.35 !important;} h1{font-size:16px !important;} h2{font-size:13px !important;} h3{font-size:12px !important;}</style>';
+            }
             html += '</head><body>';
             // three logos: left KPT, center event logo, right UPNM
             const logoKPT = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/kpt.png']) ? INLINE_ASSETS['img/logos/UA/kpt.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/kpt.png');
             const logoEvent = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/logo-print.png']) ? INLINE_ASSETS['img/logos/logo-print.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/logo-print.png');
             const logoUPNM = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/UPNM.svg']) ? INLINE_ASSETS['img/logos/UA/UPNM.svg'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/UPNM.svg');
-            const logoUPNMWord = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/avatar/logo_UPNM.jpg']) ? INLINE_ASSETS['img/avatar/logo_UPNM.jpg'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/avatar/logo_UPNM.jpg');
             if (isWordExport) {
-                html += '<table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>' +
-                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoKPT + '" alt="KPT" width="96" height="44" style="display:block;margin:0 auto;width:25mm !important;height:11.5mm !important;min-width:25mm !important;max-width:25mm !important;min-height:11.5mm !important;max-height:11.5mm !important;border:0;outline:none;"></td>' +
-                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoEvent + '" alt="Logo Sukan" width="120" height="54" style="display:block;margin:0 auto;width:31mm !important;height:14mm !important;min-width:31mm !important;max-width:31mm !important;min-height:14mm !important;max-height:14mm !important;border:0;outline:none;"></td>' +
-                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoUPNMWord + '" alt="UPNM" width="96" height="44" style="display:block;margin:0 auto;width:25mm !important;height:11.5mm !important;min-width:25mm !important;max-width:25mm !important;min-height:11.5mm !important;max-height:11.5mm !important;border:0;outline:none;"></td>' +
-                        '</tr></table>';
+                // Word export: remove header logos to avoid renderer size inconsistencies.
             } else {
                 html += '<div style="display:flex;justify-content:center;align-items:center;margin-bottom:8px">' +
                             '<img src="' + logoKPT + '" alt="KPT" style="height:56px;width:auto;max-height:56px;max-width:180px;margin-right:18px">' +
@@ -1856,9 +1854,13 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
                     switch(String(sukanId)){
                         case '1': iconFile='badminton.png'; break; case '2': iconFile='bola-jaring.png'; break; case '3': iconFile='volleyball.png'; break; case '4': iconFile='catur.png'; break; case '5': iconFile='bola-sepak.png'; break; case '6': iconFile='ragbi.png'; break; case '7': iconFile='takraw.png'; break; case '8': case '9': iconFile='mlbb-pubg.png'; break; case '10': iconFile='tenpin-bowling.png'; break; case '11': iconFile='olahraga.png'; break; default: iconFile='default.png'; }
                     // Prefer inlined asset when available; otherwise build absolute URL using SITE_BASE
-                    var iconRel = 'img/sukan/' + iconFile;
-                    var iconPath = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS[iconRel]) ? INLINE_ASSETS[iconRel] : (window.location.origin + (SITE_BASE || '') + '/assets/img/sukan/' + iconFile);
-                    html += '<td style="vertical-align:top;width:10%;text-align:center;border:1px solid #000"><img src="' + iconPath + '" style="display:inline-block;margin:0 auto;max-height:40px;max-width:100%;object-fit:contain"></td>';
+                    if (isWordExport) {
+                        html += '<td style="vertical-align:top;width:10%;text-align:center;border:1px solid #000">-</td>';
+                    } else {
+                        var iconRel = 'img/sukan/' + iconFile;
+                        var iconPath = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS[iconRel]) ? INLINE_ASSETS[iconRel] : (window.location.origin + (SITE_BASE || '') + '/assets/img/sukan/' + iconFile);
+                        html += '<td style="vertical-align:top;width:10%;text-align:center;border:1px solid #000"><img src="' + iconPath + '" style="display:inline-block;margin:0 auto;max-height:40px;max-width:100%;object-fit:contain"></td>';
+                    }
                     html += '<td style="vertical-align:top;width:15%;text-align:left;border:1px solid #000">' + escapeHtml(acara) + '</td>';
                     html += '<td style="width:20%;vertical-align:top;text-align:left;border:1px solid #000"><strong>Pemenang Emas</strong><div style="margin-top:6px">' + escapeHtml(w1.kontingen_short_name || w1.participant_display_name || '-') + '</div></td>';
                     html += '<td style="width:50%;vertical-align:top;text-align:left;border:1px solid #000">' + renderNamesList(nm1) + '</td>';

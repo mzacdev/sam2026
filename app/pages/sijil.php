@@ -400,7 +400,8 @@ if ($kod === '') {
     $relPath = '/assets/img/sijil/sijil_atlet.jpeg';
     $fullPath = realpath(__DIR__ . '/..') . $relPath;
     $ver = @file_exists($fullPath) ? @filemtime($fullPath) : time();
-    $img_url_versioned = $relPath . '?v=' . $ver;
+    // Use app-aware URL helper so path stays valid in subfolder deployments.
+    $img_url_versioned = url('assets/img/sijil/sijil_atlet.jpeg') . '?v=' . $ver;
 }
 
 $ajax = trim((string)($_GET['ajax'] ?? ''));
