@@ -81,7 +81,13 @@ try {
 }
 
 // Add "Pertandingan" section when user has access to any Pertandingan pages
-if ($rbac && ($rbac->hasPageAccess('pages/setup-pertandingan.php') || $rbac->hasPageAccess('pages/setup-jadual.php'))) {
+if ($rbac && (
+    $rbac->hasPageAccess('pages/setup-pertandingan.php') ||
+    $rbac->hasPageAccess('pages/setup-jadual.php') ||
+    $rbac->hasPageAccess('pages/matches.php') ||
+    $rbac->hasPageAccess('pages/round-standing.php') ||
+    $rbac->hasPageAccess('pages/knockout-rule-editor.php')
+)) {
     $exists = false;
     if (isset($nav_sections) && is_array($nav_sections)) {
         foreach ($nav_sections as $s) {
@@ -101,6 +107,21 @@ if ($rbac && ($rbac->hasPageAccess('pages/setup-pertandingan.php') || $rbac->has
                 [
                     'title' => 'Setup Jadual',
                     'url' => 'pages/setup-jadual.php',
+                    'icon' => 'cil-settings'
+                ],
+                [
+                    'title' => 'Perlawanan',
+                    'url' => 'pages/matches.php',
+                    'icon' => 'cil-settings'
+                ],
+                [
+                    'title' => 'Papan Kedudukan',
+                    'url' => 'pages/round-standing.php',
+                    'icon' => 'cil-chart'
+                ],
+                [
+                    'title' => 'Knockout Rule Editor',
+                    'url' => 'pages/knockout-rule-editor.php',
                     'icon' => 'cil-settings'
                 ]
             ]

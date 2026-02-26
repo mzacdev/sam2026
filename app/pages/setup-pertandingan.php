@@ -59,6 +59,23 @@ $rbac->requirePageAccess('pages/setup-pertandingan.php');
 
 $page_title = 'Setup Pertandingan';
 
+function st_has_column(PDO $db, string $table, string $column): bool {
+	static $cache = [];
+	$key = strtolower($table . '.' . $column);
+	if (array_key_exists($key, $cache)) return (bool)$cache[$key];
+	$stmt = $db->prepare("
+		SELECT COUNT(*)
+		FROM information_schema.columns
+		WHERE table_schema = DATABASE()
+		  AND table_name = :t
+		  AND column_name = :c
+	");
+	$stmt->execute([':t' => $table, ':c' => $column]);
+	$ok = ((int)$stmt->fetchColumn() > 0);
+	$cache[$key] = $ok;
+	return $ok;
+}
+
 // --- Server-side: AJAX check for existing event (sukan + kategori) ---
 if (isset($_GET['action']) && $_GET['action'] === 'check_event' && isset($_GET['sukan_id']) && isset($_GET['kategori_id'])) {
 	header('Content-Type: application/json; charset=utf-8');
@@ -185,12 +202,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
  	$bilangan = isset($_POST['bilangan_kumpulan']) ? (int)$_POST['bilangan_kumpulan'] : 0;
  	$format = isset($_POST['format_kumpulan']) ? $_POST['format_kumpulan'] : 'alphabetical';
+	$mode_structure = isset($_POST['mode_structure']) ? strtolower(trim((string)$_POST['mode_structure'])) : 'group';
+	if ($mode_structure !== 'group' && $mode_structure !== 'knockout_direct') $mode_structure = 'group';
  	$group_codes_json = isset($_POST['group_codes']) ? $_POST['group_codes'] : null;
  	$qualification_topn = isset($_POST['qualification_topn']) && $_POST['qualification_topn'] !== '' ? (int)$_POST['qualification_topn'] : null;
  	$qualification_criteria = isset($_POST['qualification_criteria']) && $_POST['qualification_criteria'] !== '' ? $_POST['qualification_criteria'] : null;
 
  	if ($event_id <= 0) { $errors[] = 'Event tidak ditemui.'; }
- 	if ($bilangan <= 0) { $errors[] = 'Bilangan Kumpulan mesti lebih besar dari 0.'; }
+	if ($mode_structure === 'group' && $bilangan <= 0) { $errors[] = 'Bilangan Kumpulan mesti lebih besar dari 0.'; }
 
 	// parse group codes from client if provided
 	$group_codes = [];
@@ -212,6 +231,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
  	try {
  		$db = getDB();
+
+		// Direct knockout mode: create/update one knockout round and bypass group setup.
+		if ($mode_structure === 'knockout_direct') {
+			$db->beginTransaction();
+			try {
+				// Remove existing league/group rounds for this event to keep structure clean.
+				$delLeague = $db->prepare("DELETE FROM table_round WHERE event_id = :event_id AND (LOWER(COALESCE(round_type,'')) = 'league' OR nama_round = 'Peringkat Kumpulan')");
+				$delLeague->execute([':event_id' => $event_id]);
+
+				$kchk = $db->prepare("SELECT id FROM table_round WHERE event_id = :event_id AND LOWER(COALESCE(round_type,'')) = 'knockout' LIMIT 1");
+				$kchk->execute([':event_id' => $event_id]);
+				$krow = $kchk->fetch(PDO::FETCH_ASSOC);
+				if ($krow) {
+					$kid = (int)$krow['id'];
+					$upCols = [];
+					if (st_has_column($db, 'table_round', 'nama_round')) $upCols[] = "nama_round = 'Knockout Stage'";
+					if (st_has_column($db, 'table_round', 'status')) $upCols[] = "status = 'pending'";
+					if (st_has_column($db, 'table_round', 'round_order')) $upCols[] = "round_order = 1";
+					if (st_has_column($db, 'table_round', 'updated_at')) $upCols[] = "updated_at = NOW()";
+					if (!empty($upCols)) {
+						$u = $db->prepare("UPDATE table_round SET " . implode(', ', $upCols) . " WHERE id = :id");
+						$u->execute([':id' => $kid]);
+					}
+					$db->commit();
+					echo json_encode(['success' => true, 'mode' => 'knockout_direct', 'round_id' => $kid]);
+					exit;
+				}
+
+				$cols = ['event_id'];
+				$vals = [':event_id'];
+				$params = [':event_id' => $event_id];
+				if (st_has_column($db, 'table_round', 'nama_round')) { $cols[] = 'nama_round'; $vals[] = ':nama_round'; $params[':nama_round'] = 'Knockout Stage'; }
+				if (st_has_column($db, 'table_round', 'round_type')) { $cols[] = 'round_type'; $vals[] = ':round_type'; $params[':round_type'] = 'knockout'; }
+				if (st_has_column($db, 'table_round', 'status')) { $cols[] = 'status'; $vals[] = ':status'; $params[':status'] = 'pending'; }
+				if (st_has_column($db, 'table_round', 'round_order')) { $cols[] = 'round_order'; $vals[] = ':round_order'; $params[':round_order'] = 1; }
+				if (st_has_column($db, 'table_round', 'group_code')) { $cols[] = 'group_code'; $vals[] = ':group_code'; $params[':group_code'] = null; }
+				if (st_has_column($db, 'table_round', 'group_order')) { $cols[] = 'group_order'; $vals[] = ':group_order'; $params[':group_order'] = null; }
+				if (st_has_column($db, 'table_round', 'qualification_rule')) { $cols[] = 'qualification_rule'; $vals[] = ':qualification_rule'; $params[':qualification_rule'] = null; }
+				if (st_has_column($db, 'table_round', 'created_at')) { $cols[] = 'created_at'; $vals[] = 'NOW()'; }
+
+				$ins = $db->prepare("INSERT INTO table_round (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")");
+				$ins->execute($params);
+				$newRoundId = (int)$db->lastInsertId();
+				$db->commit();
+				echo json_encode(['success' => true, 'mode' => 'knockout_direct', 'round_id' => $newRoundId]);
+				exit;
+			} catch (Exception $inner) {
+				if ($db && $db->inTransaction()) $db->rollBack();
+				throw $inner;
+			}
+		}
 
  		// fetch existing rounds for this event (Peringkat Kumpulan)
  		$existingStmt = $db->prepare("SELECT id, group_code, group_order FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
@@ -533,6 +603,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_tab2') {
 		$rstmt = $db->prepare("SELECT id, group_code, group_order, qualification_rule, nama_round FROM table_round WHERE event_id = :event_id AND nama_round = 'Peringkat Kumpulan' AND deleted_at IS NULL ORDER BY group_order ASC");
 		$rstmt->execute([':event_id' => $event_id]);
 		$rounds = $rstmt->fetchAll(PDO::FETCH_ASSOC);
+		$kstmt = $db->prepare("SELECT id FROM table_round WHERE event_id = :event_id AND LOWER(COALESCE(round_type,'')) = 'knockout' AND deleted_at IS NULL LIMIT 1");
+		$kstmt->execute([':event_id' => $event_id]);
+		$knockoutRound = $kstmt->fetch(PDO::FETCH_ASSOC);
+		$structure_mode = (!empty($rounds) ? 'group' : ($knockoutRound ? 'knockout_direct' : 'group'));
 
 		$rnStmt = $db->prepare("SELECT DISTINCT nama_round FROM table_round WHERE event_id = :event_id AND deleted_at IS NULL ORDER BY nama_round ASC");
 		$rnStmt->execute([':event_id' => $event_id]);
@@ -577,7 +651,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_tab2') {
 			}
 		}
 
-		echo json_encode(['success' => true, 'rounds' => $rounds, 'round_names' => $round_names, 'teams' => $teams, 'detected_format' => $detected_format, 'qualification_topn' => $qualification_topn, 'qualification_criteria' => $qualification_criteria, 'group_assignments_exist' => $group_assignments_exist]);
+		echo json_encode(['success' => true, 'structure_mode' => $structure_mode, 'rounds' => $rounds, 'round_names' => $round_names, 'teams' => $teams, 'detected_format' => $detected_format, 'qualification_topn' => $qualification_topn, 'qualification_criteria' => $qualification_criteria, 'group_assignments_exist' => $group_assignments_exist]);
 		exit;
 	} catch (Exception $e) {
 		error_log('[setup-pertandingan load_tab2] ' . $e->getMessage());
@@ -670,6 +744,7 @@ $qualification_topn = null;
 $qualification_criteria = null;
 $detected_format = 'alphabetical';
 $group_assignments_exist = false;
+$structure_mode_initial = 'group';
 try {
 	// detect group format from existing rounds
 	$codes = array_filter(array_map(function($r){ return isset($r['group_code']) ? (string)$r['group_code'] : ''; }, $rounds));
@@ -702,6 +777,13 @@ try {
 		$aStmt->execute([':sukan_id' => $event_sukan_id]);
 		$ac = $aStmt->fetch(PDO::FETCH_ASSOC);
 		$group_assignments_exist = ($ac && (int)$ac['c'] > 0);
+	}
+	if (!empty($rounds)) {
+		$structure_mode_initial = 'group';
+	} elseif ($event_id > 0) {
+		$kStmt2 = $db->prepare("SELECT id FROM table_round WHERE event_id = :event_id AND LOWER(COALESCE(round_type,'')) = 'knockout' AND deleted_at IS NULL LIMIT 1");
+		$kStmt2->execute([':event_id' => $event_id]);
+		$structure_mode_initial = $kStmt2->fetch(PDO::FETCH_ASSOC) ? 'knockout_direct' : 'group';
 	}
 } catch (Exception $e) {
 	error_log('[setup-pertandingan] TAB2 detection error: ' . $e->getMessage());
@@ -821,18 +903,15 @@ ob_start();
 							<div class="col-md-6">
 								<h5>Struktur Kumpulan <?php if ($edit_mode): ?><span class="badge bg-info ms-2">EDIT MODE</span><?php endif; ?></h5>
 								<div class="mb-3">
-									<label class="form-label">Nama Round</label>
-									<select class="form-select" id="nama_round" name="nama_round" <?php echo $edit_mode ? '' : 'disabled'; ?> >
-										<?php if (empty($round_names)): ?>
-											<option selected>Peringkat Kumpulan</option>
-										<?php else: ?>
-											<?php foreach ($round_names as $rn): ?>
-												<option value="<?php echo htmlspecialchars($rn, ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($rn === 'Peringkat Kumpulan') ? 'selected' : ''; ?>><?php echo htmlspecialchars($rn, ENT_QUOTES, 'UTF-8'); ?></option>
-											<?php endforeach; ?>
-										<?php endif; ?>
+									<label class="form-label">Mode Struktur</label>
+									<select id="mode_structure" name="mode_structure" class="form-select">
+										<option value="group" <?php echo ($structure_mode_initial === 'group') ? 'selected' : ''; ?>>Group Stage + Knockout</option>
+										<option value="knockout_direct" <?php echo ($structure_mode_initial === 'knockout_direct') ? 'selected' : ''; ?>>Knockout Terus (Tanpa Kumpulan)</option>
 									</select>
+									<div class="form-text">Pilih Knockout Terus jika sukan ini tidak guna pembahagian kumpulan.</div>
 								</div>
 
+								<div id="group-config-wrap">
 								<div class="mb-3">
 									<label class="form-label">Bilangan Kumpulan <span class="text-danger">*</span></label>
 									<input id="bilangan_kumpulan" name="bilangan_kumpulan" type="number" min="1" class="form-control" required value="<?php echo $edit_mode ? (int)count($rounds) : 4; ?>" <?php echo ($edit_mode && $group_assignments_exist) ? 'readonly' : ''; ?>>
@@ -863,6 +942,11 @@ ob_start();
 										<option value="masa" <?php echo ($qualification_criteria === 'masa') ? 'selected' : ''; ?>>masa</option>
 									</select>
 								</div>
+								</div>
+
+								<div id="knockout-direct-note" class="alert alert-info d-none">
+									Mode ini tidak memerlukan setup kumpulan. Sistem akan guna pasukan aktif terus untuk jadual knockout.
+								</div>
 
 								<div class="mb-3">
 									<button id="save-groups" type="submit" class="btn btn-primary">Simpan Group</button>
@@ -879,6 +963,7 @@ ob_start();
 										<tbody></tbody>
 									</table>
 								</div>
+								<div id="knockout-preview-note" class="text-muted small d-none">Preview kumpulan disembunyikan kerana mode Knockout Terus dipilih.</div>
 							</div>
 						</div>
 					</form>
@@ -929,7 +1014,7 @@ ob_start();
 								<div id="teams-empty-msg" class="small text-muted text-center mt-2 <?php echo $teams_empty ? '' : 'd-none'; ?>">Tiada pasukan ditemui.</div>
 							</div>
 							<!-- assign controls: moved below team table as requested -->
-							<div class="mt-2">
+							<div id="tab3-assign-controls" class="mt-2 <?php echo ($structure_mode_initial === 'knockout_direct') ? 'd-none' : ''; ?>">
 								<label class="form-label">Pilih Kumpulan</label>
 								<div class="d-flex gap-2 mb-2">
 									<select id="assign-group-select" class="form-select" style="flex:1;">
@@ -938,13 +1023,16 @@ ob_start();
 											<option value="<?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?>">Kumpulan <?php echo htmlspecialchars($r['group_code'], ENT_QUOTES, 'UTF-8'); ?></option>
 										<?php endforeach; ?>
 									</select>
-									<button id="assign-btn" class="btn btn-primary" <?php echo empty($rounds) ? 'disabled' : ''; ?>>Assign ke Kumpulan</button>
+									<button id="assign-btn" class="btn btn-primary" <?php echo (empty($rounds) || $structure_mode_initial === 'knockout_direct') ? 'disabled' : ''; ?>>Assign ke Kumpulan</button>
 								</div>
 							</div>
 						</div>
 
 						<div class="col-md-6">
 							<h5>Kumpulan</h5>
+							<div id="tab3-knockout-note" class="alert alert-info small <?php echo ($structure_mode_initial === 'knockout_direct') ? '' : 'd-none'; ?>">
+								Mode Knockout Terus aktif. Tiada agihan kumpulan diperlukan; semua pasukan aktif akan digunakan semasa generate knockout.
+							</div>
 							<div id="groups-container">
 								<?php
 									// build lookup of teams by initial_group_code
@@ -980,7 +1068,7 @@ ob_start();
 									<?php if (empty($rounds)): ?>Tiada kumpulan dicipta untuk event ini. Sila lengkapkan Struktur Kumpulan (Tab 2) terlebih dahulu.<?php endif; ?>
 								</div>
                                 
-								<button id="save-assignment" class="btn btn-primary" <?php echo empty($rounds) ? 'disabled' : ''; ?>>Simpan Agihan Pasukan</button>
+								<button id="save-assignment" class="btn btn-primary" <?php echo (empty($rounds) || $structure_mode_initial === 'knockout_direct') ? 'disabled' : ''; ?>>Simpan Agihan Pasukan</button>
 							</div>
 						</div>
 					</div>
@@ -1001,6 +1089,30 @@ ob_start();
 	const assignBtn = document.getElementById('assign-btn');
 	const groupsContainer = document.getElementById('groups-container');
 	const saveBtn = document.getElementById('save-assignment');
+	const tab3AssignControls = document.getElementById('tab3-assign-controls');
+	const tab3KnockoutNote = document.getElementById('tab3-knockout-note');
+	const tab3Warning = document.getElementById('tab3-warning');
+
+	function isKnockoutDirectMode() {
+		return (window.currentStructureMode || '<?php echo $structure_mode_initial; ?>') === 'knockout_direct';
+	}
+
+	function applyTab3StructureMode(mode) {
+		const isKnockout = (mode === 'knockout_direct');
+		window.currentStructureMode = isKnockout ? 'knockout_direct' : 'group';
+		if (tab3AssignControls) tab3AssignControls.classList.toggle('d-none', isKnockout);
+		if (tab3KnockoutNote) tab3KnockoutNote.classList.toggle('d-none', !isKnockout);
+		if (tab3Warning) {
+			if (isKnockout) {
+				tab3Warning.classList.add('d-none');
+				tab3Warning.textContent = '';
+			}
+		}
+		if (assignBtn && isKnockout) assignBtn.disabled = true;
+		if (saveBtn && isKnockout) saveBtn.disabled = true;
+		if (!isKnockout && typeof updateSaveButtonState === 'function') updateSaveButtonState();
+	}
+	window.applyTab3StructureMode = applyTab3StructureMode;
 
 	// helper: mark/unmark a team row as assigned (adds class + status icon + tooltip)
 	function setTeamRowAssigned(tr, assigned) {
@@ -1025,6 +1137,11 @@ ob_start();
 	}
 
 		function updateSaveButtonState() {
+			if (isKnockoutDirectMode()) {
+				if (saveBtn) saveBtn.disabled = true;
+				if (assignBtn) assignBtn.disabled = true;
+				return;
+			}
 			const rows = getCheckedTeamRows();
 			const group = assignSelect ? assignSelect.value : null;
 			// enable save if there are any staged assignments OR (selected rows + chosen group)
@@ -1169,6 +1286,10 @@ ob_start();
 
 	if (saveBtn) {
 		saveBtn.addEventListener('click', async function () {
+			if (isKnockoutDirectMode()) {
+				Swal.fire({ icon: 'info', title: 'Mode Knockout Terus', text: 'Tiada agihan kumpulan diperlukan untuk mode ini.' });
+				return;
+			}
 			// collect assignments from staged rows
 			const assignments = {};
 			document.querySelectorAll('#teams-table tbody tr').forEach(tr => {
@@ -1223,10 +1344,14 @@ ob_start();
 
 	// initial render of any existing assignments (if teams have initial_group_code attribute rendered, we could map)
 		// initial render of any existing assignments based on server-rendered attributes
+		applyTab3StructureMode('<?php echo $structure_mode_initial; ?>');
 		renderAssigned();
 		// now fetch authoritative assignments from server and re-hydrate UI
 		async function loadAssignmentsFromServer() {
 			try {
+				if (isKnockoutDirectMode()) {
+					return;
+				}
 				console.debug('[setup-pertandingan] loading assignments from server');
 				const res = await fetch('?action=load_assignments', { credentials: 'same-origin' });
 				console.debug('[setup-pertandingan] load_assignments HTTP status', res.status);
@@ -1369,16 +1494,25 @@ ob_start();
 				const qualification_topn = json.qualification_topn || null;
 				const qualification_criteria = json.qualification_criteria || null;
 				const group_assignments_exist = !!json.group_assignments_exist;
+				const structure_mode = (json.structure_mode === 'knockout_direct') ? 'knockout_direct' : 'group';
 
 				// update bilangan and preview
 				const bilInputEl = document.getElementById('bilangan_kumpulan');
 				const formatEl = document.getElementById('format_kumpulan');
+				const modeEl = document.getElementById('mode_structure');
 				const previewTbodyEl = document.querySelector('#group-preview-table tbody');
+				if (modeEl) modeEl.value = structure_mode;
+				if (typeof window.applyTab2StructureMode === 'function') window.applyTab2StructureMode(structure_mode);
+				if (typeof window.applyTab3StructureMode === 'function') window.applyTab3StructureMode(structure_mode);
 				if (bilInputEl) bilInputEl.value = rounds.length > 0 ? rounds.length : (bilInputEl.value || 4);
 				if (formatEl) { formatEl.value = detected_format; if (rounds.length > 0) formatEl.disabled = true; else formatEl.disabled = false; }
 				if (previewTbodyEl) {
 					previewTbodyEl.innerHTML = '';
-					if (rounds.length > 0) {
+					if (structure_mode === 'knockout_direct') {
+						const tr = document.createElement('tr');
+						tr.innerHTML = '<td colspan="3" class="text-center text-muted py-3">Mode Knockout Terus dipilih.</td>';
+						previewTbodyEl.appendChild(tr);
+					} else if (rounds.length > 0) {
 						rounds.forEach((r, idx) => {
 							const tr = document.createElement('tr');
 							const td1 = document.createElement('td'); td1.textContent = r.group_code || '';
@@ -1435,7 +1569,7 @@ ob_start();
 
 				// update tab3 enable state
 				const tab3Btn = document.getElementById('tab-3-btn');
-				if (tab3Btn && rounds.length>0) { tab3Btn.classList.remove('disabled'); tab3Btn.removeAttribute('aria-disabled'); tab3Btn.setAttribute('data-bs-toggle','pill'); tab3Btn.setAttribute('data-bs-target','#tab-3'); }
+				if (tab3Btn && (rounds.length > 0 || structure_mode === 'knockout_direct')) { tab3Btn.classList.remove('disabled'); tab3Btn.removeAttribute('aria-disabled'); tab3Btn.setAttribute('data-bs-toggle','pill'); tab3Btn.setAttribute('data-bs-target','#tab-3'); }
 
 				// final renderAssigned sync: mark rows in teams table
 				try {
@@ -1513,19 +1647,17 @@ ob_start();
 					if (help) { help.classList.remove('d-none'); help.textContent = 'Gagal memuatkan kategori (respons tidak sah). Sila cuba semula.'; }
 					return;
 				}
-				if (Array.isArray(data)) {
-					const help = document.getElementById('kategori-help');
-					if (help) { help.classList.add('d-none'); help.textContent = ''; }
-					data.forEach(k => {
-						const opt = document.createElement('option');
-						opt.value = k.id;
-						opt.textContent = k.nama_kategori;
-						kategoriSelect.appendChild(opt);
-					});
-					if (data.length === 0) {
-						const help = document.getElementById('kategori-help');
-						if (help) { help.classList.remove('d-none'); help.textContent = 'Tiada kategori untuk sukan ini.'; }
-					}
+				const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+				const help = document.getElementById('kategori-help');
+				if (help) { help.classList.add('d-none'); help.textContent = ''; }
+				rows.forEach(k => {
+					const opt = document.createElement('option');
+					opt.value = k.id;
+					opt.textContent = (k.nama_kategori || '').toString().trim();
+					kategoriSelect.appendChild(opt);
+				});
+				if (rows.length === 0) {
+					if (help) { help.classList.remove('d-none'); help.textContent = 'Tiada kategori untuk sukan ini.'; }
 				}
 			} catch (e) { console.error('Failed to load kategori', e); const help = document.getElementById('kategori-help'); if (help) { help.classList.remove('d-none'); help.textContent = 'Ralat sambungan ketika memuatkan kategori.'; } }
 		}
@@ -1621,6 +1753,11 @@ ob_start();
 
 	(() => {
 		// TAB2: Preview generation and submit
+		const modeSelect = document.getElementById('mode_structure');
+		const groupConfigWrap = document.getElementById('group-config-wrap');
+		const knockoutDirectNote = document.getElementById('knockout-direct-note');
+		const knockoutPreviewNote = document.getElementById('knockout-preview-note');
+		const previewArea = document.getElementById('group-preview-area');
 		const bilInput = document.getElementById('bilangan_kumpulan');
 		const formatSelect = document.getElementById('format_kumpulan');
 		const previewTbody = document.querySelector('#group-preview-table tbody');
@@ -1633,6 +1770,27 @@ ob_start();
 		const groupAssignmentsExist = <?php echo $group_assignments_exist ? 'true' : 'false'; ?>;
 		const serverQualificationTopn = <?php echo json_encode($qualification_topn); ?>;
 		const serverQualificationCriteria = <?php echo json_encode($qualification_criteria); ?>;
+
+		function getCurrentMode() {
+			return (modeSelect && modeSelect.value === 'knockout_direct') ? 'knockout_direct' : 'group';
+		}
+
+		function applyStructureMode(mode) {
+			const isKnockout = mode === 'knockout_direct';
+			window.currentStructureMode = isKnockout ? 'knockout_direct' : 'group';
+			if (groupConfigWrap) groupConfigWrap.classList.toggle('d-none', isKnockout);
+			if (knockoutDirectNote) knockoutDirectNote.classList.toggle('d-none', !isKnockout);
+			if (previewArea) previewArea.classList.toggle('d-none', isKnockout);
+			if (knockoutPreviewNote) knockoutPreviewNote.classList.toggle('d-none', !isKnockout);
+			if (bilInput) {
+				if (isKnockout) bilInput.removeAttribute('required');
+				else bilInput.setAttribute('required', 'required');
+			}
+			const btn = document.getElementById('save-groups');
+			if (btn) btn.textContent = isKnockout ? 'Simpan Mode Knockout' : (editMode ? 'Kemaskini Group' : 'Simpan Group');
+			if (typeof window.applyTab3StructureMode === 'function') window.applyTab3StructureMode(mode);
+		}
+		window.applyTab2StructureMode = applyStructureMode;
 
 		function generateCodes(n, format) {
 			const codes = [];
@@ -1647,6 +1805,12 @@ ob_start();
 
 		function renderPreview() {
 			previewTbody.innerHTML = '';
+			if (getCurrentMode() === 'knockout_direct') {
+				const tr = document.createElement('tr');
+				tr.innerHTML = '<td colspan="3" class="text-center text-muted py-3">Mode Knockout Terus dipilih.</td>';
+				previewTbody.appendChild(tr);
+				return [];
+			}
 			// If editing, render existing rounds from server to reflect DB state
 			if (editMode) {
 				const desiredN = Math.max(1, parseInt(bilInput.value || existingRounds.length));
@@ -1696,6 +1860,7 @@ ob_start();
 
 		// initial render if elements exist
 		if (bilInput && formatSelect && previewTbody) {
+			applyStructureMode(getCurrentMode());
 			if (editMode) {
 				// populate bilangan and set readonly only if assignments exist
 				bilInput.value = existingRounds.length;
@@ -1724,12 +1889,20 @@ ob_start();
 				formatSelect.addEventListener('change', renderPreview);
 			}
 		}
+		if (modeSelect) {
+			modeSelect.addEventListener('change', function () {
+				applyStructureMode(getCurrentMode());
+				renderPreview();
+			});
+		}
 
 		if (form2) {
 			form2.addEventListener('submit', async function (ev) {
 				ev.preventDefault();
-				const n = Math.max(1, parseInt(bilInput.value || '0'));
-				if (!n || n < 1) {
+				const mode = getCurrentMode();
+				const isKnockout = mode === 'knockout_direct';
+				const n = Math.max(1, parseInt((bilInput && bilInput.value) ? bilInput.value : '0'));
+				if (!isKnockout && (!n || n < 1)) {
 					Swal.fire({ icon: 'error', title: 'Gagal', text: 'Sila masukkan bilangan kumpulan yang sah.' });
 					return;
 				}
@@ -1741,7 +1914,7 @@ ob_start();
 				}
 
 				// if editing and group count changed, enforce checks
-				if (editMode && existingRounds.length !== n) {
+				if (!isKnockout && editMode && existingRounds.length !== n) {
 					if (groupAssignmentsExist) {
 						Swal.fire({ icon: 'warning', title: 'Tidak dibenarkan', text: 'Bilangan kumpulan tidak boleh diubah kerana terdapat pasukan yang telah ditetapkan ke kumpulan.' });
 						return;
@@ -1760,9 +1933,10 @@ ob_start();
 					}
 				}
 
-				const codes = renderPreview();
+				const codes = isKnockout ? [] : renderPreview();
 				const fd = new FormData(form2);
-				fd.append('group_codes', JSON.stringify(codes));
+				fd.set('mode_structure', mode);
+				if (!isKnockout) fd.set('group_codes', JSON.stringify(codes));
 				fd.append('event_id', eventId);
 				try {
 					const btn = document.getElementById('save-groups');
@@ -1770,7 +1944,9 @@ ob_start();
 					const res = await fetch('', { method: 'POST', body: fd });
 					const json = await res.json();
 					if (json.success) {
-						const okText = json.mode === 'update' ? 'Struktur kumpulan dikemaskini' : 'Struktur kumpulan disimpan';
+						const okText = (mode === 'knockout_direct')
+							? 'Mode knockout terus disimpan'
+							: (json.mode === 'update' ? 'Struktur kumpulan dikemaskini' : 'Struktur kumpulan disimpan');
 						Swal.fire({ icon: 'success', title: 'Berjaya', text: okText, timer: 1200, showConfirmButton: false }).then(() => {
 							// enable and switch to TAB 3
 							const tab3Btn = document.getElementById('tab-3-btn');
@@ -1783,12 +1959,12 @@ ob_start();
 								tabTrigger.show();
 							}
 							// if created, reload page to refresh rounds list used in TAB3; if updated, update select/options in-page
-							if (json.mode === 'create') {
+							if (mode !== 'knockout_direct' && json.mode === 'create') {
 								window.location.reload();
 							} else {
 								// update assign-group-select and groups container using returned groups if provided
 								const assignSelect = document.getElementById('assign-group-select');
-								if (assignSelect) {
+								if (assignSelect && mode !== 'knockout_direct') {
 									assignSelect.innerHTML = '<option value="">-- Pilih Kumpulan --</option>';
 										const newGroups = json.groups || codes;
 										newGroups.forEach(c => {
@@ -1800,7 +1976,7 @@ ob_start();
 								// rebuild Tab3 groups container as a full-width table so it reflects DB state immediately
 								try {
 									const gContainer = document.getElementById('groups-container');
-									if (gContainer) {
+									if (gContainer && mode !== 'knockout_direct') {
 										const groups = json.groups || codes;
 										gContainer.innerHTML = '';
 										const table = document.createElement('table');
@@ -1833,7 +2009,8 @@ ob_start();
 					Swal.fire({ icon: 'error', title: 'Ralat', text: 'Ralat jaringan semasa menyimpan.' });
 				} finally {
 					const btn = document.getElementById('save-groups');
-					btn.disabled = false; btn.textContent = editMode ? 'Kemaskini Group' : 'Simpan Group';
+					btn.disabled = false;
+					btn.textContent = (getCurrentMode() === 'knockout_direct') ? 'Simpan Mode Knockout' : (editMode ? 'Kemaskini Group' : 'Simpan Group');
 				}
 			});
 		}
@@ -1855,4 +2032,3 @@ console.log('[setup-pertandingan debug]', window.__setup_debug);
 <?php
 $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
-

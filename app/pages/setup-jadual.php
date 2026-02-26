@@ -17,11 +17,148 @@ $rbac->requirePageAccess('pages/setup-jadual.php');
 
 $page_title = 'Setup Jadual Perlawanan';
 
+function sj_log(string $message): void {
+    // Keep default PHP/Apache logging
+    error_log($message);
+
+    // Additional file log for easier debugging in Docker dev:
+    // Host path: app/logs/setup-jadual.log
+    try {
+        $logDir = realpath(__DIR__ . '/..') . DIRECTORY_SEPARATOR . 'logs';
+        if ($logDir && !is_dir($logDir)) {
+            @mkdir($logDir, 0775, true);
+        }
+        if ($logDir && is_dir($logDir) && is_writable($logDir)) {
+            $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
+            @file_put_contents($logDir . DIRECTORY_SEPARATOR . 'setup-jadual.log', $line, FILE_APPEND);
+        }
+    } catch (Exception $e) {
+        // silent fallback
+    }
+}
+
+function sj_has_column(PDO $db, string $table, string $column): bool {
+    static $cache = [];
+    $key = strtolower($table . '.' . $column);
+    if (array_key_exists($key, $cache)) return (bool)$cache[$key];
+    try {
+        $sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = :t
+                  AND COLUMN_NAME = :c";
+        $st = $db->prepare($sql);
+        $st->execute([':t' => $table, ':c' => $column]);
+        $ok = ((int)$st->fetchColumn() > 0);
+        $cache[$key] = $ok;
+        return $ok;
+    } catch (Exception $e) {
+        $cache[$key] = false;
+        return false;
+    }
+}
+
+function sj_match_group_col(PDO $db): ?string {
+    if (sj_has_column($db, 'table_match', 'group_code')) return 'group_code';
+    return null;
+}
+
+function sj_match_event_col(PDO $db): ?string {
+    if (sj_has_column($db, 'table_match', 'event_id')) return 'event_id';
+    return null;
+}
+
+function sj_participant_team_col(PDO $db): string {
+    if (sj_has_column($db, 'table_match_participant', 'participant_id')) return 'participant_id';
+    if (sj_has_column($db, 'table_match_participant', 'team_id')) return 'team_id';
+    if (sj_has_column($db, 'table_match_participant', 'pasukan_id')) return 'pasukan_id';
+    // fallback to existing expected name
+    return 'participant_id';
+}
+
+function sj_get_event_sukan_id(PDO $db, int $eventId): int {
+    if ($eventId <= 0) return 0;
+    $st = $db->prepare('SELECT sukan_id FROM table_event WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+    $st->execute([':id' => $eventId]);
+    return (int)$st->fetchColumn();
+}
+
+function sj_next_match_no(PDO $db, int $eventId): int {
+    $matchEventCol = sj_match_event_col($db);
+    if ($matchEventCol) {
+        $st = $db->prepare("SELECT COALESCE(MAX(match_no),0)+1 FROM table_match WHERE {$matchEventCol} = :event_id AND deleted_at IS NULL");
+        $st->execute([':event_id' => $eventId]);
+        $next = (int)$st->fetchColumn();
+        return $next > 0 ? $next : 1;
+    }
+
+    $st = $db->prepare("
+        SELECT COALESCE(MAX(m.match_no),0)+1
+        FROM table_match m
+        INNER JOIN table_round r ON r.id = m.round_id
+        WHERE r.event_id = :event_id
+          AND m.deleted_at IS NULL
+          AND r.deleted_at IS NULL
+    ");
+    $st->execute([':event_id' => $eventId]);
+    $next = (int)$st->fetchColumn();
+    return $next > 0 ? $next : 1;
+}
+
 // Utility: find round rows for event + nama_round
 function _get_round_rows($db, $event_id, $nama_round) {
-    $stmt = $db->prepare("SELECT id, group_code FROM table_round WHERE event_id = :event_id AND nama_round = :nama_round AND deleted_at IS NULL ORDER BY group_order ASC");
+    $stmt = $db->prepare("SELECT id, group_code FROM table_round WHERE event_id = :event_id AND nama_round = :nama_round AND deleted_at IS NULL ORDER BY group_code ASC, group_order ASC");
     $stmt->execute([':event_id' => $event_id, ':nama_round' => $nama_round]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function sj_is_no_group_round(array $roundRows): bool {
+    if (empty($roundRows)) return false;
+    foreach ($roundRows as $r) {
+        $c = trim((string)($r['group_code'] ?? ''));
+        if ($c !== '') return false;
+    }
+    return true;
+}
+
+function sj_build_slot_placeholders(array $roundRow): array {
+    $out = [];
+    $rule = trim((string)($roundRow['qualification_rule'] ?? ''));
+    if ($rule === '') return $out;
+
+    $decoded = json_decode($rule, true);
+    if (!is_array($decoded) || !isset($decoded['advance_map']) || !is_array($decoded['advance_map'])) {
+        return $out;
+    }
+
+    foreach ($decoded['advance_map'] as $sourceNo => $targets) {
+        $src = (int)$sourceNo;
+        if ($src <= 0) continue;
+
+        $labelFrom = static function(string $outcome, int $matchNo): string {
+            $o = strtolower(trim($outcome));
+            if ($o === 'loser' || $o === 'kalah') return 'KALAH ' . $matchNo;
+            return 'MENANG ' . $matchNo;
+        };
+
+        if (is_array($targets) && array_is_list($targets)) {
+            foreach ($targets as $t) {
+                if (!is_array($t)) continue;
+                $targetNo = (int)($t['match_no'] ?? 0);
+                $slot = strtolower((string)($t['slot'] ?? ''));
+                $outcome = strtolower((string)($t['outcome'] ?? 'winner'));
+                if ($targetNo <= 0 || ($slot !== 'home' && $slot !== 'away')) continue;
+                $out[$targetNo][$slot] = $labelFrom($outcome, $src);
+            }
+        } elseif (is_array($targets)) {
+            $targetNo = (int)($targets['match_no'] ?? 0);
+            $slot = strtolower((string)($targets['slot'] ?? ''));
+            $outcome = strtolower((string)($targets['outcome'] ?? 'winner'));
+            if ($targetNo <= 0) continue;
+            if ($slot !== 'home' && $slot !== 'away') $slot = 'away';
+            $out[$targetNo][$slot] = $labelFrom($outcome, $src);
+        }
+    }
+    return $out;
 }
 
 // --- AJAX endpoints ---
@@ -36,7 +173,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_round_names' && isset($_G
         $rows = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
         echo json_encode(['success' => true, 'rounds' => $rows]);
     } catch (Exception $e) {
-        error_log('[setup-jadual get_round_names] ' . $e->getMessage());
+        sj_log('[setup-jadual get_round_names] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => 'server_error']);
     }
     exit;
@@ -77,13 +214,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_event_all' && isset($_GE
                     if (!isset($groups[$code])) $groups[$code] = [];
                     $groups[$code][] = ['id' => (int)$row['id'], 'nama_pasukan' => $row['nama_pasukan']];
                 }
+            } elseif (sj_is_no_group_round($rrows)) {
+                $q = $db->prepare('SELECT id, nama_pasukan FROM table_pasukan WHERE sukan_id = :sukan_id AND status = 1 AND deleted_at IS NULL ORDER BY nama_pasukan ASC');
+                $q->execute([':sukan_id' => $sukan_id]);
+                $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+                $groups['__ALL__'] = array_map(function($row){
+                    return ['id' => (int)$row['id'], 'nama_pasukan' => $row['nama_pasukan']];
+                }, $rows ?: []);
             }
             $groups_by_round[$rname] = $groups;
         }
 
         echo json_encode(['success' => true, 'rounds' => $rounds, 'groups_by_round' => $groups_by_round]);
     } catch (Exception $e) {
-        error_log('[setup-jadual load_event_all] ' . $e->getMessage());
+        sj_log('[setup-jadual load_event_all] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => 'server_error']);
     }
     exit;
@@ -102,8 +246,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_groups' && isset($_GET['
         if (!$evr) { echo json_encode(['success' => false, 'error' => 'event_not_found']); exit; }
         $sukan_id = (int)$evr['sukan_id'];
 
-        // Load round rows ordered by group_order so groups are returned in defined order
-        $rstmt = $db->prepare("SELECT id, group_code FROM table_round WHERE event_id = :event_id AND nama_round = :nama_round AND deleted_at IS NULL ORDER BY group_order ASC");
+        // Load round rows ordered alphabetically by group_code
+        $rstmt = $db->prepare("SELECT id, group_code FROM table_round WHERE event_id = :event_id AND nama_round = :nama_round AND deleted_at IS NULL ORDER BY group_code ASC, group_order ASC");
         $rstmt->execute([':event_id' => $event_id, ':nama_round' => $nama_round]);
         $roundRows = $rstmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -121,10 +265,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_groups' && isset($_GET['
             }
             $groups[] = ['group_code' => $code, 'teams' => $teams];
         }
+        if (empty($groups) && sj_is_no_group_round($roundRows)) {
+            $allStmt = $db->prepare('SELECT id, nama_pasukan, kontinjen_id, initial_group_code FROM table_pasukan WHERE sukan_id = :sukan_id AND status = 1 AND deleted_at IS NULL ORDER BY nama_pasukan ASC');
+            $allStmt->execute([':sukan_id' => $sukan_id]);
+            $rows = $allStmt->fetchAll(PDO::FETCH_ASSOC);
+            $teams = [];
+            foreach ($rows as $r) {
+                $teams[] = ['id' => (int)$r['id'], 'nama_pasukan' => $r['nama_pasukan'], 'kontinjen_id' => isset($r['kontinjen_id']) ? (int)$r['kontinjen_id'] : null, 'initial_group_code' => $r['initial_group_code']];
+            }
+            $groups[] = ['group_code' => '__ALL__', 'teams' => $teams];
+        }
 
         echo json_encode(['success' => true, 'groups' => $groups]);
     } catch (Exception $e) {
-        error_log('[setup-jadual load_groups] ' . $e->getMessage());
+        sj_log('[setup-jadual load_groups] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'server_error']);
+    }
+    exit;
+}
+
+if (isset($_GET['action']) && $_GET['action'] === 'get_next_match_no' && isset($_GET['event_id'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $event_id = (int)$_GET['event_id'];
+    if ($event_id <= 0) { echo json_encode(['success' => false]); exit; }
+    try {
+        $db = getDB();
+        echo json_encode(['success' => true, 'next_match_no' => sj_next_match_no($db, $event_id)]);
+    } catch (Exception $e) {
+        sj_log('[setup-jadual get_next_match_no] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => 'server_error']);
     }
     exit;
@@ -135,17 +303,83 @@ if (isset($_GET['action']) && $_GET['action'] === 'load_venues') {
     header('Content-Type: application/json; charset=utf-8');
     try {
         $db = getDB();
-        $stmt = $db->prepare('SELECT id, nama_venue, lokasi FROM table_ref_venues WHERE status = 1 AND deleted_at IS NULL ORDER BY nama_venue ASC');
-        $stmt->execute();
+        $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
+        $sukanId = isset($_GET['sukan_id']) ? (int)$_GET['sukan_id'] : 0;
+        if ($sukanId <= 0 && $eventId > 0) {
+            $sukanId = sj_get_event_sukan_id($db, $eventId);
+        }
+
+        $hasSukanCol = sj_has_column($db, 'table_ref_venues', 'sukan');
+        if ($hasSukanCol && $sukanId > 0) {
+            $sql = "
+                SELECT id, nama_venue, lokasi,
+                       CASE
+                           WHEN sukan = :sukan_exact THEN 1
+                           WHEN FIND_IN_SET(:sukan_csv, REPLACE(COALESCE(sukan,''), ' ', '')) > 0 THEN 1
+                           ELSE 0
+                       END AS is_recommended
+                FROM table_ref_venues
+                WHERE status = 1 AND deleted_at IS NULL
+                ORDER BY is_recommended DESC, nama_venue ASC
+            ";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([
+                ':sukan_exact' => (string)$sukanId,
+                ':sukan_csv' => (string)$sukanId,
+            ]);
+        } else {
+            $stmt = $db->prepare('SELECT id, nama_venue, lokasi, 0 AS is_recommended FROM table_ref_venues WHERE status = 1 AND deleted_at IS NULL ORDER BY nama_venue ASC');
+            $stmt->execute();
+        }
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $out = [];
         foreach ($rows as $r) {
             $disp = trim($r['nama_venue'] . (isset($r['lokasi']) && trim($r['lokasi']) !== '' ? ' (' . $r['lokasi'] . ')' : ''));
-            $out[] = ['id' => (int)$r['id'], 'display' => $disp];
+            $out[] = ['id' => (int)$r['id'], 'display' => $disp, 'is_recommended' => ((int)($r['is_recommended'] ?? 0) === 1 ? 1 : 0)];
         }
         echo json_encode(['success' => true, 'venues' => $out]);
     } catch (Exception $e) {
-        error_log('[setup-jadual load_venues] ' . $e->getMessage());
+        sj_log('[setup-jadual load_venues] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'server_error']);
+    }
+    exit;
+}
+
+if (isset($_GET['action']) && $_GET['action'] === 'load_venue_details') {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        $db = getDB();
+        $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
+        $sukanId = isset($_GET['sukan_id']) ? (int)$_GET['sukan_id'] : 0;
+        if ($sukanId <= 0 && $eventId > 0) {
+            $sukanId = sj_get_event_sukan_id($db, $eventId);
+        }
+        if ($sukanId <= 0) {
+            echo json_encode(['success' => true, 'details' => []]);
+            exit;
+        }
+
+        $sql = "
+            SELECT DISTINCT TRIM(m.venue_detail) AS venue_detail
+            FROM table_match m
+            INNER JOIN table_round r ON r.id = m.round_id
+            INNER JOIN table_event e ON e.id = r.event_id
+            WHERE e.sukan_id = :sukan_id
+              AND m.deleted_at IS NULL
+              AND r.deleted_at IS NULL
+              AND e.deleted_at IS NULL
+              AND m.venue_detail IS NOT NULL
+              AND TRIM(m.venue_detail) <> ''
+            ORDER BY venue_detail ASC
+            LIMIT 100
+        ";
+        $st = $db->prepare($sql);
+        $st->execute([':sukan_id' => $sukanId]);
+        $rows = $st->fetchAll(PDO::FETCH_COLUMN, 0);
+        $rows = is_array($rows) ? array_values(array_filter(array_map(static fn($v) => trim((string)$v), $rows), static fn($v) => $v !== '')) : [];
+        echo json_encode(['success' => true, 'details' => $rows]);
+    } catch (Exception $e) {
+        sj_log('[setup-jadual load_venue_details] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => 'server_error']);
     }
     exit;
@@ -161,24 +395,86 @@ if (isset($_GET['action']) && $_GET['action'] === 'list_matches' && isset($_GET[
         $roundRows = _get_round_rows($db, $event_id, $nama_round);
         if (empty($roundRows)) { echo json_encode(['success' => true, 'matches' => []]); exit; }
         $roundIds = array_map('intval', array_column($roundRows, 'id'));
+        $roundMap = [];
+        foreach ($roundRows as $rr) {
+            $roundMap[(int)$rr['id']] = trim((string)($rr['group_code'] ?? ''));
+        }
+        $matchGroupCol = sj_match_group_col($db);
+        $groupExpr = $matchGroupCol ? ('m.' . $matchGroupCol) : "''";
         $in = implode(',', array_fill(0, count($roundIds), '?'));
-        $sql = "SELECT m.id, m.round_id, m.group_code, m.match_no, m.status, m.tarikh FROM table_match m WHERE m.round_id IN ($in) AND m.deleted_at IS NULL ORDER BY m.group_code ASC, m.match_no ASC";
+        $hasVenueId = sj_has_column($db, 'table_match', 'venue_id');
+        $hasVenueDetail = sj_has_column($db, 'table_match', 'venue_detail');
+        $venueIdSelect = $hasVenueId ? 'm.venue_id' : 'NULL';
+        $venueDetailSelect = $hasVenueDetail ? 'm.venue_detail' : "''";
+        $joinVenue = $hasVenueId ? 'LEFT JOIN table_ref_venues v ON v.id = m.venue_id' : '';
+        $venueNameSelect = $hasVenueId ? "COALESCE(v.nama_venue, '')" : "''";
+
+        $sql = "SELECT m.id, m.round_id, {$groupExpr} AS group_code, m.match_no, m.status, m.tarikh,
+                       {$venueIdSelect} AS venue_id, {$venueDetailSelect} AS venue_detail, {$venueNameSelect} AS venue_name
+                FROM table_match m
+                {$joinVenue}
+                WHERE m.round_id IN ($in) AND m.deleted_at IS NULL
+                ORDER BY " . ($matchGroupCol ? "m.{$matchGroupCol} ASC, " : "") . "m.match_no ASC";
         $stmt = $db->prepare($sql);
         $stmt->execute($roundIds);
         $matches = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        $roundPlaceholders = [];
+        if (!empty($roundIds)) {
+            $rin = implode(',', array_fill(0, count($roundIds), '?'));
+            $rst = $db->prepare("SELECT id, qualification_rule FROM table_round WHERE id IN ({$rin})");
+            $rst->execute($roundIds);
+            $rrows = $rst->fetchAll(PDO::FETCH_ASSOC);
+            if (is_array($rrows)) {
+                foreach ($rrows as $rr) {
+                    $rid = (int)($rr['id'] ?? 0);
+                    if ($rid > 0) $roundPlaceholders[$rid] = sj_build_slot_placeholders($rr);
+                }
+            }
+        }
+
         $out = [];
+        $partTeamCol = sj_participant_team_col($db);
         foreach ($matches as $m) {
             $mid = (int)$m['id'];
-            $pstmt = $db->prepare('SELECT p.team_id, t.nama_pasukan FROM table_match_participant p JOIN table_pasukan t ON t.id = p.team_id WHERE p.match_id = :mid AND p.deleted_at IS NULL');
+            $pstmt = $db->prepare("SELECT p.id AS participant_row_id, p.{$partTeamCol} AS team_id, t.nama_pasukan
+                                   FROM table_match_participant p
+                                   JOIN table_pasukan t ON t.id = p.{$partTeamCol}
+                                   WHERE p.match_id = :mid AND p.deleted_at IS NULL
+                                   ORDER BY p.id ASC");
             $pstmt->execute([':mid' => $mid]);
             $parts = $pstmt->fetchAll(PDO::FETCH_ASSOC);
             $teams = [];
             foreach ($parts as $p) $teams[] = ['id' => (int)$p['team_id'], 'nama_pasukan' => $p['nama_pasukan']];
-            $out[$m['group_code']][] = ['id'=>$mid, 'match_no'=>(int)$m['match_no'], 'status'=>$m['status'], 'tarikh'=>$m['tarikh'], 'teams'=>$teams];
+            $gcode = trim((string)($m['group_code'] ?? ''));
+            if ($gcode === '') $gcode = (string)($roundMap[(int)$m['round_id']] ?? '');
+            if ($gcode === '') $gcode = '__ALL__';
+            $mno = (int)($m['match_no'] ?? 0);
+            $rid = (int)($m['round_id'] ?? 0);
+            $ph = $roundPlaceholders[$rid] ?? [];
+            $phA = (string)($ph[$mno]['home'] ?? '');
+            $phB = (string)($ph[$mno]['away'] ?? '');
+            $teamALabel = (isset($teams[0]['nama_pasukan']) && trim((string)$teams[0]['nama_pasukan']) !== '')
+                ? (string)$teams[0]['nama_pasukan']
+                : $phA;
+            $teamBLabel = (isset($teams[1]['nama_pasukan']) && trim((string)$teams[1]['nama_pasukan']) !== '')
+                ? (string)$teams[1]['nama_pasukan']
+                : $phB;
+            $out[$gcode][] = [
+                'id' => $mid,
+                'match_no' => (int)$m['match_no'],
+                'status' => $m['status'],
+                'tarikh' => $m['tarikh'],
+                'venue_id' => isset($m['venue_id']) ? (int)$m['venue_id'] : null,
+                'venue_name' => $m['venue_name'] ?? '',
+                'venue_detail' => $m['venue_detail'] ?? '',
+                'teams' => $teams,
+                'team_a_label' => $teamALabel,
+                'team_b_label' => $teamBLabel
+            ];
         }
         echo json_encode(['success' => true, 'matches' => $out]);
-    } catch (Exception $e) { error_log('[setup-jadual list_matches] '.$e->getMessage()); echo json_encode(['success'=>false, 'error'=>'server_error']); }
+    } catch (Exception $e) { sj_log('[setup-jadual list_matches] '.$e->getMessage()); echo json_encode(['success'=>false, 'error'=>'server_error']); }
     exit;
 }
 
@@ -198,47 +494,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $errors = [];
     if ($event_id <= 0) $errors[] = 'Event tidak sah';
     if ($nama_round === '') $errors[] = 'Round tidak dipilih';
-    if ($group_code === '') $errors[] = 'Kumpulan tidak dipilih';
     if ($team_a <= 0 || $team_b <= 0) $errors[] = 'Sila pilih kedua-dua pasukan';
     if ($team_a === $team_b) $errors[] = 'Pasukan A mesti berbeza daripada Pasukan B';
     if ($venue_detail !== null && strlen($venue_detail) > 100) $errors[] = 'Venue detail terlalu panjang';
+    if ($match_no !== null && $match_no <= 0) $errors[] = 'Nombor perlawanan tidak sah';
     if (!empty($errors)) { echo json_encode(['success'=>false,'errors'=>$errors]); exit; }
 
     try {
         $db = getDB();
         // ensure round exists and map to a round_id for this group
         $roundRows = _get_round_rows($db, $event_id, $nama_round);
+        if (empty($roundRows)) { echo json_encode(['success'=>false,'errors'=>['Round tidak ditemui untuk event ini']]); exit; }
+        $isNoGroupRound = sj_is_no_group_round($roundRows);
+        if (!$isNoGroupRound && $group_code === '') { echo json_encode(['success'=>false,'errors'=>['Kumpulan tidak dipilih']]); exit; }
         $groupMap = [];
         foreach ($roundRows as $r) { $c = trim((string)$r['group_code']); if ($c !== '') $groupMap[$c] = (int)$r['id']; }
-        if (!isset($groupMap[$group_code])) { echo json_encode(['success'=>false,'errors'=>['Kumpulan tidak ditemui untuk round ini']]); exit; }
-        $round_id = $groupMap[$group_code];
+        if ($isNoGroupRound) {
+            $round_id = (int)$roundRows[0]['id'];
+            $group_code = '';
+        } else {
+            if (!isset($groupMap[$group_code])) { echo json_encode(['success'=>false,'errors'=>['Kumpulan tidak ditemui untuk round ini']]); exit; }
+            $round_id = $groupMap[$group_code];
+        }
 
-        // ensure both teams belong to this group (initial_group_code)
-        $q = $db->prepare('SELECT id, initial_group_code FROM table_pasukan WHERE id IN (:a, :b) AND deleted_at IS NULL');
-        $q->execute([':a'=>$team_a, ':b'=>$team_b]);
-        $found = $q->fetchAll(PDO::FETCH_ASSOC);
-        $map = [];
-        foreach ($found as $f) $map[(int)$f['id']] = $f['initial_group_code'];
-        if (!isset($map[$team_a]) || !isset($map[$team_b])) { echo json_encode(['success'=>false,'errors'=>['Salah satu pasukan tidak ditemui']]); exit; }
-        if (trim((string)$map[$team_a]) !== $group_code || trim((string)$map[$team_b]) !== $group_code) { echo json_encode(['success'=>false,'errors'=>['Kedua-dua pasukan mesti milik kumpulan yang sama']]); exit; }
+        // In grouped rounds, enforce both teams in same group.
+        if (!$isNoGroupRound) {
+            $q = $db->prepare('SELECT id, initial_group_code FROM table_pasukan WHERE id IN (?, ?) AND deleted_at IS NULL');
+            $q->execute([$team_a, $team_b]);
+            $found = $q->fetchAll(PDO::FETCH_ASSOC);
+            $map = [];
+            foreach ($found as $f) $map[(int)$f['id']] = $f['initial_group_code'];
+            if (!isset($map[$team_a]) || !isset($map[$team_b])) { echo json_encode(['success'=>false,'errors'=>['Salah satu pasukan tidak ditemui']]); exit; }
+            if (trim((string)$map[$team_a]) !== $group_code || trim((string)$map[$team_b]) !== $group_code) { echo json_encode(['success'=>false,'errors'=>['Kedua-dua pasukan mesti milik kumpulan yang sama']]); exit; }
+        }
 
-        // ensure required columns exist (migration applied)
-        $colCheck = $db->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'table_match' AND COLUMN_NAME IN ('venue_id','venue_detail','created_by')");
-        $colCheck->execute();
-        $colCount = (int)$colCheck->fetchColumn();
-        if ($colCount < 3) {
-            echo json_encode(['success'=>false,'errors'=>['Database migration not applied: missing venue or created_by columns in table_match. Please run the migration: db/migrations/20260126_add_venue_to_table_match.sql']]);
-            exit;
+        // Normalize datetime input from <input type="datetime-local"> (YYYY-MM-DDTHH:MM)
+        if ($tarikh !== null && $tarikh !== '') {
+            $tarikh = str_replace('T', ' ', $tarikh);
+            if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $tarikh)) {
+                $tarikh .= ':00';
+            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $tarikh)) {
+                echo json_encode(['success'=>false,'errors'=>['Format tarikh tidak sah']]);
+                exit;
+            }
         }
 
         // prevent duplicate pairing within same round
-        $dupSql = 'SELECT m.id FROM table_match m JOIN table_match_participant p1 ON p1.match_id=m.id AND p1.team_id=:a JOIN table_match_participant p2 ON p2.match_id=m.id AND p2.team_id=:b WHERE m.round_id = :rid AND m.deleted_at IS NULL LIMIT 1';
+        $partTeamCol = sj_participant_team_col($db);
+        $dupSql = "SELECT m.id FROM table_match m
+                   JOIN table_match_participant p1 ON p1.match_id=m.id AND p1.{$partTeamCol}=:a
+                   JOIN table_match_participant p2 ON p2.match_id=m.id AND p2.{$partTeamCol}=:b
+                   WHERE m.round_id = :rid AND m.deleted_at IS NULL LIMIT 1";
         $dup = $db->prepare($dupSql);
         $dup->execute([':a'=>$team_a, ':b'=>$team_b, ':rid'=>$round_id]);
         if ($dup->fetch()) { echo json_encode(['success'=>false,'errors'=>['Perlawanan antara pasukan ini telah wujud dalam round ini']]); exit; }
 
-        // insert
-        $db->beginTransaction();
         // validate venue if provided
         $created_by = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
         if ($venue_id) {
@@ -247,21 +558,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             if (!$vs->fetch()) { echo json_encode(['success'=>false,'errors'=>['Venue tidak sah']]); exit; }
         }
 
-        $insSql = 'INSERT INTO table_match (event_id, round_id, group_code, match_no, status, created_by, tarikh, venue_id, venue_detail, created_at) VALUES (:event_id, :round_id, :group_code, :match_no, :status, :created_by, :tarikh, :venue_id, :venue_detail, NOW())';
-        $ins = $db->prepare($insSql);
-        $ins->execute([
-            ':event_id'=>$event_id,
-            ':round_id'=>$round_id,
-            ':group_code'=>$group_code,
-            ':match_no'=>$match_no,
-            ':status'=>'scheduled',
-            ':created_by'=>$created_by,
-            ':tarikh'=>$tarikh,
-            ':venue_id'=>$venue_id,
-            ':venue_detail'=>$venue_detail
-        ]);
+        // Auto next match number globally for this event (not by group)
+        if ($match_no === null) {
+            $match_no = sj_next_match_no($db, $event_id);
+        } else {
+            $globalNext = sj_next_match_no($db, $event_id);
+            if ($match_no < $globalNext) $match_no = $globalNext;
+        }
+
+        // insert
+        $db->beginTransaction();
+        $inserted = false;
+        $matchGroupCol = sj_match_group_col($db);
+        $matchEventCol = sj_match_event_col($db);
+        // Preferred schema (new columns)
+        try {
+            $insCols = ['round_id'];
+            $insVals = [':round_id'];
+            if ($matchEventCol) { $insCols[] = $matchEventCol; $insVals[] = ':event_id'; }
+            if ($matchGroupCol) { $insCols[] = $matchGroupCol; $insVals[] = ':group_code'; }
+            $insCols = array_merge($insCols, ['match_no','status','created_by','tarikh','venue_id','venue_detail','created_at']);
+            $insVals = array_merge($insVals, [':match_no',':status',':created_by',':tarikh',':venue_id',':venue_detail','NOW()']);
+            $insSql = 'INSERT INTO table_match (' . implode(',', $insCols) . ') VALUES (' . implode(',', $insVals) . ')';
+            $ins = $db->prepare($insSql);
+            $params = [
+                ':round_id'=>$round_id,
+                ':match_no'=>$match_no,
+                ':status'=>'scheduled',
+                ':created_by'=>$created_by,
+                ':tarikh'=>$tarikh,
+                ':venue_id'=>$venue_id,
+                ':venue_detail'=>$venue_detail
+            ];
+            if ($matchEventCol) $params[':event_id'] = $event_id;
+            if ($matchGroupCol) $params[':group_code'] = $group_code;
+            $ins->execute($params);
+            $inserted = true;
+        } catch (Exception $schemaEx) {
+            // Fallback schema compatibility (older production without venue/created_by columns)
+            $insCols = ['round_id'];
+            $insVals = [':round_id'];
+            if ($matchEventCol) { $insCols[] = $matchEventCol; $insVals[] = ':event_id'; }
+            if ($matchGroupCol) { $insCols[] = $matchGroupCol; $insVals[] = ':group_code'; }
+            $insCols = array_merge($insCols, ['match_no','status','tarikh','created_at']);
+            $insVals = array_merge($insVals, [':match_no',':status',':tarikh','NOW()']);
+            $insSql = 'INSERT INTO table_match (' . implode(',', $insCols) . ') VALUES (' . implode(',', $insVals) . ')';
+            $ins = $db->prepare($insSql);
+            $params = [
+                ':round_id'=>$round_id,
+                ':match_no'=>$match_no,
+                ':status'=>'scheduled',
+                ':tarikh'=>$tarikh
+            ];
+            if ($matchEventCol) $params[':event_id'] = $event_id;
+            if ($matchGroupCol) $params[':group_code'] = $group_code;
+            $ins->execute($params);
+            $inserted = true;
+        }
+        if (!$inserted) {
+            throw new Exception('Gagal insert table_match');
+        }
         $mid = (int)$db->lastInsertId();
-        $pins = $db->prepare('INSERT INTO table_match_participant (match_id, team_id, created_at) VALUES (:mid, :tid, NOW())');
+        $partTeamCol = sj_participant_team_col($db);
+        $pins = $db->prepare("INSERT INTO table_match_participant (match_id, {$partTeamCol}, created_at) VALUES (:mid, :tid, NOW())");
         $pins->execute([':mid'=>$mid, ':tid'=>$team_a]);
         $pins->execute([':mid'=>$mid, ':tid'=>$team_b]);
         $db->commit();
@@ -269,7 +628,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode(['success'=>true,'match'=>['id'=>$mid,'match_no'=>$match_no,'group'=>$group_code]]);
     } catch (Exception $e) {
         if (isset($db) && $db && $db->inTransaction()) $db->rollBack();
-        error_log('[setup-jadual add_manual] '.$e->getMessage());
+        sj_log('[setup-jadual add_manual] '.$e->getMessage().' | event_id='.$event_id.' round='.$nama_round.' group='.$group_code.' a='.$team_a.' b='.$team_b.' match_no='.(string)$match_no.' tarikh='.(string)$tarikh);
+        echo json_encode(['success'=>false,'errors'=>['Server error']]);
+    }
+    exit;
+}
+
+// Update manual match (scheduled only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_manual_match') {
+    header('Content-Type: application/json; charset=utf-8');
+    $match_id = isset($_POST['match_id']) ? (int)$_POST['match_id'] : 0;
+    $event_id = isset($_POST['event_id']) ? (int)$_POST['event_id'] : 0;
+    $nama_round = isset($_POST['nama_round']) ? trim((string)$_POST['nama_round']) : '';
+    $group_code = isset($_POST['group_code']) ? trim((string)$_POST['group_code']) : '';
+    $team_a = isset($_POST['team_a']) ? (int)$_POST['team_a'] : 0;
+    $team_b = isset($_POST['team_b']) ? (int)$_POST['team_b'] : 0;
+    $match_no = isset($_POST['match_no']) && $_POST['match_no'] !== '' ? (int)$_POST['match_no'] : null;
+    $tarikh = isset($_POST['tarikh']) && $_POST['tarikh'] !== '' ? trim((string)$_POST['tarikh']) : null;
+    $venue_id = isset($_POST['venue_id']) && $_POST['venue_id'] !== '' ? (int)$_POST['venue_id'] : null;
+    $venue_detail = isset($_POST['venue_detail']) ? trim((string)$_POST['venue_detail']) : null;
+
+    $errors = [];
+    if ($match_id <= 0) $errors[] = 'Match tidak sah';
+    if ($event_id <= 0) $errors[] = 'Event tidak sah';
+    if ($nama_round === '') $errors[] = 'Round tidak dipilih';
+    if ($team_a <= 0 || $team_b <= 0) $errors[] = 'Sila pilih kedua-dua pasukan';
+    if ($team_a === $team_b) $errors[] = 'Pasukan A mesti berbeza daripada Pasukan B';
+    if ($venue_detail !== null && strlen($venue_detail) > 100) $errors[] = 'Venue detail terlalu panjang';
+    if ($match_no !== null && $match_no <= 0) $errors[] = 'Nombor perlawanan tidak sah';
+    if (!empty($errors)) { echo json_encode(['success'=>false,'errors'=>$errors]); exit; }
+
+    try {
+        $db = getDB();
+        $mchk = $db->prepare('SELECT id, round_id, status FROM table_match WHERE id = :id AND deleted_at IS NULL LIMIT 1');
+        $mchk->execute([':id' => $match_id]);
+        $mrow = $mchk->fetch(PDO::FETCH_ASSOC);
+        if (!$mrow) { echo json_encode(['success'=>false,'errors'=>['Perlawanan tidak ditemui']]); exit; }
+        if (strtolower((string)$mrow['status']) !== 'scheduled') { echo json_encode(['success'=>false,'errors'=>['Hanya perlawanan berstatus scheduled boleh dikemaskini']]); exit; }
+
+        $roundRows = _get_round_rows($db, $event_id, $nama_round);
+        if (empty($roundRows)) { echo json_encode(['success'=>false,'errors'=>['Round tidak ditemui untuk event ini']]); exit; }
+        $isNoGroupRound = sj_is_no_group_round($roundRows);
+        if (!$isNoGroupRound && $group_code === '') { echo json_encode(['success'=>false,'errors'=>['Kumpulan tidak dipilih']]); exit; }
+        $groupMap = [];
+        foreach ($roundRows as $r) { $c = trim((string)$r['group_code']); if ($c !== '') $groupMap[$c] = (int)$r['id']; }
+        if ($isNoGroupRound) {
+            $round_id = (int)$roundRows[0]['id'];
+            $group_code = '';
+        } else {
+            if (!isset($groupMap[$group_code])) { echo json_encode(['success'=>false,'errors'=>['Kumpulan tidak ditemui untuk round ini']]); exit; }
+            $round_id = $groupMap[$group_code];
+        }
+
+        if (!$isNoGroupRound) {
+            $q = $db->prepare('SELECT id, initial_group_code FROM table_pasukan WHERE id IN (?, ?) AND deleted_at IS NULL');
+            $q->execute([$team_a, $team_b]);
+            $found = $q->fetchAll(PDO::FETCH_ASSOC);
+            $map = [];
+            foreach ($found as $f) $map[(int)$f['id']] = $f['initial_group_code'];
+            if (!isset($map[$team_a]) || !isset($map[$team_b])) { echo json_encode(['success'=>false,'errors'=>['Salah satu pasukan tidak ditemui']]); exit; }
+            if (trim((string)$map[$team_a]) !== $group_code || trim((string)$map[$team_b]) !== $group_code) { echo json_encode(['success'=>false,'errors'=>['Kedua-dua pasukan mesti milik kumpulan yang sama']]); exit; }
+        }
+
+        if ($tarikh !== null && $tarikh !== '') {
+            $tarikh = str_replace('T', ' ', $tarikh);
+            if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $tarikh)) $tarikh .= ':00';
+            if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $tarikh)) {
+                echo json_encode(['success'=>false,'errors'=>['Format tarikh tidak sah']]); exit;
+            }
+        }
+
+        $partTeamCol = sj_participant_team_col($db);
+        $dupSql = "SELECT m.id FROM table_match m
+                   JOIN table_match_participant p1 ON p1.match_id=m.id AND p1.{$partTeamCol}=:a
+                   JOIN table_match_participant p2 ON p2.match_id=m.id AND p2.{$partTeamCol}=:b
+                   WHERE m.round_id = :rid AND m.deleted_at IS NULL AND m.id <> :mid LIMIT 1";
+        $dup = $db->prepare($dupSql);
+        $dup->execute([':a'=>$team_a, ':b'=>$team_b, ':rid'=>$round_id, ':mid'=>$match_id]);
+        if ($dup->fetch()) { echo json_encode(['success'=>false,'errors'=>['Perlawanan antara pasukan ini telah wujud dalam round ini']]); exit; }
+
+        if ($venue_id) {
+            $vs = $db->prepare('SELECT id FROM table_ref_venues WHERE id = :id AND status = 1 AND deleted_at IS NULL LIMIT 1');
+            $vs->execute([':id' => $venue_id]);
+            if (!$vs->fetch()) { echo json_encode(['success'=>false,'errors'=>['Venue tidak sah']]); exit; }
+        }
+
+        if ($match_no === null) {
+            $match_no = sj_next_match_no($db, $event_id);
+        }
+
+        $db->beginTransaction();
+        $matchGroupCol = sj_match_group_col($db);
+        $matchEventCol = sj_match_event_col($db);
+        $set = ['round_id = :round_id', 'match_no = :match_no', 'tarikh = :tarikh'];
+        $params = [':id'=>$match_id, ':round_id'=>$round_id, ':match_no'=>$match_no, ':tarikh'=>$tarikh];
+        if ($matchEventCol) { $set[] = "{$matchEventCol} = :event_id"; $params[':event_id'] = $event_id; }
+        if ($matchGroupCol) { $set[] = "{$matchGroupCol} = :group_code"; $params[':group_code'] = $group_code; }
+        if (sj_has_column($db, 'table_match', 'venue_id')) { $set[] = 'venue_id = :venue_id'; $params[':venue_id'] = $venue_id; }
+        if (sj_has_column($db, 'table_match', 'venue_detail')) { $set[] = 'venue_detail = :venue_detail'; $params[':venue_detail'] = $venue_detail; }
+        $up = $db->prepare('UPDATE table_match SET ' . implode(', ', $set) . ' WHERE id = :id AND deleted_at IS NULL');
+        $up->execute($params);
+
+        if (sj_has_column($db, 'table_match_participant', 'deleted_at')) {
+            $db->prepare('UPDATE table_match_participant SET deleted_at = NOW() WHERE match_id = :mid AND deleted_at IS NULL')->execute([':mid' => $match_id]);
+        } else {
+            $db->prepare('DELETE FROM table_match_participant WHERE match_id = :mid')->execute([':mid' => $match_id]);
+        }
+        $pins = $db->prepare("INSERT INTO table_match_participant (match_id, {$partTeamCol}, created_at) VALUES (:mid, :tid, NOW())");
+        $pins->execute([':mid'=>$match_id, ':tid'=>$team_a]);
+        $pins->execute([':mid'=>$match_id, ':tid'=>$team_b]);
+
+        $db->commit();
+        echo json_encode(['success'=>true,'match'=>['id'=>$match_id,'match_no'=>$match_no,'group'=>$group_code]]);
+    } catch (Exception $e) {
+        if (isset($db) && $db && $db->inTransaction()) $db->rollBack();
+        sj_log('[setup-jadual update_manual] ' . $e->getMessage() . ' | mid=' . $match_id);
         echo json_encode(['success'=>false,'errors'=>['Server error']]);
     }
     exit;
@@ -300,7 +773,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode(['success'=>true]);
     } catch (Exception $e) {
         if (isset($db) && $db && $db->inTransaction()) $db->rollBack();
-        error_log('[setup-jadual delete_match] '.$e->getMessage());
+        sj_log('[setup-jadual delete_match] '.$e->getMessage());
         echo json_encode(['success'=>false,'errors'=>['Server error']]);
     }
     exit;
@@ -326,24 +799,196 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $groupCodes = [];
         $roundIds = [];
         foreach ($roundRows as $rr) { $gc = trim((string)$rr['group_code']); if ($gc === '') continue; $groupCodes[$gc] = (int)$rr['id']; $roundIds[] = (int)$rr['id']; }
-        if (empty($groupCodes)) { echo json_encode(['success' => false, 'errors' => ['Tiada kumpulan ditetapkan untuk round ini']]); exit; }
+        $isNoGroupRound = sj_is_no_group_round($roundRows);
+        if (empty($groupCodes) && !$isNoGroupRound) { echo json_encode(['success' => false, 'errors' => ['Tiada kumpulan ditetapkan untuk round ini']]); exit; }
+        if (empty($roundIds) && $isNoGroupRound) {
+            $roundIds[] = (int)$roundRows[0]['id'];
+            $groupCodes['__ALL__'] = (int)$roundRows[0]['id'];
+        }
 
         $in = implode(',', array_fill(0, count($roundIds), '?'));
         $checkSql = "SELECT COUNT(*) AS c FROM table_match WHERE round_id IN ($in) AND deleted_at IS NULL";
         $chk = $db->prepare($checkSql);
         $chk->execute($roundIds);
         $cnt = (int)$chk->fetchColumn();
-        if ($cnt > 0) { echo json_encode(['success' => false, 'errors' => ['Jadual perlawanan telah dijana atau wujud perlawanan manual sebelum ini.']]); exit; }
+        if ($cnt > 0 && !$isNoGroupRound) {
+            $sampleSql = "SELECT id, match_no, round_id, status FROM table_match WHERE round_id IN ($in) AND deleted_at IS NULL ORDER BY match_no ASC, id ASC LIMIT 8";
+            $sst = $db->prepare($sampleSql);
+            $sst->execute($roundIds);
+            $sampleRows = $sst->fetchAll(PDO::FETCH_ASSOC);
+            $sampleNos = [];
+            foreach ($sampleRows as $sr) {
+                $no = isset($sr['match_no']) ? (int)$sr['match_no'] : 0;
+                $sampleNos[] = $no > 0 ? ('#' . $no) : ('ID:' . (int)$sr['id']);
+            }
+            $sampleText = !empty($sampleNos) ? (' (contoh: ' . implode(', ', $sampleNos) . ')') : '';
+            echo json_encode([
+                'success' => false,
+                'errors' => ["Jadual tidak boleh dijana kerana {$cnt} match sudah wujud untuk round ini{$sampleText}."],
+                'debug' => [
+                    'event_id' => $event_id,
+                    'nama_round' => $nama_round,
+                    'round_ids' => $roundIds,
+                    'existing_match_count' => $cnt,
+                    'existing_matches_sample' => $sampleRows,
+                ],
+            ]);
+            exit;
+        }
+
+        // Knockout direct (no-group): allow incremental generation.
+        // If opening matches already exist, generate only downstream matches
+        // declared in qualification_rule.advance_map (e.g. 5,6,7,8).
+        if ($isNoGroupRound) {
+            $ridPrimary = (int)$roundIds[0];
+            $qRuleStmt = $db->prepare("SELECT qualification_rule FROM table_round WHERE id = :id LIMIT 1");
+            $qRuleStmt->execute([':id' => $ridPrimary]);
+            $qRuleRaw = (string)$qRuleStmt->fetchColumn();
+            $qRule = $qRuleRaw !== '' ? json_decode($qRuleRaw, true) : null;
+            $advanceMap = (is_array($qRule) && isset($qRule['advance_map']) && is_array($qRule['advance_map'])) ? $qRule['advance_map'] : [];
+
+            // Existing match numbers in this knockout round.
+            $existingStmt = $db->prepare("SELECT match_no FROM table_match WHERE round_id = :rid AND deleted_at IS NULL");
+            $existingStmt->execute([':rid' => $ridPrimary]);
+            $existingNos = array_map('intval', $existingStmt->fetchAll(PDO::FETCH_COLUMN, 0) ?: []);
+            $existingNosSet = [];
+            foreach ($existingNos as $n) if ($n > 0) $existingNosSet[$n] = true;
+
+            $targets = [];
+            foreach ($advanceMap as $srcNo => $maps) {
+                if (is_array($maps) && array_is_list($maps)) {
+                    foreach ($maps as $m) {
+                        $tn = (int)($m['match_no'] ?? 0);
+                        if ($tn > 0) $targets[$tn] = true;
+                    }
+                } elseif (is_array($maps)) {
+                    $tn = (int)($maps['match_no'] ?? 0);
+                    if ($tn > 0) $targets[$tn] = true;
+                }
+            }
+            $targetNos = array_keys($targets);
+            sort($targetNos, SORT_NUMERIC);
+
+            if (empty($targetNos)) {
+                // Fallback default map (standard 8-match flow):
+                // 1v2 -> 5, 3v4 -> 6, losers 5/6 -> 7 (bronze), winners 5/6 -> 8 (final).
+                $haveOpening = (isset($existingNosSet[1], $existingNosSet[2], $existingNosSet[3], $existingNosSet[4]));
+                if ($haveOpening) {
+                    $advanceMap = [
+                        '1' => [['match_no' => 5, 'slot' => 'home', 'outcome' => 'winner']],
+                        '2' => [['match_no' => 5, 'slot' => 'away', 'outcome' => 'winner']],
+                        '3' => [['match_no' => 6, 'slot' => 'home', 'outcome' => 'winner']],
+                        '4' => [['match_no' => 6, 'slot' => 'away', 'outcome' => 'winner']],
+                        '5' => [
+                            ['match_no' => 7, 'slot' => 'home', 'outcome' => 'loser'],
+                            ['match_no' => 8, 'slot' => 'home', 'outcome' => 'winner'],
+                        ],
+                        '6' => [
+                            ['match_no' => 7, 'slot' => 'away', 'outcome' => 'loser'],
+                            ['match_no' => 8, 'slot' => 'away', 'outcome' => 'winner'],
+                        ],
+                    ];
+                    $targetNos = [5, 6, 7, 8];
+
+                    // Persist fallback map into qualification_rule for future bracket rendering.
+                    $ruleDecoded = [];
+                    if ($qRuleRaw !== '') {
+                        $tmpRule = json_decode($qRuleRaw, true);
+                        if (is_array($tmpRule)) $ruleDecoded = $tmpRule;
+                    }
+                    $ruleDecoded['advance_map'] = $advanceMap;
+                    $uq = $db->prepare("UPDATE table_round SET qualification_rule = :rule WHERE id = :id");
+                    $uq->execute([
+                        ':rule' => json_encode($ruleDecoded, JSON_UNESCAPED_UNICODE),
+                        ':id' => $ridPrimary,
+                    ]);
+                } else {
+                    echo json_encode([
+                        'success' => false,
+                        'errors' => ['Rules knockout (advance_map) tidak ditemui. Sila semak Knockout Rule Editor dahulu atau pastikan match 1-4 sudah wujud.'],
+                        'debug' => [
+                            'existing_match_nos' => array_values($existingNos),
+                            'required_opening_match_nos' => [1, 2, 3, 4],
+                        ],
+                    ]);
+                    exit;
+                }
+            }
+
+            $toCreate = [];
+            foreach ($targetNos as $tn) {
+                if (!isset($existingNosSet[$tn])) $toCreate[] = (int)$tn;
+            }
+            if (empty($toCreate)) {
+                echo json_encode([
+                    'success' => true,
+                    'matches' => ['__ALL__' => []],
+                    'message' => 'Semua match lanjutan telah wujud. Tiada match baharu dijana.',
+                    'debug' => [
+                        'existing_match_nos' => array_values($existingNos),
+                        'target_match_nos' => array_values($targetNos),
+                        'created_match_nos' => [],
+                    ],
+                ]);
+                exit;
+            }
+
+            $db->beginTransaction();
+            $matchGroupCol = sj_match_group_col($db);
+            $matchEventCol = sj_match_event_col($db);
+            $insCols = ['round_id', 'match_no', 'status', 'tarikh', 'created_at'];
+            $insVals = [':round_id', ':match_no', ':status', 'NULL', 'NOW()'];
+            if ($matchEventCol) { $insCols[] = $matchEventCol; $insVals[] = ':event_id'; }
+            if ($matchGroupCol) { $insCols[] = $matchGroupCol; $insVals[] = ':group_code'; }
+            $insSql = "INSERT INTO table_match (" . implode(',', $insCols) . ") VALUES (" . implode(',', $insVals) . ")";
+            $ins = $db->prepare($insSql);
+
+            $created = [];
+            foreach ($toCreate as $mno) {
+                $params = [
+                    ':round_id' => $ridPrimary,
+                    ':match_no' => (int)$mno,
+                    ':status' => 'scheduled',
+                ];
+                if ($matchEventCol) $params[':event_id'] = $event_id;
+                if ($matchGroupCol) $params[':group_code'] = '';
+                $ins->execute($params);
+                $created[] = ['id' => (int)$db->lastInsertId(), 'match_no' => (int)$mno];
+            }
+            $db->commit();
+
+            echo json_encode([
+                'success' => true,
+                'matches' => ['__ALL__' => $created],
+                'message' => 'Match lanjutan knockout berjaya dijana.',
+                'debug' => [
+                    'existing_match_nos' => array_values($existingNos),
+                    'target_match_nos' => array_values($targetNos),
+                    'created_match_nos' => array_values($toCreate),
+                ],
+            ]);
+            exit;
+        }
 
         // For each group, fetch teams
         $groups = [];
         $teamStmt = $db->prepare('SELECT id, nama_pasukan FROM table_pasukan WHERE sukan_id = :sukan_id AND initial_group_code = :code AND deleted_at IS NULL ORDER BY id ASC');
         foreach ($groupCodes as $code => $rid) {
-            $teamStmt->execute([':sukan_id' => $sukan_id, ':code' => $code]);
-            $rows = $teamStmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($isNoGroupRound && $code === '__ALL__') {
+                $allStmt = $db->prepare('SELECT id, nama_pasukan FROM table_pasukan WHERE sukan_id = :sukan_id AND status = 1 AND deleted_at IS NULL ORDER BY id ASC');
+                $allStmt->execute([':sukan_id' => $sukan_id]);
+                $rows = $allStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $teamStmt->execute([':sukan_id' => $sukan_id, ':code' => $code]);
+                $rows = $teamStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
             $teams = array_map(function($r){ return ['id' => (int)$r['id'], 'nama_pasukan' => $r['nama_pasukan']]; }, $rows);
-            if (count($teams) < 2) {
+            if (count($teams) < 2 && !$isNoGroupRound) {
                 echo json_encode(['success' => false, 'errors' => ["Kumpulan {$code} mesti mempunyai sekurang-kurangnya 2 pasukan."]]);
+                exit;
+            }
+            if (count($teams) < 2 && $isNoGroupRound) {
+                echo json_encode(['success' => false, 'errors' => ['Sekurang-kurangnya 2 pasukan aktif diperlukan untuk jana jadual.']]);
                 exit;
             }
             $groups[$code] = $teams;
@@ -351,8 +996,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         // All validations passed — generate matches
         $db->beginTransaction();
-        $insertMatch = $db->prepare('INSERT INTO table_match (event_id, round_id, group_code, match_no, status, tarikh, created_at) VALUES (:event_id, :round_id, :group_code, :match_no, :status, NULL, NOW())');
-        $insertPart = $db->prepare('INSERT INTO table_match_participant (match_id, team_id, created_at) VALUES (:match_id, :team_id, NOW())');
+        $matchGroupCol = sj_match_group_col($db);
+        $matchEventCol = sj_match_event_col($db);
+        $matchCols = ['round_id'];
+        $matchVals = [':round_id'];
+        if ($matchEventCol) { $matchCols[] = $matchEventCol; $matchVals[] = ':event_id'; }
+        if ($matchGroupCol) { $matchCols[] = $matchGroupCol; $matchVals[] = ':group_code'; }
+        $matchCols = array_merge($matchCols, ['match_no','status','tarikh','created_at']);
+        $matchVals = array_merge($matchVals, [':match_no',':status','NULL','NOW()']);
+        $insertMatch = $db->prepare("INSERT INTO table_match (" . implode(',', $matchCols) . ") VALUES (" . implode(',', $matchVals) . ")");
+        $partTeamCol = sj_participant_team_col($db);
+        $insertPart = $db->prepare("INSERT INTO table_match_participant (match_id, {$partTeamCol}, created_at) VALUES (:match_id, :team_id, NOW())");
 
         $output = [];
         foreach ($groups as $code => $teams) {
@@ -363,13 +1017,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $t1 = $teams[$i]['id'];
                     $t2 = $teams[$j]['id'];
                     $round_id = $groupCodes[$code] ?? $roundIds[0];
-                    $insertMatch->execute([
-                        ':event_id' => $event_id,
+                    $params = [
                         ':round_id' => $round_id,
-                        ':group_code' => $code,
                         ':match_no' => $matchNo,
                         ':status' => 'scheduled'
-                    ]);
+                    ];
+                    if ($matchEventCol) $params[':event_id'] = $event_id;
+                    if ($matchGroupCol) $params[':group_code'] = ($code === '__ALL__' ? '' : $code);
+                    $insertMatch->execute($params);
                     $matchId = (int)$db->lastInsertId();
                     $insertPart->execute([':match_id' => $matchId, ':team_id' => $t1]);
                     $insertPart->execute([':match_id' => $matchId, ':team_id' => $t2]);
@@ -384,7 +1039,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit;
     } catch (Exception $e) {
         if (isset($db) && $db && $db->inTransaction()) $db->rollBack();
-        error_log('[setup-jadual generate] ' . $e->getMessage());
+        sj_log('[setup-jadual generate] ' . $e->getMessage());
         echo json_encode(['success' => false, 'errors' => ['Gagal menjana jadual: ' . $e->getMessage()]]);
         exit;
     }
@@ -398,7 +1053,7 @@ try {
     $stmt = $db->prepare("SELECT id, nama_event FROM table_event WHERE deleted_at IS NULL AND status != 'cancelled' ORDER BY tarikh_mula DESC, created_at DESC");
     $stmt->execute();
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) { error_log('[setup-jadual] load events: ' . $e->getMessage()); }
+} catch (Exception $e) { sj_log('[setup-jadual] load events: ' . $e->getMessage()); }
 
 ob_start();
 ?>
@@ -460,10 +1115,11 @@ ob_start();
                     <div class="modal-dialog modal-lg">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title">Tambah Perlawanan</h5>
+                                <h5 id="modal-title" class="modal-title">Tambah Perlawanan</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
+                                <input type="hidden" id="modal-match-id" value="">
                                 <div class="mb-3">
                                     <label class="form-label">Round / Peringkat</label>
                                     <select id="modal-round" class="form-select"></select>
@@ -492,7 +1148,8 @@ ob_start();
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Venue Detail (optional)</label>
-                                    <input id="modal-venue-detail" class="form-control" type="text" placeholder="Contoh: Padang A, Court 2, Lane 4" maxlength="100" disabled>
+                                    <input id="modal-venue-detail" class="form-control" type="text" list="modal-venue-detail-list" placeholder="Contoh: Padang A, Court 2, Lane 4" maxlength="100" disabled>
+                                    <datalist id="modal-venue-detail-list"></datalist>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nombor Perlawanan</label>
@@ -512,9 +1169,18 @@ ob_start();
                 <div id="manual-table" class="table-responsive">
                     <table class="table table-sm">
                         <thead>
-                            <tr><th>Kumpulan</th><th>Match No</th><th>Pasukan A</th><th>Pasukan B</th><th>Tarikh</th><th>Status</th><th>Aksi</th></tr>
+                            <tr>
+                                <th style="width:7%;">Kumpulan</th>
+                                <th style="width:7%;">Match No</th>
+                                <th style="width:18%;">Pasukan A</th>
+                                <th style="width:18%;">Pasukan B</th>
+                                <th style="width:26%;">Venue</th>
+                                <th style="width:10%;">Tarikh</th>
+                                <th style="width:7%;">Status</th>
+                                <th style="width:7%;">Aksi</th>
+                            </tr>
                         </thead>
-                        <tbody id="manual-table-body"><tr><td colspan="7" class="text-muted">Pilih event dan round untuk memuatkan perlawanan.</td></tr></tbody>
+                        <tbody id="manual-table-body"><tr><td colspan="8" class="text-muted">Pilih event dan round untuk memuatkan perlawanan.</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -543,6 +1209,26 @@ ob_start();
 
 <script>
 (function(){
+    const SJ_DEBUG = true;
+    function sjDbg(label, payload){
+        if (!SJ_DEBUG || !window.console) return;
+        try { console.log('[SETUP-JADUAL]', label, payload || ''); } catch(e) {}
+    }
+    async function sjFetchJson(url, options){
+        sjDbg('fetch:start', { url: url, options: options || {} });
+        const res = await fetch(url, options || {});
+        const text = await res.text();
+        sjDbg('fetch:response', { url: url, status: res.status, text: text });
+        let json = null;
+        try {
+            json = JSON.parse(text);
+        } catch (e) {
+            sjDbg('fetch:json_parse_error', { url: url, error: String(e), text: text });
+            throw new Error('JSON parse error for ' + url);
+        }
+        return json;
+    }
+
     const evt = document.getElementById('sj-event');
     const rnd = document.getElementById('sj-round');
     const modeManual = document.getElementById('mode-manual');
@@ -563,6 +1249,8 @@ ob_start();
     const manualSave = document.getElementById('manual-save') || document.getElementById('modal-save-btn');
     const manualMsg = document.getElementById('manual-msg') || document.getElementById('modal-msg');
     const modalRound = document.getElementById('modal-round');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMatchId = document.getElementById('modal-match-id');
     const modalGroup = document.getElementById('modal-group');
     const modalA = document.getElementById('modal-team-a');
     const modalB = document.getElementById('modal-team-b');
@@ -570,9 +1258,19 @@ ob_start();
     const modalMsg = document.getElementById('modal-msg');
     const modalVenue = document.getElementById('modal-venue');
     const modalVenueDetail = document.getElementById('modal-venue-detail');
+    const modalVenueDetailList = document.getElementById('modal-venue-detail-list');
     const manualTableBody = document.getElementById('manual-table-body');
 
     let currentGroups = {}; // code => [{id,name}]
+    let currentGroupsOrder = [];
+    let modalMode = 'add';
+    let editPayload = null;
+    let currentRoundName = '';
+    let currentMatchMap = {};
+    const ALL_GROUP_CODE = '__ALL__';
+    function groupLabel(code){
+        return String(code || '') === ALL_GROUP_CODE ? 'SEMUA PASUKAN' : String(code || '');
+    }
 
     function setMode() {
         if (modeManual.checked) { manualSection.style.display = ''; autoSection.style.display = 'none'; }
@@ -587,14 +1285,14 @@ ob_start();
         rnd.innerHTML = '<option value="">-- Pilih Round --</option>';
         rnd.disabled = true; groupsEl.innerHTML = '<p class="text-muted">Pilih event dan round untuk melihat ringkasan kumpulan.</p>';
         genBtn.disabled = true; resultEl.innerHTML = '';
-        manualTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Pilih event dan round untuk memuatkan perlawanan.</td></tr>';
+        manualTableBody.innerHTML = '<tr><td colspan="8" class="text-muted">Pilih event dan round untuk memuatkan perlawanan.</td></tr>';
         window.loadedEventData = null; currentGroups = {};
         if (!id) return;
         try{
-            const res = await fetch('?action=load_event_all&event_id=' + encodeURIComponent(id));
-            const j = await res.json();
+            const j = await sjFetchJson('?action=load_event_all&event_id=' + encodeURIComponent(id));
             if (j && j.success){
                 window.loadedEventData = j;
+                sjDbg('load_event_all:ok', j);
                 // populate rounds
                 if (Array.isArray(j.rounds)){
                     j.rounds.forEach(r => { const opt = document.createElement('option'); opt.value = r; opt.textContent = r; rnd.appendChild(opt); });
@@ -603,15 +1301,16 @@ ob_start();
                     if (j.rounds.length === 1) { rnd.value = j.rounds[0]; loadGroupsAndMatches(); }
                 }
             }
-        }catch(e){ console.error(e); }
+        }catch(e){ console.error(e); sjDbg('load_event_all:error', e); }
     });
 
     async function loadGroupsAndMatches() {
         const eventId = evt.value || '';
         const nama = rnd.value || '';
+        currentRoundName = nama;
         groupsEl.innerHTML = '<p class="text-muted">Memuat kumpulan...</p>';
         genBtn.disabled = true; resultEl.innerHTML = '';
-        manualTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Memuat perlawanan...</td></tr>';
+        manualTableBody.innerHTML = '<tr><td colspan="8" class="text-muted">Memuat perlawanan...</td></tr>';
         if (addBtn) addBtn.disabled = false;
         manualMsg.innerHTML = '';
         if (!eventId || !nama) return;
@@ -620,16 +1319,17 @@ ob_start();
             if (window.loadedEventData && window.loadedEventData.groups_by_round && window.loadedEventData.groups_by_round[nama]){
                 j = { success: true, groups: window.loadedEventData.groups_by_round[nama] };
             } else {
-                const res = await fetch('?action=load_groups&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
-                j = await res.json();
+                j = await sjFetchJson('?action=load_groups&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
             }
                 if (j && j.success){
+                    sjDbg('load_groups:ok', j);
                     // j.groups is an ordered array: [{group_code, teams:[]}, ...]
                     let groupsArr = j.groups || [];
                     if (!Array.isArray(groupsArr) && groupsArr && typeof groupsArr === 'object') {
                         groupsArr = Object.keys(groupsArr).map(function(code){ return { group_code: code, teams: groupsArr[code] || [] }; });
                     }
-                    if (groupsArr.length === 0) { groupsEl.innerHTML = '<p class="text-muted">Tiada kumpulan ditemui.</p>'; manualTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Tiada perlawanan.</td></tr>'; return; }
+                    groupsArr.sort((a,b) => String(a.group_code || '').localeCompare(String(b.group_code || ''), undefined, { sensitivity: 'base' }));
+                    if (groupsArr.length === 0) { groupsEl.innerHTML = '<p class="text-muted">Tiada kumpulan ditemui.</p>'; manualTableBody.innerHTML = '<tr><td colspan="8" class="text-muted">Tiada perlawanan.</td></tr>'; return; }
                     // build mapping for quick lookup and maintain order
                     currentGroups = {}; currentGroupsOrder = [];
                     let html = '';
@@ -638,19 +1338,19 @@ ob_start();
                         const code = g.group_code;
                         currentGroupsOrder.push(code);
                         currentGroups[code] = g.teams || [];
-                        html += '<h6>Group ' + code + ':</h6><ul>';
+                        html += '<h6>Group ' + groupLabel(code) + ':</h6><ul>';
                         (g.teams || []).forEach(t => { html += '<li>' + (t.nama_pasukan || ('Pasukan ' + t.id)) + '</li>'; });
                         html += '</ul>';
-                        const opt = document.createElement('option'); opt.value = code; opt.textContent = code; manualGroup.appendChild(opt);
+                        const opt = document.createElement('option'); opt.value = code; opt.textContent = groupLabel(code); manualGroup.appendChild(opt);
                     });
                     groupsEl.innerHTML = html;
                     // populate manual team selects for first group
                     _populateTeamsForGroup(currentGroupsOrder[0]);
             }
             // now load matches
-            const lm = await fetch('?action=list_matches&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
-            const lmj = await lm.json();
+            const lmj = await sjFetchJson('?action=list_matches&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
             if (lmj && lmj.success){
+                sjDbg('list_matches:ok', lmj);
                 const matches = lmj.matches || {};
                 _renderMatchTable(matches);
                 // If any matches exist, disable auto generation
@@ -658,7 +1358,7 @@ ob_start();
                 genBtn.disabled = hasAny; // server will also protect
                 if (hasAny) resultEl.innerHTML = '<div class="alert alert-info">Terdapat perlawanan sedia ada untuk round ini — auto-generation dikunci.</div>';
             }
-        }catch(e){ console.error(e); groupsEl.innerHTML = '<p class="text-danger">Gagal memuat kumpulan.</p>'; }
+        }catch(e){ console.error(e); sjDbg('loadGroupsAndMatches:error', e); groupsEl.innerHTML = '<p class="text-danger">Gagal memuat kumpulan.</p>'; }
     }
 
     rnd && rnd.addEventListener('change', loadGroupsAndMatches);
@@ -676,6 +1376,13 @@ ob_start();
 
     // modal-specific: when modal opens, populate modal round/group/team selects
     document.getElementById('modalTambahPerlawanan') && document.getElementById('modalTambahPerlawanan').addEventListener('show.bs.modal', function(){
+        if (modalMode !== 'edit') {
+            modalMode = 'add';
+            editPayload = null;
+            if (modalMatchId) modalMatchId.value = '';
+            if (modalTitle) modalTitle.textContent = 'Tambah Perlawanan';
+            if (manualSave) manualSave.textContent = 'Simpan Perlawanan';
+        }
         // populate modal rounds
         modalRound.innerHTML = '';
         if (window.loadedEventData && Array.isArray(window.loadedEventData.rounds)){
@@ -688,18 +1395,40 @@ ob_start();
         // load venues for modal
         if (modalVenue) {
             modalVenue.innerHTML = '<option value="">-- Pilih Venue (optional) --</option>';
-            fetch('?action=load_venues')
+            fetch('?action=load_venues&event_id=' + encodeURIComponent(evt.value || ''))
                 .then(r=>r.json())
                 .then(j=>{
                     if (j && j.success) {
+                        let firstRecommended = '';
                         (j.venues||[]).forEach(v=>{
                             const o = document.createElement('option');
                             o.value = v.id; o.textContent = v.display;
                             modalVenue.appendChild(o);
+                            if (!firstRecommended && Number(v.is_recommended || 0) === 1) firstRecommended = String(v.id);
+                        });
+                        if (firstRecommended) {
+                            modalVenue.value = firstRecommended;
+                            if (modalVenueDetail) modalVenueDetail.disabled = false;
+                        }
+                    }
+                }).catch(()=>{});
+        }
+        // load venue detail suggestions by selected sukan(event)
+        if (modalVenueDetailList) {
+            modalVenueDetailList.innerHTML = '';
+            fetch('?action=load_venue_details&event_id=' + encodeURIComponent(evt.value || ''))
+                .then(r=>r.json())
+                .then(j=>{
+                    if (j && j.success) {
+                        (j.details || []).forEach(d => {
+                            const o = document.createElement('option');
+                            o.value = d;
+                            modalVenueDetailList.appendChild(o);
                         });
                     }
                 }).catch(()=>{});
         }
+        _suggestNextMatchNo(modalRound.value || '', modalGroup.value || '');
     });
 
     modalRound && modalRound.addEventListener('change', async function(){
@@ -712,7 +1441,8 @@ ob_start();
             if (!Array.isArray(groupsArr) && typeof groupsArr === 'object') {
                 groupsArr = Object.keys(groupsArr).map(function(code){ return { group_code: code, teams: groupsArr[code] || [] }; });
             }
-            groupsArr.forEach(g => { const o = document.createElement('option'); o.value = g.group_code; o.textContent = g.group_code; modalGroup.appendChild(o); });
+            groupsArr.sort((a,b) => String(a.group_code || '').localeCompare(String(b.group_code || ''), undefined, { sensitivity: 'base' }));
+            groupsArr.forEach(g => { const o = document.createElement('option'); o.value = g.group_code; o.textContent = groupLabel(g.group_code); modalGroup.appendChild(o); });
             // auto populate teams for first group
             if (modalGroup.options.length) {
                 modalGroup.value = modalGroup.options[0].value;
@@ -731,11 +1461,11 @@ ob_start();
         // Fallback: fetch groups for this round from server
         if (!evt.value) return; // need event selected
         try {
-            const res = await fetch('?action=load_groups&event_id=' + encodeURIComponent(evt.value) + '&nama_round=' + encodeURIComponent(rname));
-            const j = await res.json();
+            const j = await sjFetchJson('?action=load_groups&event_id=' + encodeURIComponent(evt.value) + '&nama_round=' + encodeURIComponent(rname));
             if (j && j.success) {
                 const groupsArr = j.groups || [];
-                groupsArr.forEach(g => { const o = document.createElement('option'); o.value = g.group_code; o.textContent = g.group_code; modalGroup.appendChild(o); });
+                groupsArr.sort((a,b) => String(a.group_code || '').localeCompare(String(b.group_code || ''), undefined, { sensitivity: 'base' }));
+                groupsArr.forEach(g => { const o = document.createElement('option'); o.value = g.group_code; o.textContent = groupLabel(g.group_code); modalGroup.appendChild(o); });
                 if (modalGroup.options.length) {
                     modalGroup.value = modalGroup.options[0].value;
                     const first = groupsArr[0];
@@ -747,7 +1477,7 @@ ob_start();
                     _suggestNextMatchNo(rname, modalGroup.value);
                 }
             }
-        } catch (e) { console.error('Failed to load groups for modal:', e); }
+        } catch (e) { console.error('Failed to load groups for modal:', e); sjDbg('modalRound:load_groups:error', e); }
     });
 
     modalGroup && modalGroup.addEventListener('change', async function(){
@@ -773,8 +1503,7 @@ ob_start();
         // Otherwise fetch groups (which include teams) and populate
         if (!evt.value || !rname) return;
         try {
-            const res = await fetch('?action=load_groups&event_id=' + encodeURIComponent(evt.value) + '&nama_round=' + encodeURIComponent(rname));
-            const j = await res.json();
+            const j = await sjFetchJson('?action=load_groups&event_id=' + encodeURIComponent(evt.value) + '&nama_round=' + encodeURIComponent(rname));
             if (j && j.success) {
                 const groupsArr = j.groups || [];
                 // update window.loadedEventData cache if present
@@ -790,7 +1519,7 @@ ob_start();
                 }
                 _suggestNextMatchNo(rname, code);
             }
-        } catch (e) { console.error('Failed to load teams for modal group:', e); }
+        } catch (e) { console.error('Failed to load teams for modal group:', e); sjDbg('modalGroup:load_groups:error', e); }
     });
 
         // enable/disable venue detail input based on venue selection
@@ -800,44 +1529,138 @@ ob_start();
         });
 
     function _suggestNextMatchNo(roundName, groupCode){
-        // use list_matches if available
-        if (!evt.value || !roundName) return;
-        fetch('?action=list_matches&event_id=' + encodeURIComponent(evt.value) + '&nama_round=' + encodeURIComponent(roundName))
+        if (!evt.value) return;
+        fetch('?action=get_next_match_no&event_id=' + encodeURIComponent(evt.value))
             .then(r=>r.json()).then(j=>{
                 if (!j || !j.success) return;
-                const matches = j.matches || {};
-                const arr = matches[groupCode] || [];
-                let max = 0; arr.forEach(m => { if (m.match_no && m.match_no > max) max = m.match_no; });
-                const next = max + 1;
+                const next = parseInt(j.next_match_no || 1, 10) || 1;
                 if (manualMatchNo) manualMatchNo.value = next;
-                if (modalMatchNoHint) modalMatchNoHint.textContent = 'Cadangan nombor perlawanan: ' + next;
+                if (modalMatchNoHint) modalMatchNoHint.textContent = 'Cadangan nombor perlawanan global: ' + next;
             }).catch(()=>{});
+    }
+
+    function _toDatetimeLocal(v){
+        const s = (v || '').toString().trim();
+        if (!s) return '';
+        return s.replace(' ', 'T').slice(0, 16);
+    }
+
+    function _formatDateTimeDisplay(v){
+        const s = (v || '').toString().trim();
+        if (!s) return '';
+        const m = s.replace('T', ' ').match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+        if (!m) return s;
+        const year = m[1], month = m[2], day = m[3];
+        let hour24 = parseInt(m[4], 10);
+        const minute = m[5];
+        const ampm = hour24 >= 12 ? 'PM' : 'AM';
+        let hour12 = hour24 % 12;
+        if (hour12 === 0) hour12 = 12;
+        const hh = String(hour12).padStart(2, '0');
+        return day + '/' + month + '/' + year + ' ' + hh + ':' + minute + ' ' + ampm;
+    }
+
+    async function _prepareModalForEdit(payload){
+        if (!payload) return;
+        if (modalTitle) modalTitle.textContent = 'Edit Perlawanan';
+        if (manualSave) manualSave.textContent = 'Kemaskini Perlawanan';
+        if (modalMatchId) modalMatchId.value = String(payload.id || '');
+
+        const roundName = payload.round_name || (rnd ? rnd.value : '');
+        if (roundName) {
+            modalRound.value = roundName;
+            const ev = new Event('change');
+            modalRound.dispatchEvent(ev);
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        if (payload.group_code) {
+            modalGroup.value = payload.group_code;
+            const ev2 = new Event('change');
+            modalGroup.dispatchEvent(ev2);
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        if (payload.team_a_id) modalA.value = String(payload.team_a_id);
+        if (payload.team_b_id) modalB.value = String(payload.team_b_id);
+        if (manualMatchNo) manualMatchNo.value = String(payload.match_no || '');
+        if (manualTarikh) manualTarikh.value = _toDatetimeLocal(payload.tarikh || '');
+        if (modalVenue) modalVenue.value = payload.venue_id ? String(payload.venue_id) : '';
+        if (modalVenueDetail) modalVenueDetail.value = (payload.venue_detail || '').toString();
+        if (modalVenueDetail) modalVenueDetail.disabled = !(modalVenue && modalVenue.value);
     }
 
     function _renderMatchTable(matches){
         manualTableBody.innerHTML = '';
+        currentMatchMap = {};
         const allGroups = Object.keys(matches || {});
-        if (allGroups.length === 0) { manualTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Tiada perlawanan.</td></tr>'; return; }
+        if (allGroups.length === 0) { manualTableBody.innerHTML = '<tr><td colspan="8" class="text-muted">Tiada perlawanan.</td></tr>'; return; }
         let locked = false;
+        const flat = [];
         for (const code of allGroups){
             const arr = matches[code] || [];
-            arr.forEach(m => {
-                const tr = document.createElement('tr');
-                const teams = (m.teams||[]).map(t=>t.nama_pasukan||t.id).join(' vs ');
-                tr.innerHTML = '<td>'+code+'</td><td>'+ (m.match_no||'') +'</td><td>'+ (m.teams[0]?m.teams[0].nama_pasukan:'') +'</td><td>'+ (m.teams[1]?m.teams[1].nama_pasukan:'') +'</td><td>'+ (m.tarikh||'') +'</td><td>'+m.status+'</td><td>'+(m.status==='scheduled'?'<button class="btn btn-sm btn-danger manual-delete" data-id="'+m.id+'">Padam</button>':'')+'</td>';
-                manualTableBody.appendChild(tr);
-                if (m.status !== 'scheduled') locked = true;
-            });
+            arr.forEach(m => flat.push({ code: code, m: m }));
         }
+        flat.sort((x, y) => {
+            const mx = parseInt((x.m && x.m.match_no) || 0, 10) || 0;
+            const my = parseInt((y.m && y.m.match_no) || 0, 10) || 0;
+            if (mx !== my) return mx - my;
+            return String(x.code || '').localeCompare(String(y.code || ''));
+        });
+        flat.forEach(item => {
+            const code = item.code;
+            const m = item.m || {};
+            const teamA = (m.teams && m.teams[0]) ? m.teams[0] : null;
+            const teamB = (m.teams && m.teams[1]) ? m.teams[1] : null;
+            const teamALabel = (m.team_a_label || (teamA ? teamA.nama_pasukan : '') || '').toString();
+            const teamBLabel = (m.team_b_label || (teamB ? teamB.nama_pasukan : '') || '').toString();
+            currentMatchMap[String(m.id)] = {
+                id: m.id,
+                round_name: currentRoundName,
+                group_code: code,
+                team_a_id: teamA ? teamA.id : '',
+                team_b_id: teamB ? teamB.id : '',
+                match_no: m.match_no || '',
+                tarikh: m.tarikh || '',
+                venue_id: m.venue_id || '',
+                venue_detail: m.venue_detail || ''
+            };
+            const tr = document.createElement('tr');
+            const venueName = (m.venue_name || '').toString().trim();
+            const venueDetail = (m.venue_detail || '').toString().trim();
+            const tarikhDisplay = _formatDateTimeDisplay(m.tarikh || '');
+            let venueDisplay = venueName;
+            if (venueName && venueDetail) venueDisplay = venueName + ' / ' + venueDetail;
+            else if (!venueName && venueDetail) venueDisplay = venueDetail;
+            const actionHtml = (m.status === 'scheduled')
+                ? '<button class="btn btn-sm btn-outline-primary me-1 manual-edit" title="Edit" data-id="'+m.id+'"><i class="fa fa-edit"></i></button>'
+                  + '<button class="btn btn-sm btn-outline-danger manual-delete" title="Padam" data-id="'+m.id+'"><i class="fa fa-trash"></i></button>'
+                : '';
+            tr.innerHTML = '<td>'+groupLabel(code)+'</td><td>'+ (m.match_no||'') +'</td><td>'+ teamALabel +'</td><td>'+ teamBLabel +'</td><td>'+ venueDisplay +'</td><td>'+ tarikhDisplay +'</td><td>'+m.status+'</td><td>'+actionHtml+'</td>';
+            manualTableBody.appendChild(tr);
+            if (m.status !== 'scheduled') locked = true;
+        });
         // apply locking rules
         const disableActions = locked;
+        document.querySelectorAll('.manual-edit').forEach(b=>b.disabled = disableActions);
         document.querySelectorAll('.manual-delete').forEach(b=>b.disabled = disableActions);
         addBtn.disabled = disableActions;
+        document.querySelectorAll('.manual-edit').forEach(b=> b.addEventListener('click', async function(){
+            const mid = String(this.getAttribute('data-id') || '');
+            const payload = currentMatchMap[mid];
+            if (!payload) return;
+            modalMode = 'edit';
+            editPayload = payload;
+            modalMsg.innerHTML = '';
+            const modalEl = document.getElementById('modalTambahPerlawanan');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+            setTimeout(() => { _prepareModalForEdit(payload); }, 180);
+        }));
         // attach delete handlers
         document.querySelectorAll('.manual-delete').forEach(b=> b.addEventListener('click', async function(){
             if (!confirm('Padam perlawanan ini?')) return; const mid = this.getAttribute('data-id');
             const fd = new FormData(); fd.append('action','delete_match'); fd.append('match_id', mid);
-            const res = await fetch('', { method: 'POST', body: fd }); const j = await res.json();
+            sjDbg('delete_match:request', { match_id: mid });
+            const j = await sjFetchJson('', { method: 'POST', body: fd });
             if (j && j.success){ loadGroupsAndMatches(); } else { alert((j.errors||['Gagal']).join('\n')); }
         }));
     }
@@ -846,6 +1669,7 @@ ob_start();
     manualSave && manualSave.addEventListener('click', async function(){
         modalMsg.innerHTML = '';
         const eventId = evt.value || '';
+        const matchId = modalMatchId ? (modalMatchId.value || '') : '';
         const nama = modalRound.value || '';
         const group = modalGroup.value || '';
         const a = modalA.value || '';
@@ -854,44 +1678,62 @@ ob_start();
         const tar = manualTarikh.value || '';
         const venueId = modalVenue ? modalVenue.value || '' : '';
         const venueDetail = modalVenueDetail ? modalVenueDetail.value || '' : '';
-        if (!eventId || !nama || !group || !a || !b) { modalMsg.innerHTML = 'Sila lengkapkan semua medan.'; return; }
+        if (!eventId || !nama || !a || !b) { modalMsg.innerHTML = 'Sila lengkapkan semua medan.'; return; }
+        if (modalMode === 'edit' && !matchId) { modalMsg.innerHTML = 'ID perlawanan tidak sah.'; return; }
         if (a === b) { modalMsg.innerHTML = 'Pasukan A mesti berbeza daripada Pasukan B.'; return; }
         // client-side duplicate check
         try {
-            const lm = await fetch('?action=list_matches&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
-            const lmj = await lm.json();
+            const lmj = await sjFetchJson('?action=list_matches&event_id=' + encodeURIComponent(eventId) + '&nama_round=' + encodeURIComponent(nama));
             if (lmj && lmj.success) {
-                const arr = (lmj.matches && lmj.matches[group]) || [];
-                const dup = arr.some(m => {
+                const arr = (lmj.matches && (lmj.matches[group] || (group === ALL_GROUP_CODE ? (lmj.matches['-'] || []) : []))) || [];
+                const dupMatch = arr.find(m => {
                     if (!m.teams) return false;
                     const ids = m.teams.map(t=>String(t.id));
                     return (ids.includes(String(a)) && ids.includes(String(b)));
                 });
-                if (dup) { modalMsg.innerHTML = 'Perlawanan antara pasukan ini telah wujud dalam round ini.'; return; }
+                if (dupMatch && !(modalMode === 'edit' && String(dupMatch.id || '') === String(matchId))) { modalMsg.innerHTML = 'Perlawanan antara pasukan ini telah wujud dalam round ini.'; return; }
             }
         } catch(e) { /* ignore, server will validate */ }
 
         try{
-            const fd = new FormData(); fd.append('action','add_manual_match'); fd.append('event_id', eventId); fd.append('nama_round', nama);
-            fd.append('group_code', group); fd.append('team_a', a); fd.append('team_b', b);
+            const saveLabel = (modalMode === 'edit' ? 'Kemaskini Perlawanan' : 'Simpan Perlawanan');
+            const fd = new FormData();
+            fd.append('action', modalMode === 'edit' ? 'update_manual_match' : 'add_manual_match');
+            if (modalMode === 'edit') fd.append('match_id', matchId);
+            fd.append('event_id', eventId); fd.append('nama_round', nama);
+            fd.append('group_code', group || ''); fd.append('team_a', a); fd.append('team_b', b);
             if (no) fd.append('match_no', no); if (tar) fd.append('tarikh', tar);
             if (venueId) fd.append('venue_id', venueId);
             if (venueDetail) fd.append('venue_detail', venueDetail);
+            sjDbg('save_match:request', {
+                mode: modalMode, match_id: matchId, event_id: eventId, nama_round: nama, group_code: group || '',
+                team_a: a, team_b: b, match_no: no, tarikh: tar, venue_id: venueId, venue_detail: venueDetail
+            });
             manualSave.disabled = true; manualSave.textContent = 'Menyimpan...';
-            const res = await fetch('', { method: 'POST', body: fd }); const j = await res.json();
-            manualSave.disabled = false; manualSave.textContent = 'Simpan Perlawanan';
+            const j = await sjFetchJson('', { method: 'POST', body: fd });
+            manualSave.disabled = false; manualSave.textContent = saveLabel;
+            sjDbg('save_match:response', j);
             if (j && j.success){
                 // close modal
                 const modalEl = document.getElementById('modalTambahPerlawanan');
                 const modal = bootstrap.Modal.getInstance(modalEl);
                 modal && modal.hide();
                 // show success message and refresh list
-                resultEl.innerHTML = '<div class="alert alert-success">Perlawanan berjaya ditambah</div>';
+                resultEl.innerHTML = '<div class="alert alert-success">' + (modalMode === 'edit' ? 'Perlawanan berjaya dikemaskini' : 'Perlawanan berjaya ditambah') + '</div>';
+                modalMode = 'add';
+                editPayload = null;
+                if (modalMatchId) modalMatchId.value = '';
                 loadGroupsAndMatches();
             } else {
                 modalMsg.innerHTML = (j.errors || ['Gagal menyimpan']).join('<br>');
             }
-        }catch(e){ modalMsg.innerHTML = 'Ralat jaringan.'; manualSave.disabled = false; manualSave.textContent = 'Simpan Perlawanan'; }
+        }catch(e){
+            sjDbg('save_match:error', e);
+            const saveLabel = (modalMode === 'edit' ? 'Kemaskini Perlawanan' : 'Simpan Perlawanan');
+            modalMsg.innerHTML = 'Ralat jaringan.';
+            manualSave.disabled = false;
+            manualSave.textContent = saveLabel;
+        }
     });
 
     genBtn && genBtn.addEventListener('click', async function(){
@@ -902,13 +1744,14 @@ ob_start();
         genBtn.disabled = true; genBtn.textContent = 'Menjana...'; resultEl.innerHTML = '';
         try{
             const fd = new FormData(); fd.append('action','generate_schedule'); fd.append('event_id', eventId); fd.append('nama_round', nama);
-            const res = await fetch('', { method: 'POST', body: fd });
-            const j = await res.json();
+            sjDbg('generate_schedule:request', { event_id: eventId, nama_round: nama });
+            const j = await sjFetchJson('', { method: 'POST', body: fd });
+            sjDbg('generate_schedule:response', j);
             if (j && j.success){
                 const matches = j.matches || {};
                 let html = '<div class="alert alert-success">Jadual berjaya dijana.</div>';
                 for (const code of Object.keys(matches)){
-                    html += '<h6>Group ' + code + '</h6><ul>';
+                    html += '<h6>Group ' + groupLabel(code) + '</h6><ul>';
                     matches[code].forEach(m => { html += '<li>Match ' + m.match_no + '</li>'; });
                     html += '</ul>';
                 }
@@ -921,7 +1764,7 @@ ob_start();
                 resultEl.innerHTML = '<div class="alert alert-danger">' + msg + '</div>';
                 genBtn.disabled = false; genBtn.textContent = 'Jana Jadual Perlawanan';
             }
-        }catch(e){ console.error(e); resultEl.innerHTML = '<div class="alert alert-danger">Ralat jaringan.</div>'; genBtn.disabled = false; genBtn.textContent = 'Jana Jadual Perlawanan'; }
+        }catch(e){ console.error(e); sjDbg('generate_schedule:error', e); resultEl.innerHTML = '<div class="alert alert-danger">Ralat jaringan.</div>'; genBtn.disabled = false; genBtn.textContent = 'Jana Jadual Perlawanan'; }
     });
 
 })();

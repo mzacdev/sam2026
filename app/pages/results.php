@@ -132,7 +132,8 @@ ob_start();
                     <option value="ongoing">Sedang Berlangsung</option>
                     <option value="upcoming">Akan Datang</option>
                 </select>
-                <button type="button" class="btn btn-outline-secondary" id="btnPrintResults" title="Cetak">Cetak</button>
+                <button type="button" class="btn btn-outline-primary" id="btnExportWord" title="Export Word"><i class="fa-solid fa-file-word me-1"></i>*.doc</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnPrintResults" title="PDF"><i class="fa-solid fa-file-pdf me-1"></i>*.pdf</button>
             </div>
         </div>
     </div>
@@ -285,7 +286,13 @@ ob_start();
     .select2-container--bootstrap4 .select2-results__option.sport-complete { background: #e9f7ee; font-weight:700 }
     /* Highlight full-result rows for sports that are complete */
     .sukan-complete { background-color: rgba(237,247,237,0.6); }
-    .sukan-complete td { font-weight: 600; }
+    .sukan-complete td { font-weight: 400; }
+    /* Ensure all table data cells in this page stay normal weight */
+    #keputusanBody td,
+    #modalKeputusanFullTable tbody td,
+    #standingsContainer tbody td {
+        font-weight: 400 !important;
+    }
 </style>
 
 <style>
@@ -870,7 +877,7 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
             const requiredAttr = isRequired ? 'required' : '';
             const requiredLabel = isRequired ? ' <span class="text-danger">*</span>' : '';
             tableHtml += `<tr>
-                <td class="align-middle"><strong>${i}${requiredLabel}</strong></td>
+                <td class="align-middle">${i}${requiredLabel}</td>
                 <td>
                     <select class="form-select form-select-sm standings-select" data-position="${i}" data-gen="${genToken}" name="standing_${i}" ${requiredAttr}>
                         ${optionHtml}
@@ -1388,6 +1395,98 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
         }
     }
 
+    function buildExportTableHtml(data){
+        const rows = Array.isArray(data) ? data : [];
+        let html = '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%">';
+        html += '<thead><tr>'
+             + '<th style="width:5%">#</th>'
+             + '<th style="width:15%">Sukan</th>'
+             + '<th style="width:20%">Acara</th>'
+             + '<th style="width:15%">Kedudukan</th>'
+             + '<th style="width:45%">Nama Peserta / Pasukan</th>'
+             + '</tr></thead><tbody>';
+
+        rows.forEach(function(r, i){
+            const sukan = escapeHtml(r.sukan || '');
+            const acara = escapeHtml(r.kategori || r.acara || '');
+            const st = Array.isArray(r.standings) ? r.standings : [];
+            const byPos = {};
+            st.forEach(function(x){
+                const p = parseInt(x.position, 10) || 0;
+                if (p > 0 && p <= 3) byPos[p] = x;
+            });
+            const medalNames = {1:'Emas', 2:'Perak', 3:'Gangsa'};
+            let firstRow = true;
+            [1,2,3].forEach(function(pos){
+                const w = byPos[pos] || null;
+                var disp = '-';
+                if (w) {
+                    if (Array.isArray(w.members) && w.members.length > 0) {
+                        disp = w.members.map(function(n, idx){ return (idx + 1) + '. ' + (n || ''); }).join('\n');
+                    } else {
+                        disp = (w.participant_display_name || w.participant_name || w.nama || w.nama_pasukan || '-');
+                    }
+                }
+                html += '<tr>';
+                if (firstRow){
+                    html += '<td rowspan="3" style="text-align:center;vertical-align:top">' + (i + 1) + '</td>';
+                    html += '<td rowspan="3" style="vertical-align:top">' + sukan + '</td>';
+                    html += '<td rowspan="3" style="vertical-align:top">' + acara + '</td>';
+                    firstRow = false;
+                }
+                html += '<td style="vertical-align:top">Pemenang ' + medalNames[pos] + '</td>';
+                html += '<td style="vertical-align:top;white-space:pre-wrap">' + escapeHtml(disp) + '</td>';
+                html += '</tr>';
+            });
+        });
+
+        if (rows.length === 0){
+            html += '<tr><td colspan="5" style="text-align:center;color:#666">Tiada data keputusan</td></tr>';
+        }
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function downloadBlob(filename, mimeType, content){
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function(){
+            try{ document.body.removeChild(a); }catch(e){}
+            URL.revokeObjectURL(url);
+        }, 0);
+    }
+
+    function generateWordExport(){
+        var html = '';
+        try {
+            html = generateOfficialReportAndEvents({ returnHtml: true, forWord: true }) || '';
+        } catch (e) {
+            console.warn('Word export official builder failed, fallback to simple table', e);
+        }
+        if (!html) {
+            const data = Array.isArray(latestKeputusanData) ? latestKeputusanData : [];
+            const title = 'Laporan Keputusan Pertandingan';
+            const body = '<h2 style="margin:0 0 12px 0">' + title + '</h2>' + buildExportTableHtml(data);
+            html = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title></head><body>' + body + '</body></html>';
+        }
+        const fn = 'keputusan_' + (new Date().toISOString().slice(0,10)) + '.doc';
+        downloadBlob(fn, 'application/msword', html);
+    }
+
+    function generateExcellExport(){
+        const data = Array.isArray(latestKeputusanData) ? latestKeputusanData : [];
+        const title = 'Laporan Keputusan Pertandingan';
+        const body = '<h2 style="margin:0 0 12px 0">' + title + '</h2>' + buildExportTableHtml(data);
+        const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title></head><body>' + body + '</body></html>';
+        const fn = 'keputusan_' + (new Date().toISOString().slice(0,10)) + '.xls';
+        downloadBlob(fn, 'application/vnd.ms-excel', html);
+    }
+
     // Build an official single-page A4 landscape report (medal table + stacked bar),
     // then append the per-event pages and print all together.
     // Master kontinjen list and computed statistics (server-side)
@@ -1502,8 +1601,10 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
         'total_gangsa' => isset($total_gangsa)? (int)$total_gangsa : 0
     ], JSON_UNESCAPED_UNICODE); ?>;
 
-    function generateOfficialReportAndEvents(){
+    function generateOfficialReportAndEvents(opts){
         try{
+            opts = opts || {};
+            const isWordExport = !!opts.forWord;
             const data = Array.isArray(latestKeputusanData) ? latestKeputusanData : [];
 
             // Aggregate medals by kontingen_short_name (fallback to participant_display_name)
@@ -1550,11 +1651,20 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
             const logoKPT = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/kpt.png']) ? INLINE_ASSETS['img/logos/UA/kpt.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/kpt.png');
             const logoEvent = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/logo-print.png']) ? INLINE_ASSETS['img/logos/logo-print.png'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/logo-print.png');
             const logoUPNM = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/logos/UA/UPNM.svg']) ? INLINE_ASSETS['img/logos/UA/UPNM.svg'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/logos/UA/UPNM.svg');
-            html += '<div style="display:flex;justify-content:center;align-items:center;margin-bottom:8px">' +
-                        '<img src="' + logoKPT + '" alt="KPT" style="height:56px;margin-right:18px">' +
-                        '<img src="' + logoEvent + '" alt="Logo Sukan" style="height:70px;margin:0 18px">' +
-                        '<img src="' + logoUPNM + '" alt="UPNM" style="height:56px;margin-left:18px">' +
-                    '</div>';
+            const logoUPNMWord = (typeof INLINE_ASSETS !== 'undefined' && INLINE_ASSETS['img/avatar/logo_UPNM.jpg']) ? INLINE_ASSETS['img/avatar/logo_UPNM.jpg'] : (window.location.origin + (SITE_BASE || '') + '/assets/img/avatar/logo_UPNM.jpg');
+            if (isWordExport) {
+                html += '<table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>' +
+                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoKPT + '" alt="KPT" width="96" height="44" style="display:block;margin:0 auto;width:25mm !important;height:11.5mm !important;min-width:25mm !important;max-width:25mm !important;min-height:11.5mm !important;max-height:11.5mm !important;border:0;outline:none;"></td>' +
+                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoEvent + '" alt="Logo Sukan" width="120" height="54" style="display:block;margin:0 auto;width:31mm !important;height:14mm !important;min-width:31mm !important;max-width:31mm !important;min-height:14mm !important;max-height:14mm !important;border:0;outline:none;"></td>' +
+                            '<td style="width:33.33%;text-align:center;vertical-align:middle"><img src="' + logoUPNMWord + '" alt="UPNM" width="96" height="44" style="display:block;margin:0 auto;width:25mm !important;height:11.5mm !important;min-width:25mm !important;max-width:25mm !important;min-height:11.5mm !important;max-height:11.5mm !important;border:0;outline:none;"></td>' +
+                        '</tr></table>';
+            } else {
+                html += '<div style="display:flex;justify-content:center;align-items:center;margin-bottom:8px">' +
+                            '<img src="' + logoKPT + '" alt="KPT" style="height:56px;width:auto;max-height:56px;max-width:180px;margin-right:18px">' +
+                            '<img src="' + logoEvent + '" alt="Logo Sukan" style="height:70px;width:auto;max-height:70px;max-width:220px;margin:0 18px">' +
+                            '<img src="' + logoUPNM + '" alt="UPNM" style="height:56px;width:auto;max-height:56px;max-width:180px;margin-left:18px">' +
+                        '</div>';
+            }
             html += '<h1>LAPORAN PENCAPAIAN PINGAT KESELURUHAN KEJOHANAN</h1>';
             html += '<p class="intro">Laporan ini menyenaraikan pencapaian pingat keseluruhan berdasarkan pengiraan rasmi pingat daripada keputusan yang telah disahkan. Analisis ini hanya merujuk kepada jumlah pingat bagi setiap kontinjen.</p>';
 
@@ -1779,6 +1889,10 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
 
             html += '</body></html>';
 
+            if (opts && opts.returnHtml) {
+                return html;
+            }
+
             // Print via hidden iframe
             const iframe = document.createElement('iframe');
             iframe.style.position = 'fixed'; iframe.style.right='0'; iframe.style.bottom='0'; iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden'; document.body.appendChild(iframe);
@@ -1789,7 +1903,7 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
                 iframe.onload = function(){ try{ __printed_official = true; iframe.contentWindow.focus(); iframe.contentWindow.print(); }catch(e){ alert('Cetakan rasmi gagal: '+(e&&e.message?e.message:e)); } setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch(e){} },1200); };
                 setTimeout(function(){ try{ if (!__printed_official && iframe.contentWindow) { __printed_official = true; iframe.contentWindow.print(); } }catch(e){} },800);
             }catch(err){ console.error('Official print failed', err); alert('Gagal menyediakan laporan rasmi'); }
-        }catch(err){ console.error('generateOfficialReportAndEvents error', err); alert('Gagal membina laporan rasmi: ' + (err && err.message ? err.message : '')); }
+        }catch(err){ console.error('generateOfficialReportAndEvents error', err); if (!(opts && opts.returnHtml)) alert('Gagal membina laporan rasmi: ' + (err && err.message ? err.message : '')); return ''; }
     }
     
     function loadKeputusan(){
@@ -2482,6 +2596,12 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
             try{ generateOfficialReportAndEvents(); }catch(e){ console.warn('Print failed', e); }
         });
     }
+    var wordBtn = document.getElementById('btnExportWord');
+    if (wordBtn) {
+        wordBtn.addEventListener('click', function(){
+            try{ generateWordExport(); }catch(e){ console.warn('Word export failed', e); }
+        });
+    }
     
     // Make closeKeputusanModal globally available
     window.closeKeputusanModal = closeKeputusanModal;
@@ -2554,4 +2674,3 @@ var SITE_BASE = <?php echo json_encode(BASE_URL); ?>;
 $content = ob_get_clean();
 require_once __DIR__ . '/../includes/layout.php';
 ?>
-

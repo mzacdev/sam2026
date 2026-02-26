@@ -13,6 +13,9 @@ define('SESSION_PATH', '/');
 define('SESSION_DOMAIN', '');
 define('SESSION_SECURE', false); // Set to true in production with HTTPS
 define('SESSION_HTTPONLY', true);
+// Keep browser session cookie (no fixed absolute expiry while browser is open).
+// Inactivity timeout is handled by app idle flow + server gc_maxlifetime.
+define('SESSION_COOKIE_LIFETIME', 0);
 
 // Password configuration
 $pwdMinLen = function_exists('app_setting') ? (int)app_setting('securitySettingsForm.passwordMinLength', 8) : 8;
@@ -29,10 +32,19 @@ define('LOCKOUT_DURATION', 900); // 15 minutes in seconds
 // Session management
 class Session {
     private static $started = false;
+
+    private static function touchActivity(): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            // Force session file refresh on every request to prevent premature GC logout
+            // when session data is otherwise unchanged (session.lazy_write behavior).
+            $_SESSION['__last_activity'] = time();
+        }
+    }
     
     public static function start() {
         // Check if session is already started
         if (self::$started || session_status() === PHP_SESSION_ACTIVE) {
+            self::touchActivity();
             return;
         }
         
@@ -50,31 +62,14 @@ class Session {
         
         // Headers not sent - can configure and start session
         if (session_status() === PHP_SESSION_NONE) {
-            $defaultSessionSavePath = (string)ini_get('session.save_path');
-            $usedCustomSessionPath = false;
-
             // Enforce lifetime at PHP engine level (important on production)
             @ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
-            @ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
+            @ini_set('session.cookie_lifetime', (string)SESSION_COOKIE_LIFETIME);
             @ini_set('session.use_strict_mode', '1');
-
-            // Use app-specific session directory when possible to avoid shared cleanup by other apps
-            try {
-                $sessionDir = realpath(__DIR__ . '/../') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'sessions';
-                if ($sessionDir && !is_dir($sessionDir)) {
-                    @mkdir($sessionDir, 0775, true);
-                }
-                if ($sessionDir && is_dir($sessionDir) && is_writable($sessionDir)) {
-                    @session_save_path($sessionDir);
-                    $usedCustomSessionPath = true;
-                }
-            } catch (Exception $e) {
-                // Fallback to default session path silently
-            }
 
             session_name(SESSION_NAME);
             session_set_cookie_params([
-                'lifetime' => SESSION_LIFETIME,
+                'lifetime' => SESSION_COOKIE_LIFETIME,
                 'path' => SESSION_PATH,
                 'domain' => SESSION_DOMAIN,
                 'secure' => SESSION_SECURE,
@@ -82,14 +77,9 @@ class Session {
                 'samesite' => 'Strict'
             ]);
             @session_start();
-            if (session_status() !== PHP_SESSION_ACTIVE && $usedCustomSessionPath) {
-                // Fallback: custom path may contain files owned by different UID on shared hosts.
-                @session_write_close();
-                @session_save_path($defaultSessionSavePath);
-                @session_start();
-            }
             if (session_status() === PHP_SESSION_ACTIVE) {
                 self::$started = true;
+                self::touchActivity();
             } else {
                 error_log('[Session] failed to start session in ' . __FILE__);
             }

@@ -130,9 +130,17 @@ try {
     var countdownTimer = null;
 
     function markActivity(){
-        // While warning is visible, do not auto-close/auto-reset session.
-        // User must explicitly click "Stay Connected".
-        if (warningShown) return;
+        // If warning state is set but modal is not visible (render/load edge case),
+        // recover to normal active state instead of forcing logout unexpectedly.
+        if (warningShown) {
+            var swalVisible = false;
+            try { swalVisible = !!(window.Swal && window.Swal.isVisible && window.Swal.isVisible()); } catch(e) {}
+            if (!swalVisible) {
+                stayConnected();
+            } else {
+                return; // require explicit click when warning is visibly shown
+            }
+        }
         lastActivityAt = Date.now();
     }
 
@@ -192,17 +200,6 @@ try {
                 return;
             }
 
-            countdownTimer = setInterval(function(){
-                secondsLeft--;
-                if (secondsLeft <= 0) {
-                    clearInterval(countdownTimer);
-                    goLogout();
-                    return;
-                }
-                var cEl = document.getElementById('idle-countdown');
-                if (cEl) cEl.textContent = String(Math.max(0, secondsLeft));
-            }, 1000);
-
             window.Swal.fire({
                 icon: 'warning',
                 title: 'Sesi Anda Hampir Tamat',
@@ -211,7 +208,20 @@ try {
                 confirmButtonText: 'Stay Connected',
                 cancelButtonText: 'Logout',
                 allowOutsideClick: false,
-                allowEscapeKey: false
+                allowEscapeKey: false,
+                didOpen: function(){
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    countdownTimer = setInterval(function(){
+                        secondsLeft--;
+                        if (secondsLeft <= 0) {
+                            clearInterval(countdownTimer);
+                            goLogout();
+                            return;
+                        }
+                        var cEl = document.getElementById('idle-countdown');
+                        if (cEl) cEl.textContent = String(Math.max(0, secondsLeft));
+                    }, 1000);
+                }
             }).then(function(result){
                 if (result.isConfirmed) {
                     stayConnected();

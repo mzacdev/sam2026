@@ -10,11 +10,18 @@ if ($sukan_id <= 0) {
 }
 try {
     $db = getDB();
-    $stmt = $db->prepare('SELECT id, nama_kategori FROM table_kategori WHERE status = 1 AND sukan_id = :sukan_id ORDER BY nama_kategori');
+    $stmt = $db->prepare("
+        SELECT id, nama_kategori, kod_kategori
+        FROM table_kategori
+        WHERE status = 1
+          AND sukan_id = :sukan_id
+          AND deleted_at IS NULL
+        ORDER BY nama_kategori ASC
+    ");
     $stmt->execute([':sukan_id' => $sukan_id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode($rows);
+    echo json_encode(['success' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     error_log('[get_kategori] ' . $e->getMessage());
-    echo json_encode([]);
+    echo json_encode(['success' => false, 'data' => []], JSON_UNESCAPED_UNICODE);
 }
