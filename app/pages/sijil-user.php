@@ -99,7 +99,8 @@ if ($ajax === 'athletes') {
     $t0 = microtime(true);
     try {
         $db = getDB();
-        $sqlA = "SELECT pa.id AS id, TRIM(pa.nama) AS nama,
+        $sqlA = "SELECT pa.id AS id, pa.pasukan_id, p.sukan_id, pa.kategori_id,
+                        TRIM(pa.nama) AS nama,
                         COALESCE(s.nama_sukan, '') AS sukan,
                         COALESCE(kt.nama_kategori, '') AS acara
             FROM table_pasukan_atlet pa
@@ -114,6 +115,131 @@ if ($ajax === 'athletes') {
         $stA = $db->prepare($sqlA);
         $stA->execute([':kod_val' => $k]);
         $rows = $stA->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        if (!empty($rows)) {
+            $athleteCtxExact = [];
+            $teamCtxExact = [];
+            $athleteCtxSukan = [];
+            $teamCtxSukan = [];
+            foreach ($rows as $r0) {
+                $aid = (int)($r0['id'] ?? 0);
+                $tid = (int)($r0['pasukan_id'] ?? 0);
+                $sid = (int)($r0['sukan_id'] ?? 0);
+                $kid = (int)($r0['kategori_id'] ?? 0);
+                if ($sid <= 0) continue;
+                if ($aid > 0) {
+                    $athleteCtxExact[$sid . '|' . $kid . '|' . $aid] = true;
+                    $athleteCtxSukan[$sid . '|' . $aid] = true;
+                }
+                if ($tid > 0) {
+                    $teamCtxExact[$sid . '|' . $kid . '|' . $tid] = true;
+                    $teamCtxSukan[$sid . '|' . $tid] = true;
+                }
+            }
+
+            $rank = ['gold' => 3, 'silver' => 2, 'bronze' => 1];
+            $athleteMedalExact = [];
+            $teamMedalExact = [];
+            $athleteMedalBySukan = [];
+            $teamMedalBySukan = [];
+            $pickBest = static function (string $curr, string $next) use ($rank): string {
+                $c = $rank[$curr] ?? 0;
+                $n = $rank[$next] ?? 0;
+                return ($n > $c) ? $next : $curr;
+            };
+            $medalFromPos = static function ($pos): string {
+                $p = (int)$pos;
+                if ($p === 1) return 'gold';
+                if ($p === 2) return 'silver';
+                if ($p === 3) return 'bronze';
+                return '';
+            };
+            $extractIds = static function ($v): array {
+                if (is_array($v)) {
+                    $out = [];
+                    foreach ($v as $x) {
+                        $n = (int)$x;
+                        if ($n > 0) $out[] = $n;
+                    }
+                    return array_values(array_unique($out));
+                }
+                $s = trim((string)$v);
+                if ($s === '') return [];
+                if (preg_match_all('/\d+/', $s, $m)) {
+                    $out = [];
+                    foreach (($m[0] ?? []) as $x) {
+                        $n = (int)$x;
+                        if ($n > 0) $out[] = $n;
+                    }
+                    return array_values(array_unique($out));
+                }
+                return [];
+            };
+
+            $resSql = "
+                SELECT sukan_id, kategori_id, standings
+                FROM table_results
+                WHERE deleted_at IS NULL
+                  AND status = 'completed'
+                  AND standings IS NOT NULL
+                  AND TRIM(CAST(standings AS CHAR)) <> ''
+            ";
+            $resSt = $db->query($resSql);
+            $resRows = $resSt ? ($resSt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+            foreach ($resRows as $rr) {
+                $resSukanId = (int)($rr['sukan_id'] ?? 0);
+                $resKategoriId = (int)($rr['kategori_id'] ?? 0);
+                if ($resSukanId <= 0) continue;
+                $decoded = json_decode((string)($rr['standings'] ?? ''), true);
+                if (!is_array($decoded)) continue;
+                foreach ($decoded as $item) {
+                    if (!is_array($item)) continue;
+                    $medal = $medalFromPos($item['position'] ?? null);
+                    if ($medal === '') continue;
+                    $pidList = $extractIds($item['participant_id'] ?? ($item['pasukan_id'] ?? ''));
+                    foreach ($pidList as $pid) {
+                        $aKeyExact = $resSukanId . '|' . $resKategoriId . '|' . $pid;
+                        $tKeyExact = $resSukanId . '|' . $resKategoriId . '|' . $pid;
+                        $aKeySukan = $resSukanId . '|' . $pid;
+                        $tKeySukan = $resSukanId . '|' . $pid;
+                        if (isset($athleteCtxExact[$aKeyExact]) || ($resKategoriId <= 0 && isset($athleteCtxSukan[$aKeySukan]))) {
+                            if ($resKategoriId > 0) {
+                                $prev = $athleteMedalExact[$aKeyExact] ?? '';
+                                $athleteMedalExact[$aKeyExact] = $pickBest($prev, $medal);
+                            } else {
+                                $prev = $athleteMedalBySukan[$aKeySukan] ?? '';
+                                $athleteMedalBySukan[$aKeySukan] = $pickBest($prev, $medal);
+                            }
+                        }
+                        if (isset($teamCtxExact[$tKeyExact]) || ($resKategoriId <= 0 && isset($teamCtxSukan[$tKeySukan]))) {
+                            if ($resKategoriId > 0) {
+                                $prev = $teamMedalExact[$tKeyExact] ?? '';
+                                $teamMedalExact[$tKeyExact] = $pickBest($prev, $medal);
+                            } else {
+                                $prev = $teamMedalBySukan[$tKeySukan] ?? '';
+                                $teamMedalBySukan[$tKeySukan] = $pickBest($prev, $medal);
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach ($rows as &$r1) {
+                $aid = (int)($r1['id'] ?? 0);
+                $tid = (int)($r1['pasukan_id'] ?? 0);
+                $sid = (int)($r1['sukan_id'] ?? 0);
+                $kid = (int)($r1['kategori_id'] ?? 0);
+                $aKeyExact = $sid . '|' . $kid . '|' . $aid;
+                $tKeyExact = $sid . '|' . $kid . '|' . $tid;
+                $aKeySukan = $sid . '|' . $aid;
+                $tKeySukan = $sid . '|' . $tid;
+                $mAth = $athleteMedalExact[$aKeyExact] ?? ($athleteMedalBySukan[$aKeySukan] ?? '');
+                $mTeam = $teamMedalExact[$tKeyExact] ?? ($teamMedalBySukan[$tKeySukan] ?? '');
+                $r1['medal_type'] = $mAth !== '' ? $mAth : $mTeam;
+            }
+            unset($r1);
+        }
+
         $out['ok'] = true;
         $out['rows'] = $rows;
         $out['count'] = count($rows);
@@ -737,7 +863,7 @@ ob_start();
                                     <input type="search" id="searchAtlet" class="form-control form-control-sm me-2" placeholder="Cari..." style="max-width:220px;">
                                     <button type="button" id="printAllAtlet" class="btn btn-sm btn-primary">Cetak Semua</button>
                                 </div>
-                                <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:60%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
+                                <div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th style="width:5%" class="text-center">No</th><th style="width:50%">Nama Atlet</th><th style="width:25%">Sukan / Acara</th><th style="width:10%" class="text-center">Pingat</th><th style="width:10%" class="text-center">Tindakan</th></tr></thead><tbody id="athleteBody"></tbody></table></div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" id="athletePrev" class="btn btn-sm btn-outline-secondary me-2">Prev</button>
                                     <span id="athletePageInfo" class="me-2">Page 1/1</span>
@@ -794,6 +920,25 @@ ob_start();
                                         '<img class="bg-img" src="'+templateUrl+'" alt="background">' +
                                         '<div class="cert-name">'+(name||'')+'</div>' +
                                         '<div class="cert-sport">' + ((sukanCombined||'').toString().toUpperCase()) + '</div>' +
+                                    '</div>' +
+                                    '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
+                                return html;
+                            }
+
+                            function buildMedalCertHtml(name, medalText, sukanText, medalType){
+                                var medalTemplates = {
+                                    gold: <?php echo json_encode(url('assets/img/sijil/sijil_emas.jpeg')); ?>,
+                                    silver: <?php echo json_encode(url('assets/img/sijil/sijil_perak.jpeg')); ?>,
+                                    bronze: <?php echo json_encode(url('assets/img/sijil/sijil_gangsa.jpeg')); ?>
+                                };
+                                var templateUrl = medalTemplates[medalType] || medalTemplates.gold;
+                                var html = '<!doctype html><html><head><meta charset="utf-8"><title>Sijil Pencapaian</title>' +
+                                    '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.medal-name{position:absolute;left:51.8%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.medal-type{position:absolute;left:51.8%;top:45.5%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.medal-sport{position:absolute;left:51.8%;top:52.5%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' +
+                                    '<div class="page">' +
+                                        '<img class="bg-img" src="'+templateUrl+'" alt="background">' +
+                                        '<div class="medal-name">'+escHtml((name||'').toString().trim())+'</div>' +
+                                        '<div class="medal-type">'+escHtml((medalText||'').toString().trim().toUpperCase())+'</div>' +
+                                        '<div class="medal-sport">'+escHtml((sukanText||'').toString().trim().toUpperCase())+'</div>' +
                                     '</div>' +
                                     '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
                                 return html;
@@ -936,25 +1081,50 @@ ob_start();
                             var slice = list.slice(start, start + PAGE_SIZE);
                             athleteBody.innerHTML = '';
                             if (!slice.length) {
-                                appendNoDataRow(athleteBody, 4);
+                                appendNoDataRow(athleteBody, 5);
                             }
                             slice.forEach(function(r, idx){
                                 var pid = r.id || '';
                                 var name = (r.nama || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var sukan = (r.sukan || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 var acara = (r.acara || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                                var medalType = String(r.medal_type || '').toLowerCase();
+                                var medalLabel = '';
+                                if (medalType === 'gold') medalLabel = 'Emas';
+                                else if (medalType === 'silver') medalLabel = 'Perak';
+                                else if (medalType === 'bronze') medalLabel = 'Gangsa';
+                                var rawSukan = (r.sukan || '').toString().trim();
+                                var rawAcara = (r.acara || '').toString().trim();
                                 var info = sukan;
                                 if (acara !== '') info = info !== '' ? (info + ' (' + acara + ')') : acara;
                                 var nIdx = start + idx + 1;
                                 var tr = document.createElement('tr');
+                                if (medalType === 'gold' || medalType === 'silver' || medalType === 'bronze') {
+                                    tr.classList.add('medal-' + medalType);
+                                }
+                                var medalPrintHtml = '';
+                                if (medalLabel) {
+                                    medalPrintHtml = ' <button type="button" class="btn btn-sm btn-outline-primary icon-action-btn do-print-medal" title="Cetak Sijil Pingat" aria-label="Cetak Sijil Pingat"><span class="icon-glyph">🖨️</span></button>';
+                                }
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(name, false); })() +
                                     (function(){ return cellHtml(info, false); })() +
+                                    '<td class="text-center">'+(medalLabel ? ('<span>'+medalLabel+'</span>' + medalPrintHtml) : '<span class="no-data-badge">Tiada</span>')+'</td>' +
                                     '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-primary do-print">Cetak</button></td>';
                                 athleteBody.appendChild(tr);
                                 var btnEl = tr.querySelector('.do-print');
                                 if (btnEl) {
                                     btnEl.addEventListener('click', function(e){ e.preventDefault(); printDirect(pid); });
+                                }
+                                var medalBtnEl = tr.querySelector('.do-print-medal');
+                                if (medalBtnEl) {
+                                    medalBtnEl.addEventListener('click', function(e){
+                                        e.preventDefault();
+                                        var medalText = 'PINGAT ' + medalLabel;
+                                        var sukanKategori = rawSukan;
+                                        if (rawAcara !== '') sukanKategori = sukanKategori ? (sukanKategori + ' (' + rawAcara + ')') : rawAcara;
+                                        printDirectHtml(buildMedalCertHtml(r.nama || '', medalText, sukanKategori, medalType));
+                                    });
                                 }
                             });
                             try{ document.getElementById('athletePageInfo').textContent = 'Page ' + currentAthletePage + '/' + pages; }catch(e){}
@@ -1236,6 +1406,21 @@ ob_start();
     font-size:0.8rem;
     font-weight:600;
     line-height:1.2;
+}
+#athleteBody tr.medal-gold > td { background-color: #fff4cf !important; }
+#athleteBody tr.medal-silver > td { background-color: #edf1f5 !important; }
+#athleteBody tr.medal-bronze > td { background-color: #f6e3d3 !important; }
+.icon-action-btn{
+    width:32px;
+    height:32px;
+    padding:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+}
+.icon-glyph{
+    line-height:1;
+    font-size:14px;
 }
 </style>
 

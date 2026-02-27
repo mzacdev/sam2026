@@ -2166,6 +2166,25 @@ ob_start();
                                     return html;
                                 }
 
+                                function buildMedalCertHtml(name, medalText, sukanText, medalType){
+                                    var medalTemplates = {
+                                        gold: <?php echo json_encode(url('assets/img/sijil/sijil_emas.jpeg')); ?>,
+                                        silver: <?php echo json_encode(url('assets/img/sijil/sijil_perak.jpeg')); ?>,
+                                        bronze: <?php echo json_encode(url('assets/img/sijil/sijil_gangsa.jpeg')); ?>
+                                    };
+                                    var templateUrl = medalTemplates[medalType] || medalTemplates.gold;
+                                    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Sijil Pencapaian</title>' +
+                                        '<style>@page{size:A4;margin:0}html,body{height:100%;margin:0;padding:0}body{background:#fff;font-family:Arial,Helvetica,sans-serif}.page{position:relative;width:210mm;height:297mm;overflow:hidden}.bg-img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:0}.medal-name{position:absolute;left:51.8%;top:38%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.medal-type{position:absolute;left:51.8%;top:45.5%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.medal-sport{position:absolute;left:51.8%;top:52.5%;transform:translate(-50%,-50%);width:78%;text-align:center;font-weight:700;color:#000;line-height:1.15;z-index:1;font-size:20px}.page,.bg-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' +
+                                        '<div class="page">' +
+                                            '<img class="bg-img" src="'+templateUrl+'" alt="background">' +
+                                            '<div class="medal-name">'+escHtml((name||'').toString().trim())+'</div>' +
+                                            '<div class="medal-type">'+escHtml((medalText||'').toString().trim().toUpperCase())+'</div>' +
+                                            '<div class="medal-sport">'+escHtml((sukanText||'').toString().trim().toUpperCase())+'</div>' +
+                                        '</div>' +
+                                        '<script> (function(){ if(window.top===window.self){ setTimeout(function(){ window.print(); },120); } })();<\/script></body></html>';
+                                    return html;
+                                }
+
                             function printDirectHtml(html){
                                 try{
                                     showLoader();
@@ -2474,7 +2493,7 @@ ob_start();
                                 tr.innerHTML = '<td class="text-center">'+nIdx+'</td>'+
                                     (function(){ return cellHtml(name, false); })() +
                                     (function(){ return cellHtml(info, false); })() +
-                                    '<td class="text-center">'+(medalLabel ? ('<span>'+medalLabel+'</span>' + medalPrintHtml) : '-')+'</td>' +
+                                    '<td class="text-center">'+(medalLabel ? ('<span>'+medalLabel+'</span>' + medalPrintHtml) : '<span class="no-data-badge">Tiada</span>')+'</td>' +
                                     '<td class="text-center">'
                                     + '<button type="button" class="btn btn-sm btn-outline-primary icon-action-btn me-1 do-print" title="Cetak" aria-label="Cetak"><span class="icon-glyph">🖨️</span></button>'
                                     + '</td>';
@@ -2487,16 +2506,10 @@ ob_start();
                                 if (medalBtnEl) {
                                     medalBtnEl.addEventListener('click', function(e){
                                         e.preventDefault();
-                                        var line1 = 'PINGAT ' + medalLabel + ' DALAM ACARA';
-                                        var line2 = rawSukan;
-                                        if (rawAcara !== '') line2 = line2 ? (line2 + ' (' + rawAcara + ')') : rawAcara;
-                                        var medalText = line1 + '\n' + line2;
-                                        printDirectHtml(buildCertHtml(name, medalText, null, {
-                                            sportSize: '18px',
-                                            sportTop: '48.5%',
-                                            sportTransform: 'translate(-50%,-50%)',
-                                            sportWeight: '700'
-                                        }));
+                                        var medalText = 'PINGAT ' + medalLabel;
+                                        var sukanKategori = rawSukan;
+                                        if (rawAcara !== '') sukanKategori = sukanKategori ? (sukanKategori + ' (' + rawAcara + ')') : rawAcara;
+                                        printDirectHtml(buildMedalCertHtml(r.nama || '', medalText, sukanKategori, medalType));
                                     });
                                 }
                             });
