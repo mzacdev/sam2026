@@ -3,3 +3,4 @@
 .env
 docker/apache/ssl
 docker/apache/ssl
+public_backup_*
